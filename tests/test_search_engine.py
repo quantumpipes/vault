@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from qp_vault.core.search_engine import (
     apply_trust_weighting,
     compute_freshness,
@@ -102,4 +104,5 @@ class TestApplyTrustWeighting:
     def test_trust_weight_field_set(self):
         results = [_make_result("canonical", 0.8)]
         weighted = apply_trust_weighting(results)
-        assert weighted[0].trust_weight == 1.5
+        # 2D trust: CANONICAL (1.5) * UNVERIFIED (0.7) = 1.05
+        assert weighted[0].trust_weight == pytest.approx(1.05)

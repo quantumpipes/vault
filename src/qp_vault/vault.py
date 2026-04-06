@@ -24,6 +24,8 @@ from qp_vault.enums import (
 )
 from qp_vault.exceptions import VaultError
 from qp_vault.models import (
+    HealthScore,
+    MerkleProof,
     Resource,
     SearchResult,
     VaultVerificationResult,
@@ -43,7 +45,6 @@ if TYPE_CHECKING:
     from datetime import date
 
     from qp_vault.core.layer_manager import LayerView
-    from qp_vault.models import HealthScore, MerkleProof
 
 # --- Input Sanitization ---
 
@@ -763,29 +764,34 @@ class Vault:
         """Get supersession chain."""
         return _run_async(self._async.chain(resource_id))
 
-    def export_proof(self, resource_id: str) -> Any:
+    def export_proof(self, resource_id: str) -> MerkleProof:
         """Export Merkle proof for auditors."""
-        return _run_async(self._async.export_proof(resource_id))
+        result: MerkleProof = _run_async(self._async.export_proof(resource_id))
+        return result
 
     def search(self, query: str, **kwargs: Any) -> list[SearchResult]:
         """Trust-weighted hybrid search."""
-        return _run_async(self._async.search(query, **kwargs))
+        result: list[SearchResult] = _run_async(self._async.search(query, **kwargs))
+        return result
 
     def verify(self, resource_id: str | None = None) -> VerificationResult | VaultVerificationResult:
         """Verify integrity."""
-        return _run_async(self._async.verify(resource_id))
+        result: VerificationResult | VaultVerificationResult = _run_async(self._async.verify(resource_id))
+        return result
 
-    def layer(self, name: MemoryLayer | str) -> Any:
+    def layer(self, name: MemoryLayer | str) -> LayerView:  # type: ignore[return-value]
         """Get a scoped view of a memory layer."""
-        return self._async.layer(name)
+        return self._async.layer(name)  # type: ignore[return-value]
 
-    def health(self) -> Any:
+    def health(self) -> HealthScore:
         """Compute vault health score."""
-        return _run_async(self._async.health())
+        result: HealthScore = _run_async(self._async.health())
+        return result
 
     def status(self) -> dict[str, Any]:
         """Get vault status."""
-        return _run_async(self._async.status())
+        result: dict[str, Any] = _run_async(self._async.status())
+        return result
 
     def register_embedder(self, embedder: EmbeddingProvider) -> None:
         """Register a custom embedding provider."""

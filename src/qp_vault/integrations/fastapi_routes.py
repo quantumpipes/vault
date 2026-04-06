@@ -117,7 +117,7 @@ def create_vault_router(vault: Any) -> APIRouter:
         return HTTPException(status_code=500, detail="Internal server error")
 
     @router.post("/resources")
-    async def add_resource(req: AddResourceRequest) -> dict:
+    async def add_resource(req: AddResourceRequest) -> dict[str, Any]:
         resource = await vault.add(
             req.content,
             name=req.name,
@@ -139,7 +139,7 @@ def create_vault_router(vault: Any) -> APIRouter:
         status: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> dict:
+    ) -> dict[str, Any]:
         resources = await vault.list(
             trust=trust,
             layer=layer,
@@ -151,7 +151,7 @@ def create_vault_router(vault: Any) -> APIRouter:
         return {"data": [r.model_dump() for r in resources], "meta": {"count": len(resources)}}
 
     @router.get("/resources/{resource_id}")
-    async def get_resource(resource_id: str) -> dict:
+    async def get_resource(resource_id: str) -> dict[str, Any]:
         try:
             resource = await vault.get(resource_id)
         except Exception as e:
@@ -159,7 +159,7 @@ def create_vault_router(vault: Any) -> APIRouter:
         return {"data": resource.model_dump(), "meta": {}}
 
     @router.put("/resources/{resource_id}")
-    async def update_resource(resource_id: str, req: UpdateResourceRequest) -> dict:
+    async def update_resource(resource_id: str, req: UpdateResourceRequest) -> dict[str, Any]:
         try:
             resource = await vault.update(
                 resource_id,
@@ -174,7 +174,7 @@ def create_vault_router(vault: Any) -> APIRouter:
         return {"data": resource.model_dump(), "meta": {}}
 
     @router.delete("/resources/{resource_id}")
-    async def delete_resource(resource_id: str, hard: bool = False) -> dict:
+    async def delete_resource(resource_id: str, hard: bool = False) -> dict[str, Any]:
         try:
             await vault.delete(resource_id, hard=hard)
         except Exception as e:
@@ -182,7 +182,7 @@ def create_vault_router(vault: Any) -> APIRouter:
         return {"data": {"deleted": True}, "meta": {}}
 
     @router.post("/resources/{resource_id}/transition")
-    async def transition_resource(resource_id: str, req: TransitionRequest) -> dict:
+    async def transition_resource(resource_id: str, req: TransitionRequest) -> dict[str, Any]:
         try:
             resource = await vault.transition(resource_id, req.target, reason=req.reason)
         except Exception as e:
@@ -190,7 +190,7 @@ def create_vault_router(vault: Any) -> APIRouter:
         return {"data": resource.model_dump(), "meta": {}}
 
     @router.post("/resources/{resource_id}/supersede")
-    async def supersede_resource(resource_id: str, req: SupersedeRequest) -> dict:
+    async def supersede_resource(resource_id: str, req: SupersedeRequest) -> dict[str, Any]:
         try:
             old, new = await vault.supersede(resource_id, req.new_id)
         except Exception as e:
@@ -198,12 +198,12 @@ def create_vault_router(vault: Any) -> APIRouter:
         return {"data": {"old": old.model_dump(), "new": new.model_dump()}, "meta": {}}
 
     @router.get("/resources/{resource_id}/verify")
-    async def verify_resource(resource_id: str) -> dict:
+    async def verify_resource(resource_id: str) -> dict[str, Any]:
         result = await vault.verify(resource_id)
         return {"data": result.model_dump(), "meta": {}}
 
     @router.get("/resources/{resource_id}/proof")
-    async def export_proof(resource_id: str) -> dict:
+    async def export_proof(resource_id: str) -> dict[str, Any]:
         try:
             proof = await vault.export_proof(resource_id)
         except Exception as e:
@@ -211,12 +211,12 @@ def create_vault_router(vault: Any) -> APIRouter:
         return {"data": proof.model_dump(), "meta": {}}
 
     @router.get("/resources/{resource_id}/chain")
-    async def get_chain(resource_id: str) -> dict:
+    async def get_chain(resource_id: str) -> dict[str, Any]:
         chain = await vault.chain(resource_id)
         return {"data": [r.model_dump() for r in chain], "meta": {"length": len(chain)}}
 
     @router.post("/search")
-    async def search(req: SearchRequest) -> dict:
+    async def search(req: SearchRequest) -> dict[str, Any]:
         as_of = date.fromisoformat(req.as_of) if req.as_of else None
         results = await vault.search(
             req.query,
@@ -233,22 +233,22 @@ def create_vault_router(vault: Any) -> APIRouter:
         }
 
     @router.get("/verify")
-    async def verify_all() -> dict:
+    async def verify_all() -> dict[str, Any]:
         result = await vault.verify()
         return {"data": result.model_dump(), "meta": {}}
 
     @router.get("/health")
-    async def health() -> dict:
+    async def health() -> dict[str, Any]:
         score = await vault.health()
         return {"data": score.model_dump(), "meta": {}}
 
     @router.get("/status")
-    async def status() -> dict:
+    async def status() -> dict[str, Any]:
         s = await vault.status()
         return {"data": s, "meta": {}}
 
     @router.get("/expiring")
-    async def expiring(days: int = 90) -> dict:
+    async def expiring(days: int = 90) -> dict[str, Any]:
         resources = await vault.expiring(days=days)
         return {"data": [r.model_dump() for r in resources], "meta": {"days": days}}
 

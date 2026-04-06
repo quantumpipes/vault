@@ -152,13 +152,15 @@ class TestVaultSearch:
         assert isinstance(results[0], SearchResult)
 
     def test_search_trust_weighting(self, populated_vault):
-        """CANONICAL should get 1.5x weight, EPHEMERAL 0.7x."""
+        """CANONICAL should outweigh EPHEMERAL in 2D trust scoring."""
         results = populated_vault.search("incident response")
         for r in results:
             if r.trust_tier == TrustTier.CANONICAL:
-                assert r.trust_weight == 1.5
+                # 2D: CANONICAL (1.5) * UNVERIFIED (0.7) = 1.05
+                assert r.trust_weight == pytest.approx(1.05)
             elif r.trust_tier == TrustTier.EPHEMERAL:
-                assert r.trust_weight == 0.7
+                # 2D: EPHEMERAL (0.7) * UNVERIFIED (0.7) = 0.49
+                assert r.trust_weight == pytest.approx(0.49)
 
     def test_search_empty_query(self, populated_vault):
         results = populated_vault.search("")

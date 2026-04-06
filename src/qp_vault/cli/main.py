@@ -226,28 +226,32 @@ def verify(
     vault = _get_vault(path)
 
     if resource_id:
-        result = vault.verify(resource_id)
-        if result.passed:
+        from qp_vault.models import VerificationResult
+        r = vault.verify(resource_id)
+        assert isinstance(r, VerificationResult)
+        if r.passed:
             console.print(f"[green]PASS[/green]  {resource_id}")
-            console.print(f"  Hash: {result.stored_hash}")
-            console.print(f"  Chunks verified: {result.chunk_count}")
+            console.print(f"  Hash: {r.stored_hash}")
+            console.print(f"  Chunks verified: {r.chunk_count}")
         else:
             console.print(f"[red]FAIL[/red]  {resource_id}")
-            console.print(f"  Stored:   {result.stored_hash}")
-            console.print(f"  Computed: {result.computed_hash}")
-            if result.failed_chunks:
-                console.print(f"  Failed chunks: {len(result.failed_chunks)}")
+            console.print(f"  Stored:   {r.stored_hash}")
+            console.print(f"  Computed: {r.computed_hash}")
+            if r.failed_chunks:
+                console.print(f"  Failed chunks: {len(r.failed_chunks)}")
             raise typer.Exit(1)
     else:
-        result = vault.verify()
-        if result.passed:
+        from qp_vault.models import VaultVerificationResult
+        vr = vault.verify()
+        assert isinstance(vr, VaultVerificationResult)
+        if vr.passed:
             console.print("[green]PASS[/green]  Vault integrity verified")
-            console.print(f"  Resources: {result.resource_count}")
-            console.print(f"  Merkle root: {result.merkle_root}")
-            console.print(f"  Duration: {result.duration_ms}ms")
+            console.print(f"  Resources: {vr.resource_count}")
+            console.print(f"  Merkle root: {vr.merkle_root}")
+            console.print(f"  Duration: {vr.duration_ms}ms")
         else:
             console.print("[red]FAIL[/red]  Vault integrity check failed")
-            console.print(f"  Failed: {len(result.failed_resources)} resources")
+            console.print(f"  Failed: {len(vr.failed_resources)} resources")
             raise typer.Exit(1)
 
 
