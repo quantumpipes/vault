@@ -137,8 +137,10 @@ pip install qp-vault
 | `pip install qp-vault` | SQLite, trust search, CAS, Merkle, lifecycle | **1** (pydantic) |
 | `pip install qp-vault[postgres]` | + PostgreSQL + pgvector hybrid search | + sqlalchemy, asyncpg, pgvector |
 | `pip install qp-vault[capsule]` | + Cryptographic audit trail | + [qp-capsule](https://github.com/quantumpipes/capsule) |
-| `pip install qp-vault[docling]` | + 25+ format document processing (planned v0.8) | + docling |
-| `pip install qp-vault[encryption]` | + AES-256-GCM encryption at rest (planned v0.8) | + cryptography, pynacl |
+| `pip install qp-vault[docling]` | + 25+ format document processing (PDF, DOCX, etc.) | + docling |
+| `pip install qp-vault[encryption]` | + AES-256-GCM encryption at rest | + cryptography, pynacl |
+| `pip install qp-vault[local]` | + Local embeddings (sentence-transformers, air-gap safe) | + sentence-transformers |
+| `pip install qp-vault[openai]` | + OpenAI embeddings (cloud) | + openai |
 | `pip install qp-vault[fastapi]` | + REST API (15+ endpoints) | + fastapi |
 | `pip install qp-vault[cli]` | + `vault` command-line tool | + typer, rich |
 | `pip install qp-vault[all]` | Everything | All of the above |
@@ -246,7 +248,7 @@ app.include_router(router, prefix="/v1/vault")
 |---|---|---|---|
 | Content integrity | SHA3-256 | FIPS 202 | Tamper-evident CIDs and Merkle roots |
 | Audit signatures | Ed25519 + ML-DSA-65 | FIPS 186-5, FIPS 204 | Via [qp-capsule](https://github.com/quantumpipes/capsule) (optional) |
-| Encryption at rest | AES-256-GCM (planned v0.8) | FIPS 197 | Post-quantum key exchange (planned) |
+| Encryption at rest | AES-256-GCM | FIPS 197 | `pip install qp-vault[encryption]` |
 | Search integrity | Parameterized SQL | -- | No string interpolation, FTS5 sanitized |
 | Input validation | Pydantic + custom | -- | Enum checks, name/tag/metadata limits |
 

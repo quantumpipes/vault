@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "qp-vault"
-version = "0.7.0"
+version = "0.8.0"
 description = "Governed knowledge store for autonomous organizations. Trust tiers, cryptographic audit trails, content-addressed storage, air-gap native."
 readme = "README.md"
 license = "Apache-2.0"
@@ -54,6 +54,12 @@ postgres = [
 ]
 docling = [
     "docling>=2.73",
+]
+local = [
+    "sentence-transformers>=3.0",
+]
+openai = [
+    "openai>=1.0",
 ]
 capsule = [
     "qp-capsule>=1.5",

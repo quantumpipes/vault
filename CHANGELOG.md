@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-04-06
+
+### Added
+- **Encryption at rest**: `AESGCMEncryptor` class (AES-256-GCM, FIPS 197). Install: `pip install qp-vault[encryption]`
+- **Built-in embedding providers**:
+  - `NoopEmbedder` for explicit text-only search
+  - `SentenceTransformerEmbedder` for local/air-gap embedding (`pip install qp-vault[local]`)
+  - `OpenAIEmbedder` for cloud embedding (`pip install qp-vault[openai]`)
+- **Docling parser**: 25+ format document processing (PDF, DOCX, PPTX, etc.). Install: `pip install qp-vault[docling]`
+- `PluginRegistry.fire_hooks()` — plugin lifecycle hooks are now invoked
+- `[local]` and `[openai]` installation extras
+
+### Changed
+- README updated: encryption and docling marked as delivered (were "planned")
+
 ## [0.7.0] - 2026-04-06
 
 ### Added

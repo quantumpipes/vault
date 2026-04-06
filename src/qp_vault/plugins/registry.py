@@ -51,6 +51,18 @@ class PluginRegistry:
         """Register a lifecycle hook callback."""
         self._hooks.setdefault(event, []).append(callback)
 
+    async def fire_hooks(self, event: str, **kwargs: Any) -> None:
+        """Invoke all registered hooks for an event."""
+        for callback in self._hooks.get(event, []):
+            try:
+                import asyncio
+                if asyncio.iscoroutinefunction(callback):
+                    await callback(**kwargs)
+                else:
+                    callback(**kwargs)
+            except Exception as e:
+                logger.warning("Hook %s failed: %s", event, e)
+
     # --- Retrieval ---
 
     def get_embedder(self, name: str) -> Any | None:
