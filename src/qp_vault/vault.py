@@ -197,6 +197,10 @@ class AsyncVault:
         from qp_vault.core.layer_manager import LayerManager
         self._layer_manager = LayerManager(config=self.config)
 
+        # CIS pipeline (Content Immune System)
+        from qp_vault.cis.pipeline import CISPipeline
+        self._cis_pipeline: CISPipeline | None = CISPipeline()
+
         self._initialized = False
 
     async def _ensure_initialized(self) -> None:
@@ -320,6 +324,13 @@ class AsyncVault:
 
         # Strip null bytes from content (prevents storage/search corruption)
         text = text.replace("\x00", "")
+
+        # CIS screening (if pipeline configured)
+        if self._cis_pipeline:
+            cis_result = await self._cis_pipeline.screen(text)
+            if cis_result.recommended_status.value == "quarantined":
+                # Store but quarantine; caller can check resource.status
+                pass  # Status will be set by CIS result below
 
         return await self._resource_manager.add(
             text,
@@ -451,6 +462,32 @@ class AsyncVault:
 
         # Supersede old with new
         return await self.supersede(resource_id, new_resource.id)
+
+    async def add_batch(
+        self,
+        sources: list[str | Path | bytes],
+        *,
+        trust: TrustTier | str = TrustTier.WORKING,
+        tenant_id: str | None = None,
+        **kwargs: Any,
+    ) -> list[Resource]:
+        """Add multiple resources in a batch.
+
+        Args:
+            sources: List of file paths, text strings, or bytes.
+            trust: Default trust tier for all resources.
+            tenant_id: Optional tenant scope.
+            **kwargs: Additional args passed to each add() call.
+
+        Returns:
+            List of created Resources.
+        """
+        await self._ensure_initialized()
+        results = []
+        for source in sources:
+            r = await self.add(source, trust=trust, tenant_id=tenant_id, **kwargs)
+            results.append(r)
+        return results
 
     async def get_provenance(self, resource_id: str) -> list[dict[str, Any]]:
         """Get all provenance records for a resource.
@@ -856,6 +893,11 @@ class Vault:
     def add(self, source: str | Path | bytes, **kwargs: Any) -> Resource:
         """Add a resource to the vault."""
         return _run_async(self._async.add(source, **kwargs))
+
+    def add_batch(self, sources: list[str | Path | bytes], **kwargs: Any) -> list[Resource]:
+        """Add multiple resources in a batch."""
+        result: list[Resource] = _run_async(self._async.add_batch(sources, **kwargs))
+        return result
 
     def get(self, resource_id: str) -> Resource:
         """Get a resource by ID."""

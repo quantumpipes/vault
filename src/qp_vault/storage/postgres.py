@@ -43,10 +43,12 @@ CREATE TABLE IF NOT EXISTS qp_vault.resources (
     resource_type TEXT NOT NULL DEFAULT 'document',
     status TEXT NOT NULL DEFAULT 'pending',
     lifecycle TEXT NOT NULL DEFAULT 'active',
+    adversarial_status TEXT NOT NULL DEFAULT 'unverified',
     valid_from DATE,
     valid_until DATE,
     supersedes TEXT,
     superseded_by TEXT,
+    tenant_id TEXT,
     collection_id TEXT,
     layer TEXT,
     tags JSONB DEFAULT '[]',
@@ -96,6 +98,25 @@ CREATE INDEX IF NOT EXISTS idx_resources_hash ON qp_vault.resources(content_hash
 CREATE INDEX IF NOT EXISTS idx_resources_valid ON qp_vault.resources(valid_from, valid_until);
 CREATE INDEX IF NOT EXISTS idx_chunks_resource ON qp_vault.chunks(resource_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_cid ON qp_vault.chunks(cid);
+CREATE INDEX IF NOT EXISTS idx_resources_tenant ON qp_vault.resources(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_resources_adversarial ON qp_vault.resources(adversarial_status);
+CREATE INDEX IF NOT EXISTS idx_resources_classification ON qp_vault.resources(data_classification);
+CREATE INDEX IF NOT EXISTS idx_resources_type ON qp_vault.resources(resource_type);
+CREATE INDEX IF NOT EXISTS idx_resources_tags ON qp_vault.resources USING gin (tags);
+
+CREATE TABLE IF NOT EXISTS qp_vault.provenance (
+    id TEXT PRIMARY KEY,
+    resource_id TEXT NOT NULL REFERENCES qp_vault.resources(id) ON DELETE CASCADE,
+    uploader_id TEXT,
+    upload_method TEXT,
+    source_description TEXT DEFAULT '',
+    original_hash TEXT NOT NULL,
+    provenance_signature TEXT,
+    signature_verified BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_provenance_resource ON qp_vault.provenance(resource_id);
 """
 
 _HNSW_INDEX = """
