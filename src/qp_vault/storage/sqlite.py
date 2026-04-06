@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS resources (
     valid_until TEXT,
     supersedes TEXT,
     superseded_by TEXT,
+    tenant_id TEXT,
     collection_id TEXT,
     layer TEXT,
     tags TEXT DEFAULT '[]',
@@ -111,6 +112,7 @@ CREATE INDEX IF NOT EXISTS idx_chunks_resource ON chunks(resource_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_cid ON chunks(cid);
 CREATE INDEX IF NOT EXISTS idx_provenance_resource ON provenance(resource_id);
 CREATE INDEX IF NOT EXISTS idx_resources_adversarial ON resources(adversarial_status);
+CREATE INDEX IF NOT EXISTS idx_resources_tenant ON resources(tenant_id);
 """
 
 _FTS_SCHEMA = """
@@ -212,14 +214,14 @@ class SQLiteBackend:
                     id, name, content_hash, cid, merkle_root,
                     trust_tier, data_classification, resource_type,
                     status, lifecycle, adversarial_status, valid_from, valid_until,
-                    supersedes, superseded_by, collection_id, layer,
+                    supersedes, superseded_by, tenant_id, collection_id, layer,
                     tags, metadata, mime_type, size_bytes, chunk_count,
                     created_at, updated_at, indexed_at, deleted_at
                 ) VALUES (
                     ?, ?, ?, ?, ?,
                     ?, ?, ?,
                     ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?
                 )""",
@@ -239,6 +241,7 @@ class SQLiteBackend:
                     str(resource.valid_until) if resource.valid_until else None,
                     resource.supersedes,
                     resource.superseded_by,
+                    resource.tenant_id,
                     resource.collection_id,
                     resource.layer.value if resource.layer and hasattr(resource.layer, "value") else resource.layer,
                     json.dumps(resource.tags),
@@ -271,6 +274,9 @@ class SQLiteBackend:
         conditions: list[str] = []
         params: list[Any] = []
 
+        if filters.tenant_id:
+            conditions.append("tenant_id = ?")
+            params.append(filters.tenant_id)
         if filters.trust_tier:
             conditions.append("trust_tier = ?")
             params.append(filters.trust_tier)
@@ -398,10 +404,14 @@ class SQLiteBackend:
         where_parts = ["r.status = 'indexed'"]
         where_params: list[Any] = []
 
+        filter_tenant = query.filters.tenant_id if query.filters else None
         filter_trust = query.filters.trust_tier if query.filters else None
         filter_layer = query.filters.layer if query.filters else None
         filter_collection = query.filters.collection_id if query.filters else None
 
+        if filter_tenant:
+            where_parts.append("r.tenant_id = ?")
+            where_params.append(filter_tenant)
         if filter_trust:
             where_parts.append("r.trust_tier = ?")
             where_params.append(filter_trust)

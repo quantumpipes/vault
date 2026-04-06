@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 class ResourceFilter:
     """Filtering criteria for resource listing."""
 
+    tenant_id: str | None = None
     trust_tier: str | None = None
     data_classification: str | None = None
     resource_type: str | None = None
