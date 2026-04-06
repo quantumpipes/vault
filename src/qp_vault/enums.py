@@ -122,7 +122,7 @@ class CISStage(StrEnum):
 class CISResult(StrEnum):
     """Result of a single CIS stage evaluation."""
 
-    PASS = "pass"
+    PASS = "pass"  # nosec B105 — CIS stage result, not a password
     """Content cleared this stage."""
 
     FLAG = "flag"

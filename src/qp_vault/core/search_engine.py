@@ -53,7 +53,15 @@ FRESHNESS_HALF_LIFE: dict[str, int] = {
 
 
 def compute_trust_weight(trust_tier: str, config: VaultConfig | None = None) -> float:
-    """Get trust weight multiplier for a given tier."""
+    """Get trust weight multiplier for a given tier.
+
+    Args:
+        trust_tier: Trust tier value (e.g., "canonical", "working").
+        config: Optional VaultConfig with custom trust_weights.
+
+    Returns:
+        Float multiplier (e.g., 1.5 for canonical, 1.0 for working).
+    """
     weights = config.trust_weights if config else TRUST_WEIGHTS
     return weights.get(trust_tier, 1.0)
 
@@ -61,8 +69,11 @@ def compute_trust_weight(trust_tier: str, config: VaultConfig | None = None) -> 
 def compute_adversarial_multiplier(adversarial_status: str) -> float:
     """Get adversarial verification multiplier.
 
-    Returns the security-dimension weight for a given adversarial status.
-    Effective RAG weight = trust_weight * adversarial_multiplier.
+    Args:
+        adversarial_status: Adversarial status value ("verified", "unverified", "suspicious").
+
+    Returns:
+        Float multiplier. Effective RAG weight = trust_weight * adversarial_multiplier.
     """
     return ADVERSARIAL_MULTIPLIERS.get(adversarial_status, 0.7)
 
@@ -71,8 +82,46 @@ def is_searchable(status: str) -> bool:
     """Check if a resource with the given status should appear in search results.
 
     QUARANTINED and DELETED resources are excluded by default.
+    This MUST be checked at every retrieval path, not just search.
+
+    Args:
+        status: ResourceStatus value (e.g., "quarantined", "indexed").
+
+    Returns:
+        True if the resource should appear in results.
     """
     return status not in EXCLUDED_STATUSES
+
+
+def filter_searchable(
+    results: list[SearchResult],
+    resource_statuses: dict[str, str] | None = None,
+    *,
+    include_quarantined: bool = False,
+) -> list[SearchResult]:
+    """Defense-in-depth filter: remove non-searchable results from any result list.
+
+    Call this as a final safety net on every result set, even if the query
+    should have already excluded quarantined resources. Belt-and-suspenders.
+
+    Uses resource_statuses lookup (resource_id -> ResourceStatus value) to check
+    whether each result's source resource is searchable. If no lookup is provided,
+    results pass through (the caller is responsible for pre-filtering).
+
+    Args:
+        results: Search results to filter.
+        resource_statuses: Mapping of resource_id to ResourceStatus value.
+        include_quarantined: If True, skip filtering (admin use only).
+
+    Returns:
+        Filtered results with non-searchable resources removed.
+    """
+    if include_quarantined or resource_statuses is None:
+        return results
+    return [
+        r for r in results
+        if is_searchable(resource_statuses.get(r.resource_id, "indexed"))
+    ]
 
 
 def compute_freshness(
@@ -109,10 +158,17 @@ def apply_trust_weighting(
     results: list[SearchResult],
     config: VaultConfig | None = None,
 ) -> list[SearchResult]:
-    """Apply trust weights and freshness decay to search results.
+    """Apply 2D trust weights and freshness decay to search results.
 
-    Mutates the relevance, trust_weight, and freshness fields on each result,
-    then re-sorts by composite relevance score.
+    Computes composite relevance = raw * organizational_trust * adversarial_multiplier * freshness.
+    Re-sorts results by composite score (highest first).
+
+    Args:
+        results: List of SearchResult objects from storage backend.
+        config: Optional VaultConfig with custom trust weights and freshness half-lives.
+
+    Returns:
+        New list of SearchResult objects with updated relevance, trust_weight, and freshness fields.
     """
     weighted: list[SearchResult] = []
 

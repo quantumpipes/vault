@@ -275,7 +275,7 @@ class SQLiteBackend:
             params.append(filters.collection_id)
 
         where = " AND ".join(conditions) if conditions else "1=1"
-        sql = f"SELECT * FROM resources WHERE {where} ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+        sql = f"SELECT * FROM resources WHERE {where} ORDER BY updated_at DESC LIMIT ? OFFSET ?"  # nosec B608 — conditions use ? params; column names from code, not user input
         params.extend([filters.limit, filters.offset])
 
         rows = conn.execute(sql, params).fetchall()
@@ -313,7 +313,7 @@ class SQLiteBackend:
         params.append(datetime.now(tz=UTC).isoformat())
         params.append(resource_id)
 
-        conn.execute(f"UPDATE resources SET {', '.join(sets)} WHERE id = ?", params)
+        conn.execute(f"UPDATE resources SET {', '.join(sets)} WHERE id = ?", params)  # nosec B608 — sets built from hardcoded field tuple (L290-293)
         conn.commit()
 
         resource = await self.get_resource(resource_id)
@@ -393,17 +393,16 @@ class SQLiteBackend:
         where_clause = " AND ".join(where_parts)
 
         # Get indexed chunks with resource info and rowid for FTS mapping
-        rows = conn.execute(
-            f"""SELECT c.rowid as chunk_rowid, c.id as chunk_id, c.resource_id,
-                       c.content, c.cid as chunk_cid, c.embedding,
-                       c.page_number, c.section_title, c.chunk_index,
-                       r.name as resource_name, r.trust_tier, r.lifecycle
-                FROM chunks c
-                JOIN resources r ON c.resource_id = r.id
-                WHERE {where_clause}
-                ORDER BY c.chunk_index""",
-            where_params,
-        ).fetchall()
+        # Column names and table names are all hardcoded; only where_clause has ? params
+        search_sql = (
+            f"SELECT c.rowid as chunk_rowid, c.id as chunk_id, c.resource_id,"  # nosec B608
+            f" c.content, c.cid as chunk_cid, c.embedding,"
+            f" c.page_number, c.section_title, c.chunk_index,"
+            f" r.name as resource_name, r.trust_tier, r.lifecycle"
+            f" FROM chunks c JOIN resources r ON c.resource_id = r.id"
+            f" WHERE {where_clause} ORDER BY c.chunk_index"
+        )
+        rows = conn.execute(search_sql, where_params).fetchall()
 
         # FTS5 match scores (if available and query text provided)
         fts_scores: dict[int, float] = {}

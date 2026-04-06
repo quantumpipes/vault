@@ -291,7 +291,7 @@ class PostgresBackend:
 
         async with pool.acquire() as conn:
             rows = await conn.fetch(
-                f"SELECT * FROM qp_vault.resources WHERE {where} "
+                f"SELECT * FROM qp_vault.resources WHERE {where} "  # nosec B608
                 f"ORDER BY updated_at DESC LIMIT ${idx} OFFSET ${idx + 1}",
                 *params,
             )
@@ -334,7 +334,7 @@ class PostgresBackend:
 
         async with pool.acquire() as conn:
             await conn.execute(
-                f"UPDATE qp_vault.resources SET {', '.join(sets)} WHERE id = ${idx}",
+                f"UPDATE qp_vault.resources SET {', '.join(sets)} WHERE id = ${idx}",  # nosec B608
                 *params,
             )
 

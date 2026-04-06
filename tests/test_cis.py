@@ -262,8 +262,27 @@ class TestContentProvenanceService:
         assert not prov.signature_verified
 
     @pytest.mark.asyncio
-    async def test_create_attestation_with_signing(self):
-        """Creates signed provenance when signing_fn is provided."""
+    async def test_create_attestation_with_signing_and_verify(self):
+        """Creates signed and verified provenance when both fns are provided."""
+        async def mock_sign(data: bytes) -> str:
+            return "signed_" + data[:8].hex()
+
+        async def mock_verify(data: bytes, sig: str) -> bool:
+            return sig == "signed_" + data[:8].hex()
+
+        service = ContentProvenanceService(signing_fn=mock_sign, verify_fn=mock_verify)
+        prov = await service.create_attestation(
+            resource_id="r1",
+            uploader_id="u1",
+            method=UploadMethod.API,
+            original_hash="def456",
+        )
+        assert prov.provenance_signature.startswith("signed_")
+        assert prov.signature_verified is True
+
+    @pytest.mark.asyncio
+    async def test_create_attestation_signed_but_no_verify_fn(self):
+        """Signed without verify_fn: signature present but not verified."""
         async def mock_sign(data: bytes) -> str:
             return "signed_" + data[:8].hex()
 
@@ -275,7 +294,7 @@ class TestContentProvenanceService:
             original_hash="def456",
         )
         assert prov.provenance_signature.startswith("signed_")
-        assert prov.signature_verified is True
+        assert prov.signature_verified is False  # No verify_fn to confirm
 
     @pytest.mark.asyncio
     async def test_verify_attestation_no_verify_fn(self, service):
