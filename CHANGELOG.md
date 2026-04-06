@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-04-06
+
+### Added
+- `vault.get_content(resource_id)` — retrieve full text content (reassembles chunks)
+- `vault.replace(resource_id, new_content)` — atomic content replacement with auto-supersession
+- `vault.get_provenance(resource_id)` — retrieve provenance records for a resource
+- `vault.set_adversarial_status(resource_id, status)` — persist adversarial verification status
+- `adversarial_status` column in storage schemas (persisted, was RAM-only)
+- `provenance` table in storage schemas (persisted, was RAM-only)
+- `updated_at`, `resource_type`, `data_classification` fields on `SearchResult` model
+- Layer `search_boost` applied in ranking (OPERATIONAL 1.5x, STRATEGIC 1.0x)
+
+### Fixed
+- **Freshness decay**: was hardcoded to 1.0, now computed from `updated_at` with per-tier half-life
+- **Layer search_boost**: defined per layer but never applied in `apply_trust_weighting()`
+
+### Changed
+- README badges corrected: removed undelivered encryption/FIPS claims, fixed test count
+- Encryption (`[encryption]`) and docling (`[docling]`) extras marked as "planned v0.8"
+
 ## [0.5.0] - 2026-04-06
 
 ### Added

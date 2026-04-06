@@ -117,6 +117,12 @@ class SearchResult(BaseModel):
     freshness: float = 1.0
     relevance: float = 0.0
 
+    # Resource metadata (for ranking and display)
+    updated_at: str | None = None
+    created_at: str | None = None
+    resource_type: str | None = None
+    data_classification: str | None = None
+
     # Provenance
     trust_tier: TrustTier = TrustTier.WORKING
     adversarial_status: AdversarialStatus = AdversarialStatus.UNVERIFIED

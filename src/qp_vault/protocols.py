@@ -41,6 +41,7 @@ class ResourceUpdate:
     tags: list[str] | None = None
     metadata: dict[str, Any] | None = None
     lifecycle: str | None = None
+    adversarial_status: str | None = None
     valid_from: str | None = None
     valid_until: str | None = None
     supersedes: str | None = None
