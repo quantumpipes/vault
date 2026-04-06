@@ -322,6 +322,18 @@ class AsyncVault:
                     f"({size_mb:.1f}MB provided)"
                 )
 
+        # Per-tenant quota check
+        if tenant_id and self.config.max_resources_per_tenant is not None:
+            from qp_vault.protocols import ResourceFilter
+            existing = await self._storage.list_resources(
+                ResourceFilter(tenant_id=tenant_id, limit=1, offset=self.config.max_resources_per_tenant)
+            )
+            if existing:
+                raise VaultError(
+                    f"Tenant {tenant_id} has reached the resource limit "
+                    f"({self.config.max_resources_per_tenant})"
+                )
+
         # Strip null bytes from content (prevents storage/search corruption)
         text = text.replace("\x00", "")
 
@@ -646,6 +658,37 @@ class AsyncVault:
                 }
 
         return paginated
+
+    async def search_with_facets(
+        self,
+        query: str,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Search with faceted results.
+
+        Returns results plus facet counts by trust tier, resource type,
+        and data classification.
+        """
+        results = await self.search(query, **kwargs)
+
+        facets: dict[str, dict[str, int]] = {
+            "trust_tier": {},
+            "resource_type": {},
+            "data_classification": {},
+        }
+        for r in results:
+            tier = r.trust_tier.value if hasattr(r.trust_tier, "value") else str(r.trust_tier)
+            facets["trust_tier"][tier] = facets["trust_tier"].get(tier, 0) + 1
+            if r.resource_type:
+                facets["resource_type"][r.resource_type] = facets["resource_type"].get(r.resource_type, 0) + 1
+            if r.data_classification:
+                facets["data_classification"][r.data_classification] = facets["data_classification"].get(r.data_classification, 0) + 1
+
+        return {
+            "results": results,
+            "total": len(results),
+            "facets": facets,
+        }
 
     # --- Verification ---
 

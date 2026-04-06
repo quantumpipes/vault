@@ -113,6 +113,8 @@ CREATE INDEX IF NOT EXISTS idx_chunks_cid ON chunks(cid);
 CREATE INDEX IF NOT EXISTS idx_provenance_resource ON provenance(resource_id);
 CREATE INDEX IF NOT EXISTS idx_resources_adversarial ON resources(adversarial_status);
 CREATE INDEX IF NOT EXISTS idx_resources_tenant ON resources(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_resources_classification ON resources(data_classification);
+CREATE INDEX IF NOT EXISTS idx_resources_type ON resources(resource_type);
 """
 
 _FTS_SCHEMA = """

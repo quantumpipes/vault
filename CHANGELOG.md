@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-04-06
+
+### Added
+- **Complete CLI**: 8 new commands (content, replace, supersede, collections, provenance, export, health, list, delete, transition, expiring)
+- **Search faceting**: `vault.search_with_facets()` returns results + facet counts by trust tier, resource type, classification
+- **FastAPI parity**: 7 new endpoints (content, provenance, collections CRUD, faceted search, batch, export)
+- **Per-tenant quotas**: `config.max_resources_per_tenant` enforced in `vault.add()`
+- **Missing storage indexes**: `data_classification`, `resource_type` in SQLite and PostgreSQL
+
+### Changed
+- CLI now has 15 commands (complete surface)
+- FastAPI now has 22+ endpoints (complete surface)
+
 ## [0.10.0] - 2026-04-06
 
 ### Added
