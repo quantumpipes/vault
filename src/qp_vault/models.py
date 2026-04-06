@@ -191,7 +191,7 @@ class HealthScore(BaseModel):
     resource_count: int = 0
 
 
-# --- Content Immune System models ---
+# --- Membrane models ---
 
 
 class ContentProvenance(BaseModel):
@@ -214,7 +214,7 @@ class ContentProvenance(BaseModel):
 
 
 class CISStageRecord(BaseModel):
-    """Result of a single CIS pipeline stage evaluation.
+    """Result of a single Membrane pipeline stage evaluation.
 
     Every stage (INGEST through REMEMBER) creates one record per document.
     Records are immutable once created.
@@ -233,7 +233,7 @@ class CISStageRecord(BaseModel):
 
 
 class CISPipelineStatus(BaseModel):
-    """Aggregate status of the CIS pipeline for a single document."""
+    """Aggregate status of the Membrane pipeline for a single document."""
 
     resource_id: str = ""
     stages: list[CISStageRecord] = Field(default_factory=list)

@@ -59,7 +59,7 @@ class ResourceStatus(StrEnum):
     """Registered, not yet processed."""
 
     QUARANTINED = "quarantined"
-    """CIS screening in progress. Excluded from search and RAG retrieval."""
+    """Membrane screening in progress. Excluded from search and RAG retrieval."""
 
     PROCESSING = "processing"
     """Being chunked and embedded."""
@@ -75,24 +75,24 @@ class ResourceStatus(StrEnum):
 
 
 class AdversarialStatus(StrEnum):
-    """CIS adversarial verification status (second dimension of trust).
+    """Membrane adversarial verification status (second dimension of trust).
 
     Orthogonal to TrustTier (organizational confidence).
     Effective RAG weight = trust_tier_weight * adversarial_multiplier.
     """
 
     UNVERIFIED = "unverified"
-    """Not yet screened by CIS. Default for legacy content. Multiplier: 0.7x."""
+    """Not yet screened by Membrane. Default for legacy content. Multiplier: 0.7x."""
 
     VERIFIED = "verified"
-    """Passed all CIS stages. Multiplier: 1.0x."""
+    """Passed all Membrane stages. Multiplier: 1.0x."""
 
     SUSPICIOUS = "suspicious"
-    """Flagged by one or more CIS stages. Multiplier: 0.3x."""
+    """Flagged by one or more Membrane stages. Multiplier: 0.3x."""
 
 
 class CISStage(StrEnum):
-    """Content Immune System pipeline stages."""
+    """Membrane pipeline stages."""
 
     INGEST = "ingest"
     """Stage 1: Provenance recording, format validation."""
@@ -120,9 +120,9 @@ class CISStage(StrEnum):
 
 
 class CISResult(StrEnum):
-    """Result of a single CIS stage evaluation."""
+    """Result of a single Membrane stage evaluation."""
 
-    PASS = "pass"  # nosec B105 — CIS stage result, not a password
+    PASS = "pass"  # nosec B105 — Membrane stage result, not a password
     """Content cleared this stage."""
 
     FLAG = "flag"

@@ -1,7 +1,7 @@
 # Copyright 2026 Quantum Pipes Technologies, LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for Content Immune System (CIS) Phase 1.
+"""Tests for Membrane (CIS) Phase 1.
 
 Covers: enums, models, provenance service, search exclusion, 2D trust scoring.
 """
@@ -80,7 +80,7 @@ class TestCISEnums:
 
 
 class TestCISModels:
-    """CIS domain model validation."""
+    """Membrane domain model validation."""
 
     def test_resource_has_adversarial_status(self):
         r = Resource(id="r1", name="test.pdf", content_hash="abc123")
@@ -131,7 +131,7 @@ class TestCISModels:
 
 
 class TestSearchEngine:
-    """CIS search engine extensions: 2D trust scoring and quarantine exclusion."""
+    """Membrane search engine extensions: 2D trust scoring and quarantine exclusion."""
 
     def test_adversarial_multiplier_verified(self):
         assert compute_adversarial_multiplier("verified") == 1.0

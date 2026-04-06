@@ -1,7 +1,7 @@
 # Copyright 2026 Quantum Pipes Technologies, LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""Edge case tests for CIS components.
+"""Edge case tests for Membrane components.
 
 Fills remaining gaps: auditor integration, provenance verify positive path,
 mixed adversarial statuses, approval budget boundaries.
@@ -104,7 +104,7 @@ class TestAdversarialVerifierAuditor:
 
         await verifier.set_status(
             "r1", AdversarialStatus.VERIFIED,
-            reason="CIS passed", reviewer_id="admin1",
+            reason="Membrane passed", reviewer_id="admin1",
         )
 
         auditor.record.assert_called_once()
@@ -113,7 +113,7 @@ class TestAdversarialVerifierAuditor:
         assert event.resource_id == "r1"
         assert event.details["previous"] == "unverified"
         assert event.details["new"] == "verified"
-        assert event.details["reason"] == "CIS passed"
+        assert event.details["reason"] == "Membrane passed"
         assert event.details["reviewer_id"] == "admin1"
 
     @pytest.mark.asyncio

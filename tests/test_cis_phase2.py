@@ -1,7 +1,7 @@
 # Copyright 2026 Quantum Pipes Technologies, LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for Content Immune System (CIS) Phase 2.
+"""Tests for Membrane (CIS) Phase 2.
 
 Covers: AdversarialVerifier, source diversity, approval budgets, anomaly detection.
 """
@@ -32,7 +32,7 @@ class TestAdversarialVerifier:
 
     @pytest.mark.asyncio
     async def test_transition_unverified_to_verified(self, verifier):
-        result = await verifier.set_status("r1", AdversarialStatus.VERIFIED, reason="CIS passed")
+        result = await verifier.set_status("r1", AdversarialStatus.VERIFIED, reason="Membrane passed")
         assert result == AdversarialStatus.VERIFIED
         assert await verifier.get_status("r1") == AdversarialStatus.VERIFIED
 
