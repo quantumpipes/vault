@@ -112,8 +112,8 @@ class PluginRegistry:
                         register_fn(ep.name, instance)
                     except Exception as e:
                         logger.warning("Failed to load entry_point plugin %s: %s", ep.name, e)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Entry point group %s unavailable: %s", group, e)
 
     def discover_plugins_dir(self, plugins_dir: Path) -> None:
         """Load plugins from a local directory (air-gap mode).

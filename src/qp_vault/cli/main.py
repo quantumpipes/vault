@@ -228,7 +228,9 @@ def verify(
     if resource_id:
         from qp_vault.models import VerificationResult
         r = vault.verify(resource_id)
-        assert isinstance(r, VerificationResult)
+        if not isinstance(r, VerificationResult):
+            console.print("[red]Unexpected verification result type[/red]")
+            raise typer.Exit(1)
         if r.passed:
             console.print(f"[green]PASS[/green]  {resource_id}")
             console.print(f"  Hash: {r.stored_hash}")
@@ -243,7 +245,9 @@ def verify(
     else:
         from qp_vault.models import VaultVerificationResult
         vr = vault.verify()
-        assert isinstance(vr, VaultVerificationResult)
+        if not isinstance(vr, VaultVerificationResult):
+            console.print("[red]Unexpected verification result type[/red]")
+            raise typer.Exit(1)
         if vr.passed:
             console.print("[green]PASS[/green]  Vault integrity verified")
             console.print(f"  Resources: {vr.resource_count}")

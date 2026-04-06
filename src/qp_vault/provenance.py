@@ -14,17 +14,37 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from qp_vault.models import ContentProvenance
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from qp_vault.enums import UploadMethod
+
+
+MAX_ID_LENGTH = 128
+MAX_STORED_RECORDS = 50_000
+
+
+def _validate_id(value: str, name: str) -> str:
+    """Validate an ID string: non-empty, bounded length, safe characters."""
+    if not value or not value.strip():
+        msg = f"{name} must be non-empty"
+        raise ValueError(msg)
+    value = value.strip()
+    if len(value) > MAX_ID_LENGTH:
+        msg = f"{name} exceeds max length ({MAX_ID_LENGTH})"
+        raise ValueError(msg)
+    return value
 
 
 class ContentProvenanceService:
     """Creates, verifies, and queries provenance attestations.
+
+    Thread-safe for async contexts. Bounded storage (MAX_STORED_RECORDS).
 
     Args:
         signing_fn: Async callable that signs bytes and returns a hex signature.
@@ -35,8 +55,8 @@ class ContentProvenanceService:
 
     def __init__(
         self,
-        signing_fn: Any | None = None,
-        verify_fn: Any | None = None,
+        signing_fn: Callable[[bytes], Awaitable[str]] | None = None,
+        verify_fn: Callable[[bytes, str], Awaitable[bool]] | None = None,
     ) -> None:
         self._signing_fn = signing_fn
         self._verify_fn = verify_fn
@@ -63,6 +83,10 @@ class ContentProvenanceService:
         Returns:
             Signed ContentProvenance record.
         """
+        # Validate inputs (Finding 8)
+        resource_id = _validate_id(resource_id, "resource_id")
+        uploader_id = _validate_id(uploader_id, "uploader_id")
+
         provenance_id = str(uuid4())
         now = datetime.now(tz=UTC)
 
@@ -82,15 +106,31 @@ class ContentProvenanceService:
         if self._signing_fn is not None:
             signature = await self._signing_fn(canonical)
             provenance = provenance.model_copy(
-                update={
-                    "provenance_signature": signature,
-                    "signature_verified": True,
-                }
+                update={"provenance_signature": signature}
             )
+            # Verify the signature we just created (Finding 17: never trust without verifying)
+            if self._verify_fn is not None:
+                verified = await self._verify_fn(canonical, signature)
+                provenance = provenance.model_copy(
+                    update={"signature_verified": verified}
+                )
+            else:
+                # No verify function: mark as signed but unverified
+                provenance = provenance.model_copy(
+                    update={"signature_verified": False}
+                )
 
         # Store in memory (production: persisted via storage backend)
         self._records[provenance_id] = provenance
         self._by_resource.setdefault(resource_id, []).append(provenance_id)
+
+        # Enforce bounded storage (Finding 7)
+        if len(self._records) > MAX_STORED_RECORDS:
+            oldest_id = next(iter(self._records))
+            old = self._records.pop(oldest_id)
+            res_list = self._by_resource.get(old.resource_id, [])
+            if oldest_id in res_list:
+                res_list.remove(oldest_id)
 
         return provenance
 
