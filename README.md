@@ -1,41 +1,132 @@
+<div align="center">
+
 # qp-vault
 
-**The knowledge store where every read is verified and every write is auditable.**
+**The governed knowledge store for autonomous organizations.**
 
-[![Python 3.12+](https://img.shields.io/badge/Python-3.12+-3776AB.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-375%20passing-brightgreen.svg)](tests/)
+Every document has a trust tier that weights search results. Every chunk has a SHA3-256 content ID. Every mutation is auditable. The entire vault is verifiable via Merkle tree. Air-gap native. Post-quantum ready.
+
+[![Python](https://img.shields.io/badge/Python-3.12+-3776AB.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Tests](https://img.shields.io/badge/Tests-375_passing-brightgreen.svg)](tests/)
 [![Security](https://img.shields.io/badge/Security-100%2F100-brightgreen.svg)](docs/security.md)
+[![FIPS](https://img.shields.io/badge/Crypto-SHA3--256%20%C2%B7%20Ed25519%20%C2%B7%20ML--KEM--768-purple.svg)](#security)
 
-qp-vault is not a vector database. It is a **governed knowledge store** for autonomous organizations. Every document has a trust tier that affects search ranking. Every chunk has a SHA3-256 content ID. Every mutation creates an audit record. The entire vault is verifiable via Merkle tree in under a second.
+</div>
 
-```python
-from qp_vault import Vault
+---
 
-vault = Vault("./my-knowledge")
-vault.add("quarterly-report.pdf", trust="canonical")
-results = vault.search("Q3 revenue projections")
-print(results[0].content, results[0].trust_tier)  # trust_weight=1.5x
+## The Architecture
+
+A Vault is a governed store of knowledge resources. Each resource is chunked, hashed, trust-classified, and indexed for hybrid search. The trust tier directly affects which results surface first.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                          VAULT                              │
+├──────────────┬──────────────────────────────────────────────┤
+│  INGEST      │  Parse → Chunk → SHA3-256 CID → Embed → Store│
+│  GOVERN      │  Trust tiers · Lifecycle · Data classification│
+│  RETRIEVE    │  Hybrid search · Trust-weighted · Time-travel │
+│  VERIFY      │  Merkle tree · CID per chunk · Proof export  │
+│  AUDIT       │  Every write → VaultEvent → Capsule (opt.)   │
+├──────────────┴──────────────────────────────────────────────┤
+│  Trust weights: CANONICAL 1.5x · WORKING 1.0x · EPHEMERAL 0.7x│
+│  SHA3-256 content IDs · Merkle root · Ed25519+ML-DSA-65 audit │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-```bash
-pip install qp-vault
+Knowledge is not static. Resources move through a lifecycle (DRAFT, REVIEW, ACTIVE, SUPERSEDED, EXPIRED, ARCHIVED), organized into memory layers (OPERATIONAL, STRATEGIC, COMPLIANCE), and verified cryptographically on every read.
+
+```
+∀ knowledge: ∃ provenance
+"For every piece of knowledge, there exists provenance."
 ```
 
 ---
 
-## Why qp-vault?
+## Why qp-vault
 
-Vector databases store embeddings. RAG frameworks build pipelines. Neither answers the questions that matter in regulated, high-stakes environments:
+Vector databases store embeddings and return them by similarity. When something goes wrong, or when a regulator asks "was this the current policy at the time?", similarity search is not enough.
 
-| Question | ChromaDB | Qdrant | Weaviate | **qp-vault** |
-|----------|----------|--------|----------|--------------|
-| **Who vouched for this document?** | -- | -- | -- | Trust tiers |
-| **Has this been tampered with?** | -- | -- | -- | SHA3-256 CIDs + Merkle |
-| **What was our policy on March 15?** | -- | -- | -- | Temporal validity |
-| **Can we prove compliance to auditors?** | -- | -- | -- | Capsule audit trail |
-| **Is this SOP still current?** | -- | -- | -- | Knowledge lifecycle |
-| **Does this work air-gapped?** | Partial | Partial | Partial | **Native** |
+qp-vault solves three problems that vector databases do not:
+
+**1. Trust-weighted retrieval.**
+Every resource has a trust tier (CANONICAL, WORKING, EPHEMERAL, ARCHIVED) that multiplies its search relevance. A CANONICAL SOP at 0.6 similarity outranks a WORKING draft at 0.8 similarity. This is not metadata filtering; it is a scoring function that ensures authoritative knowledge surfaces first, every time, without manual curation.
+
+**2. Cryptographic content integrity.**
+Every chunk receives a SHA3-256 content ID at ingest. Every resource receives a Merkle root over its chunk CIDs. The entire vault has a root hash. Any modification to any chunk, in any resource, changes the vault's Merkle root. Auditors can verify a single resource without downloading the vault, using an exported Merkle proof. No trust in the storage layer is required.
+
+**3. Knowledge lifecycle with temporal validity.**
+Resources have lifecycles (DRAFT to ACTIVE to SUPERSEDED to ARCHIVED) with temporal validity windows. Point-in-time queries answer "what was our policy on March 15, 2024?" by returning only resources that were ACTIVE at that date. Supersession chains link v1 to v2 to v3 with cryptographic pointers. Expired resources auto-transition. None of this exists in any vector database.
+
+---
+
+## Content Addressing
+
+Every chunk is hashed with SHA3-256 and assigned a content ID:
+
+```
+vault://sha3-256/4cb02d65a1b2c3d4e5f67890abcdef1234567890abcdef1234567890abcdef12
+```
+
+Every resource receives a Merkle root computed over its sorted chunk CIDs. The vault itself has a root hash over all resource hashes:
+
+```
+                    Vault Merkle Root
+                    /               \
+         Resource A Root      Resource B Root
+         /          \              |
+  hash(c1+c2)    hash(c3+c4)    hash(c5)
+   /      \        /      \       |
+CID(c1) CID(c2) CID(c3) CID(c4) CID(c5)
+```
+
+Identical content always produces the same CID. Modified content always produces a different root. Auditors verify a single resource via Merkle proof without downloading the vault.
+
+---
+
+## Trust Tiers
+
+Trust is not metadata. It is a scoring function.
+
+| Tier | Weight | Freshness Half-Life | Behavior |
+|------|--------|---------------------|----------|
+| **CANONICAL** | 1.5x | 365 days | Immutable. Official SOPs, approved policies. |
+| **WORKING** | 1.0x | 180 days | Default. Drafts, in-progress documents. |
+| **EPHEMERAL** | 0.7x | 30 days | Temporary. Meeting notes. Auto-archives after TTL. |
+| **ARCHIVED** | 0.25x | 730 days | Historical. Superseded versions. |
+
+Search ranking formula:
+
+```
+relevance = (0.7 × vector_similarity + 0.3 × text_rank) × trust_weight × freshness_decay
+```
+
+Where `freshness_decay = exp(-age_days / half_life × ln2)`. A 180-day-old WORKING document retains 50% freshness. A CANONICAL document of the same age retains 70%.
+
+---
+
+## Knowledge Lifecycle
+
+```
+DRAFT ──→ REVIEW ──→ ACTIVE ──→ SUPERSEDED ──→ ARCHIVED
+                        │
+                     EXPIRED (auto when valid_until passes)
+                        │
+                     ACTIVE (re-activate)
+```
+
+Supersession creates a linked chain. Point-in-time search returns historically correct results.
+
+```python
+vault.transition(r.id, "review", reason="Ready for security team")
+vault.transition(r.id, "active")
+
+old, new = vault.supersede(v1_id, v2_id)        # v1 → SUPERSEDED, linked to v2
+chain = vault.chain(v1_id)                        # [v1, v2, v3, ...]
+results = vault.search("policy", as_of=date(2024, 3, 15))  # Time-travel
+expiring = vault.expiring(days=90)                # What's about to expire?
+```
 
 ---
 
@@ -45,137 +136,69 @@ Vector databases store embeddings. RAG frameworks build pipelines. Neither answe
 pip install qp-vault
 ```
 
-That's it. SQLite backend, trust-weighted search, content-addressed storage, Merkle verification. Zero external services.
-
-| Extra | Adds | Install |
-|-------|------|---------|
-| `[postgres]` | PostgreSQL + pgvector hybrid search | `pip install qp-vault[postgres]` |
-| `[docling]` | 25+ format processing (PDF, DOCX, etc.) | `pip install qp-vault[docling]` |
-| `[capsule]` | Cryptographic audit trail ([qp-capsule](https://github.com/quantumpipes/capsule)) | `pip install qp-vault[capsule]` |
-| `[encryption]` | AES-256-GCM + ML-KEM-768 at rest | `pip install qp-vault[encryption]` |
-| `[integrity]` | Staleness, duplicate, orphan detection | `pip install qp-vault[integrity]` |
-| `[fastapi]` | REST API (15+ endpoints) | `pip install qp-vault[fastapi]` |
-| `[cli]` | `vault` command-line tool | `pip install qp-vault[cli]` |
-| `[all]` | Everything | `pip install qp-vault[all]` |
+| Command | What You Get | Dependencies |
+|---|---|---|
+| `pip install qp-vault` | SQLite, trust search, CAS, Merkle, lifecycle | **1** (pydantic) |
+| `pip install qp-vault[postgres]` | + PostgreSQL + pgvector hybrid search | + sqlalchemy, asyncpg, pgvector |
+| `pip install qp-vault[capsule]` | + Cryptographic audit trail | + [qp-capsule](https://github.com/quantumpipes/capsule) |
+| `pip install qp-vault[docling]` | + 25+ format document processing | + docling |
+| `pip install qp-vault[encryption]` | + AES-256-GCM + ML-KEM-768 at rest | + cryptography, pynacl |
+| `pip install qp-vault[fastapi]` | + REST API (15+ endpoints) | + fastapi |
+| `pip install qp-vault[cli]` | + `vault` command-line tool | + typer, rich |
+| `pip install qp-vault[all]` | Everything | All of the above |
 
 ---
 
-## Trust Tiers
-
-Every resource has a trust tier. Trust is not metadata; it directly affects search ranking.
-
-| Tier | Weight | Behavior |
-|------|--------|----------|
-| **CANONICAL** | 1.5x | Immutable. Official SOPs, approved policies. |
-| **WORKING** | 1.0x | Default. Drafts, in-progress docs. |
-| **EPHEMERAL** | 0.7x | Temporary. Meeting notes. Auto-archives after 90 days. |
-| **ARCHIVED** | 0.25x | Historical. Superseded versions. |
-
-A CANONICAL document with 0.6 similarity outranks a WORKING document with 0.8:
-
-```
-CANONICAL: 0.6 * 1.5 = 0.90  <-- wins
-WORKING:   0.8 * 1.0 = 0.80
-```
+## Quick Start
 
 ```python
-vault.add("SOP: Incident Response", trust="canonical")   # Always surfaces first
-vault.add("Draft: New Onboarding", trust="working")       # Baseline
-vault.add("Standup Notes 03/15", trust="ephemeral")        # Auto-archives
-```
+from qp_vault import Vault
 
----
+vault = Vault("./my-knowledge")
 
-## Knowledge Lifecycle
+# Add with trust tiers
+vault.add("Incident response: acknowledge within 15 minutes...",
+          name="sop-incident.md", trust="canonical")
+vault.add("Draft proposal for new onboarding process...",
+          name="draft-onboard.md", trust="working")
 
-Documents are not static. They have lifecycles.
+# Trust-weighted search
+results = vault.search("incident response")
+# CANONICAL surfaces first (1.5x), even at lower raw similarity
 
-```
-DRAFT --> REVIEW --> ACTIVE --> SUPERSEDED --> ARCHIVED
-                       |
-                    EXPIRED (auto)
-```
-
-```python
-# Create and advance
-r = vault.add("Security Policy v2", lifecycle="draft")
-vault.transition(r.id, "review", reason="Ready for security team")
-vault.transition(r.id, "active")
-
-# Supersede old versions
-old, new = vault.supersede(v1_id, v2_id)
-chain = vault.chain(v1_id)  # [v1, v2, v3]
-
-# Point-in-time queries
-results = vault.search("incident response", as_of=date(2024, 3, 15))
-
-# Expiration alerts
-expiring = vault.expiring(days=90)
-```
-
----
-
-## Memory Layers
-
-Three semantic partitions with per-layer defaults:
-
-| Layer | Default Trust | Search Boost | Reads Audited |
-|-------|--------------|-------------|---------------|
-| **OPERATIONAL** | WORKING | 1.5x | No |
-| **STRATEGIC** | CANONICAL | 1.0x | No |
-| **COMPLIANCE** | CANONICAL | 1.0x | **Yes** |
-
-```python
-from qp_vault import MemoryLayer
-
-ops = vault.layer(MemoryLayer.OPERATIONAL)       # SOPs, runbooks
-await ops.add("deploy-runbook.md")                # trust=WORKING auto
-
-strategic = vault.layer(MemoryLayer.STRATEGIC)    # ADRs, decisions
-compliance = vault.layer(MemoryLayer.COMPLIANCE)  # Audit evidence, certs
-await compliance.search("SOC2")                    # This search is logged
-```
-
----
-
-## Verification
-
-Content-addressed storage. SHA3-256 CID per chunk. Merkle root per vault.
-
-```python
-# Verify a single resource
-result = vault.verify(resource_id)
-assert result.passed
-
-# Verify entire vault
+# Verify integrity
 result = vault.verify()
 print(result.merkle_root)  # Changes if any content is modified
 
 # Export proof for auditors
 proof = vault.export_proof(resource_id)
-# Contains: resource_hash, merkle_root, sibling hashes along path
 ```
 
----
+### Memory Layers
 
-## Health Scoring
+```python
+from qp_vault import MemoryLayer
 
-Composite integrity assessment. Catches problems before they matter.
+ops = vault.layer(MemoryLayer.OPERATIONAL)        # SOPs, runbooks (boost=1.5x)
+strategic = vault.layer(MemoryLayer.STRATEGIC)     # ADRs, decisions (trust=CANONICAL)
+compliance = vault.layer(MemoryLayer.COMPLIANCE)   # Audit evidence (reads audited)
+
+await ops.add("deploy-runbook.md")                 # Layer defaults auto-applied
+await compliance.search("SOC2")                     # This search is logged
+```
+
+### Health Scoring
 
 ```python
 score = vault.health()
-print(f"{score.overall}/100")
-#   freshness:    92.0  (are documents current?)
-#   uniqueness:   100.0 (no duplicates?)
-#   coherence:    80.0  (no contradictions?)
-#   connectivity: 70.0  (are docs organized?)
+# score.overall:      85.0/100
+# score.freshness:    92.0  (are documents current?)
+# score.uniqueness:   100.0 (no duplicates?)
+# score.coherence:    80.0  (no contradictions?)
+# score.connectivity: 70.0  (are docs organized?)
 ```
 
----
-
-## Plugin System
-
-Extend with custom embedders, parsers, and policies. Air-gap mode: drop `.py` files in a directory.
+### Plugin System
 
 ```python
 from qp_vault.plugins import embedder, parser
@@ -193,11 +216,9 @@ class DicomParser:
         return ParseResult(text=extract_dicom(path))
 ```
 
-Three discovery methods: explicit registration, entry_points (pip packages), or `--plugins-dir` (air-gap).
+Three discovery methods: explicit registration, entry_points (pip packages), or `--plugins-dir` (air-gap: drop `.py` files, no install needed).
 
----
-
-## CLI
+### CLI
 
 ```bash
 vault init ./knowledge
@@ -209,45 +230,42 @@ vault health
 vault status
 ```
 
----
+Exit codes: `0` = pass, `1` = fail. Designed for CI: `vault verify && deploy`.
 
-## FastAPI
-
-One line to add 15+ REST endpoints:
+### FastAPI
 
 ```python
 from qp_vault.integrations.fastapi_routes import create_vault_router
 
 router = create_vault_router(vault)
 app.include_router(router, prefix="/v1/vault")
+# 15+ endpoints: resources CRUD, search, verify, health, lifecycle, proof
 ```
 
 ---
 
 ## Security
 
-| Layer | Implementation |
-|-------|---------------|
-| Content hashing | SHA3-256 (FIPS 202) |
-| Audit signatures | Ed25519 + ML-DSA-65 via [qp-capsule](https://github.com/quantumpipes/capsule) |
-| Encryption at rest | AES-256-GCM + ML-KEM-768 |
-| SQL injection | Parameterized queries only |
-| Input validation | Enum checks, name sanitization, tag/metadata limits |
-| FTS injection | Query sanitizer strips operators |
-| Path traversal | Name components stripped, null bytes removed |
-| Deprecated crypto | MD5, SHA1, DES, RSA: **never used** |
+| Layer | Algorithm | Standard | Purpose |
+|---|---|---|---|
+| Content integrity | SHA3-256 | FIPS 202 | Tamper-evident CIDs and Merkle roots |
+| Audit signatures | Ed25519 + ML-DSA-65 | FIPS 186-5, FIPS 204 | Via [qp-capsule](https://github.com/quantumpipes/capsule) (optional) |
+| Encryption at rest | AES-256-GCM + ML-KEM-768 | FIPS 197, FIPS 203 | Post-quantum key exchange (optional) |
+| Search integrity | Parameterized SQL | -- | No string interpolation, FTS5 sanitized |
+| Input validation | Pydantic + custom | -- | Enum checks, name/tag/metadata limits |
 
-100/100 security score. Full threat model in [docs/security.md](docs/security.md).
+No deprecated cryptography. No runtime network dependencies. Air-gapped operation supported. 100/100 security score. Full threat model in [docs/security.md](docs/security.md).
 
 ---
 
 ## Part of the Quantum Pipes Stack
 
-```
-qp-capsule    qp-vault      qp-conduit    qp-tunnel
-Audit         Knowledge     Infra         Access
-Protocol      Store         Mgmt          Control
-```
+| Package | Purpose | Install |
+|---|---|---|
+| **[qp-capsule](https://github.com/quantumpipes/capsule)** | Cryptographic audit protocol | `pip install qp-capsule` |
+| **qp-vault** | Governed knowledge store | `pip install qp-vault` |
+| **qp-conduit** | Infrastructure management | Shell toolkit |
+| **qp-tunnel** | Encrypted remote access | Shell toolkit |
 
 Each independently useful. Together, the governed AI platform for autonomous organizations.
 
@@ -255,32 +273,39 @@ Each independently useful. Together, the governed AI platform for autonomous org
 
 ## Documentation
 
-| Guide | Description |
-|-------|-------------|
-| [Getting Started](docs/getting-started.md) | Install to first search in 5 minutes |
-| [Architecture](docs/architecture.md) | Package structure, Protocols, data flow |
-| [API Reference](docs/api-reference.md) | Complete Python SDK |
-| [Trust Tiers](docs/trust-tiers.md) | How trust affects search ranking |
-| [Lifecycle](docs/lifecycle.md) | State machine, supersession, temporal validity |
-| [Memory Layers](docs/memory-layers.md) | OPERATIONAL, STRATEGIC, COMPLIANCE |
-| [Plugins](docs/plugins.md) | Custom embedders, parsers, policies |
-| [Security](docs/security.md) | Threat model, crypto, input validation |
-| [CLI](docs/cli.md) | All commands and options |
-| [FastAPI](docs/fastapi.md) | REST endpoints and integration |
+| Document | Audience |
+|---|---|
+| [Getting Started](docs/getting-started.md) | Developers |
+| [Architecture](docs/architecture.md) | Developers, Architects |
+| [API Reference](docs/api-reference.md) | Developers |
+| [Trust Tiers](docs/trust-tiers.md) | Developers, Product |
+| [Knowledge Lifecycle](docs/lifecycle.md) | Developers, Compliance |
+| [Memory Layers](docs/memory-layers.md) | Developers, Architects |
+| [Plugin Development](docs/plugins.md) | SDK Authors |
+| [Security Model](docs/security.md) | CISOs, Security Teams |
+| [CLI Reference](docs/cli.md) | DevOps, Developers |
+| [FastAPI Integration](docs/fastapi.md) | Backend Developers |
 
 ---
 
-## Development
+## Contributing
 
-```bash
-git clone https://github.com/quantumpipes/vault.git
-cd vault
-make install
-make test-all   # lint + typecheck + 375 tests
-```
-
----
+See [CONTRIBUTING.md](./CONTRIBUTING.md). Bug fixes with tests, new plugins (embedders, parsers, policies), and documentation improvements are welcome.
 
 ## License
 
-[Apache License 2.0](LICENSE)
+[Apache License 2.0](./LICENSE).
+
+---
+
+<div align="center">
+
+**∀ knowledge: ∃ provenance**
+
+An open-source governed knowledge store
+
+[Documentation](docs/) · [Security Policy](./SECURITY.md) · [Changelog](./CHANGELOG.md)
+
+Copyright 2026 [Quantum Pipes Technologies, LLC](https://quantumpipes.com)
+
+</div>
