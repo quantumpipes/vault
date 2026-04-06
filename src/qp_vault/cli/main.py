@@ -352,5 +352,89 @@ def expiring(
         console.print(f"  {r.name}  expires {r.valid_until}")
 
 
+@app.command()
+def content(
+    resource_id: str = typer.Argument(..., help="Resource ID"),
+    path: str | None = typer.Option(None, "--path", "-p", help="Vault path"),
+) -> None:
+    """Retrieve the full text content of a resource."""
+    vault = _get_vault(path)
+    try:
+        text = vault.get_content(resource_id)
+        console.print(text)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1) from None
+
+
+@app.command()
+def replace(
+    resource_id: str = typer.Argument(..., help="Resource ID to replace"),
+    file: str = typer.Argument(..., help="New content (file path or text)"),
+    path: str | None = typer.Option(None, "--path", "-p", help="Vault path"),
+) -> None:
+    """Replace a resource's content (creates new version, supersedes old)."""
+    vault = _get_vault(path)
+    file_path = Path(file)
+    new_content = file_path.read_text() if file_path.exists() else file
+    old, new = vault.replace(resource_id, new_content)
+    console.print(f"[green]Replaced[/green]  {old.name}")
+    console.print(f"  Old: {old.id} -> SUPERSEDED")
+    console.print(f"  New: {new.id}")
+
+
+@app.command()
+def supersede(
+    old_id: str = typer.Argument(..., help="Old resource ID"),
+    new_id: str = typer.Argument(..., help="New resource ID"),
+    path: str | None = typer.Option(None, "--path", "-p", help="Vault path"),
+) -> None:
+    """Supersede a resource with a newer version."""
+    vault = _get_vault(path)
+    old, new = vault.supersede(old_id, new_id)
+    console.print(f"[green]Superseded[/green]  {old.name} -> {new.name}")
+
+
+@app.command()
+def collections(
+    path: str | None = typer.Option(None, "--path", "-p", help="Vault path"),
+) -> None:
+    """List all collections."""
+    vault = _get_vault(path)
+    colls = vault.list_collections()
+    if not colls:
+        console.print("[yellow]No collections.[/yellow]")
+        return
+    for c in colls:
+        console.print(f"  {c.get('name', '?')}  ({c.get('id', '?')})")
+
+
+@app.command()
+def provenance(
+    resource_id: str = typer.Argument(..., help="Resource ID"),
+    path: str | None = typer.Option(None, "--path", "-p", help="Vault path"),
+) -> None:
+    """Show provenance records for a resource."""
+    vault = _get_vault(path)
+    records = vault.get_provenance(resource_id)
+    if not records:
+        console.print("[yellow]No provenance records.[/yellow]")
+        return
+    for r in records:
+        console.print(f"  {r.get('created_at', '?')}  by {r.get('uploader_id', 'unknown')}  via {r.get('upload_method', '?')}")
+
+
+@app.command(name="export")
+def export_vault(
+    output: str = typer.Argument(..., help="Output file path"),
+    path: str | None = typer.Option(None, "--path", "-p", help="Vault path"),
+) -> None:
+    """Export vault to a JSON file."""
+    vault = _get_vault(path)
+    import asyncio
+    result = asyncio.run(vault._async.export_vault(output))
+    console.print(f"[green]Exported[/green]  {result['resource_count']} resources to {result['path']}")
+
+
 if __name__ == "__main__":
     app()

@@ -252,4 +252,59 @@ def create_vault_router(vault: Any) -> APIRouter:
         resources = await vault.expiring(days=days)
         return {"data": [r.model_dump() for r in resources], "meta": {"days": days}}
 
+    @router.get("/resources/{resource_id}/content")
+    async def get_content(resource_id: str) -> dict[str, Any]:
+        try:
+            text = await vault.get_content(resource_id)
+        except Exception as e:
+            raise _handle_error(e) from e
+        return {"data": {"content": text}, "meta": {}}
+
+    @router.get("/resources/{resource_id}/provenance")
+    async def get_provenance(resource_id: str) -> dict[str, Any]:
+        records = await vault.get_provenance(resource_id)
+        return {"data": records, "meta": {"count": len(records)}}
+
+    @router.get("/collections")
+    async def list_collections() -> dict[str, Any]:
+        colls = await vault.list_collections()
+        return {"data": colls, "meta": {"count": len(colls)}}
+
+    @router.post("/collections")
+    async def create_collection(req: dict[str, Any]) -> dict[str, Any]:
+        result = await vault.create_collection(req.get("name", ""), description=req.get("description", ""))
+        return {"data": result, "meta": {}}
+
+    @router.post("/search/faceted")
+    async def search_faceted(req: SearchRequest) -> dict[str, Any]:
+        as_of_date = date.fromisoformat(req.as_of) if req.as_of else None
+        result = await vault.search_with_facets(
+            req.query,
+            top_k=req.top_k,
+            trust_min=req.trust_min,
+            layer=req.layer,
+            as_of=as_of_date,
+        )
+        return {
+            "data": [r.model_dump() for r in result["results"]],
+            "meta": {"total": result["total"], "facets": result["facets"]},
+        }
+
+    @router.post("/batch")
+    async def add_batch(req: dict[str, Any]) -> dict[str, Any]:
+        sources = req.get("sources", [])
+        trust = req.get("trust", "working")
+        tenant_id = req.get("tenant_id")
+        resources = await vault.add_batch(
+            [s.get("content", "") if isinstance(s, dict) else s for s in sources],
+            trust=trust,
+            tenant_id=tenant_id,
+        )
+        return {"data": [r.model_dump() for r in resources], "meta": {"count": len(resources)}}
+
+    @router.get("/export")
+    async def export_vault_endpoint(output: str = "vault_export.json") -> dict[str, Any]:
+        result = await vault.export_vault(output)
+        return {"data": result, "meta": {}}
+
     return router
