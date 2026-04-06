@@ -385,6 +385,87 @@ class AsyncVault:
         await self._ensure_initialized()
         await self._resource_manager.delete(resource_id, hard=hard)
 
+    async def get_content(self, resource_id: str) -> str:
+        """Retrieve the full text content of a resource.
+
+        Reassembles chunks in order to reconstruct the original text.
+
+        Args:
+            resource_id: The resource to retrieve content for.
+
+        Returns:
+            The full text content, with chunks joined by newlines.
+        """
+        await self._ensure_initialized()
+        chunks = await self._storage.get_chunks_for_resource(resource_id)
+        if not chunks:
+            raise VaultError(f"No content found for resource {resource_id}")
+        sorted_chunks = sorted(chunks, key=lambda c: c.chunk_index)
+        return "\n\n".join(c.content for c in sorted_chunks)
+
+    async def replace(
+        self,
+        resource_id: str,
+        new_content: str,
+        *,
+        reason: str | None = None,
+    ) -> tuple[Resource, Resource]:
+        """Replace a resource's content atomically.
+
+        Creates a new resource with the new content and supersedes the old one.
+        The old resource transitions to SUPERSEDED.
+
+        Args:
+            resource_id: The resource to replace.
+            new_content: The new text content.
+            reason: Optional reason for the replacement.
+
+        Returns:
+            Tuple of (old_resource, new_resource).
+        """
+        await self._ensure_initialized()
+        old_resource = await self.get(resource_id)
+
+        # Create new version with same metadata
+        new_resource = await self.add(
+            new_content,
+            name=old_resource.name,
+            trust=old_resource.trust_tier,
+            classification=old_resource.data_classification,
+            layer=old_resource.layer,
+            collection=old_resource.collection_id,
+            tags=old_resource.tags,
+            metadata=old_resource.metadata,
+        )
+
+        # Supersede old with new
+        return await self.supersede(resource_id, new_resource.id)
+
+    async def get_provenance(self, resource_id: str) -> list[dict[str, Any]]:
+        """Get all provenance records for a resource.
+
+        Returns:
+            List of provenance records in chronological order.
+        """
+        await self._ensure_initialized()
+        return await self._storage.get_provenance(resource_id)
+
+    async def set_adversarial_status(self, resource_id: str, status: str) -> Resource:
+        """Set the adversarial verification status of a resource.
+
+        Args:
+            resource_id: The resource to update.
+            status: One of 'unverified', 'verified', 'suspicious'.
+
+        Returns:
+            Updated resource.
+        """
+        await self._ensure_initialized()
+        from qp_vault.protocols import ResourceUpdate
+        return await self._storage.update_resource(
+            resource_id, ResourceUpdate(adversarial_status=status)
+        )
+
     # --- Lifecycle ---
 
     async def transition(
@@ -436,6 +517,7 @@ class AsyncVault:
         layer: MemoryLayer | str | None = None,
         collection: str | None = None,
         as_of: date | None = None,
+        _layer_boost: float = 1.0,
     ) -> list[SearchResult]:
         """Trust-weighted hybrid search.
 
@@ -479,8 +561,8 @@ class AsyncVault:
         # Get raw results from storage
         raw_results = await self._storage.search(search_query)
 
-        # Apply trust weighting
-        weighted = apply_trust_weighting(raw_results, self.config)
+        # Apply trust weighting with optional layer boost
+        weighted = apply_trust_weighting(raw_results, self.config, layer_boost=_layer_boost)
 
         # Apply threshold after trust weighting
         filtered = [r for r in weighted if r.relevance >= threshold]
@@ -747,6 +829,26 @@ class Vault:
     def delete(self, resource_id: str, *, hard: bool = False) -> None:
         """Delete a resource."""
         return _run_async(self._async.delete(resource_id, hard=hard))
+
+    def get_content(self, resource_id: str) -> str:
+        """Retrieve the full text content of a resource."""
+        result: str = _run_async(self._async.get_content(resource_id))
+        return result
+
+    def replace(self, resource_id: str, new_content: str, *, reason: str | None = None) -> tuple[Resource, Resource]:
+        """Replace a resource's content atomically. Returns (old, new)."""
+        result: tuple[Resource, Resource] = _run_async(self._async.replace(resource_id, new_content, reason=reason))
+        return result
+
+    def get_provenance(self, resource_id: str) -> list[dict[str, Any]]:
+        """Get provenance records for a resource."""
+        result: list[dict[str, Any]] = _run_async(self._async.get_provenance(resource_id))
+        return result
+
+    def set_adversarial_status(self, resource_id: str, status: str) -> Resource:
+        """Set adversarial verification status."""
+        result: Resource = _run_async(self._async.set_adversarial_status(resource_id, status))
+        return result
 
     def transition(self, resource_id: str, target: Lifecycle | str, *, reason: str | None = None) -> Resource:
         """Transition lifecycle state."""

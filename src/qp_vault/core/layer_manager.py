@@ -182,6 +182,7 @@ class LayerView:
             query,
             top_k=top_k,
             layer=self._layer,
+            _layer_boost=self._layer_config.search_boost,
             **kwargs,
         )
 

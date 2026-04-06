@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS resources (
     resource_type TEXT NOT NULL DEFAULT 'document',
     status TEXT NOT NULL DEFAULT 'pending',
     lifecycle TEXT NOT NULL DEFAULT 'active',
+    adversarial_status TEXT NOT NULL DEFAULT 'unverified',
     valid_from TEXT,
     valid_until TEXT,
     supersedes TEXT,
@@ -93,8 +94,23 @@ CREATE INDEX IF NOT EXISTS idx_resources_lifecycle ON resources(lifecycle);
 CREATE INDEX IF NOT EXISTS idx_resources_collection ON resources(collection_id);
 CREATE INDEX IF NOT EXISTS idx_resources_layer ON resources(layer);
 CREATE INDEX IF NOT EXISTS idx_resources_hash ON resources(content_hash);
+CREATE TABLE IF NOT EXISTS provenance (
+    id TEXT PRIMARY KEY,
+    resource_id TEXT NOT NULL,
+    uploader_id TEXT,
+    upload_method TEXT,
+    source_description TEXT DEFAULT '',
+    original_hash TEXT NOT NULL,
+    provenance_signature TEXT,
+    signature_verified INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_chunks_resource ON chunks(resource_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_cid ON chunks(cid);
+CREATE INDEX IF NOT EXISTS idx_provenance_resource ON provenance(resource_id);
+CREATE INDEX IF NOT EXISTS idx_resources_adversarial ON resources(adversarial_status);
 """
 
 _FTS_SCHEMA = """
@@ -145,6 +161,11 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
+def _enum_val(v: Any) -> str:
+    """Extract .value from enum, or return str directly."""
+    return v.value if hasattr(v, "value") else str(v)
+
+
 def _resource_from_row(row: dict[str, Any]) -> Resource:
     """Convert a SQLite row dict to a Resource model."""
     data = dict(row)
@@ -190,14 +211,14 @@ class SQLiteBackend:
                 """INSERT INTO resources (
                     id, name, content_hash, cid, merkle_root,
                     trust_tier, data_classification, resource_type,
-                    status, lifecycle, valid_from, valid_until,
+                    status, lifecycle, adversarial_status, valid_from, valid_until,
                     supersedes, superseded_by, collection_id, layer,
                     tags, metadata, mime_type, size_bytes, chunk_count,
                     created_at, updated_at, indexed_at, deleted_at
                 ) VALUES (
                     ?, ?, ?, ?, ?,
                     ?, ?, ?,
-                    ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?
@@ -213,6 +234,7 @@ class SQLiteBackend:
                     resource.resource_type.value if hasattr(resource.resource_type, "value") else resource.resource_type,
                     resource.status.value if hasattr(resource.status, "value") else resource.status,
                     resource.lifecycle.value if hasattr(resource.lifecycle, "value") else resource.lifecycle,
+                    _enum_val(getattr(resource, "adversarial_status", "unverified")),
                     str(resource.valid_from) if resource.valid_from else None,
                     str(resource.valid_until) if resource.valid_until else None,
                     resource.supersedes,
@@ -289,7 +311,7 @@ class SQLiteBackend:
 
         for field_name in (
             "name", "trust_tier", "data_classification", "lifecycle",
-            "valid_from", "valid_until", "supersedes", "superseded_by",
+            "adversarial_status", "valid_from", "valid_until", "supersedes", "superseded_by",
         ):
             val = getattr(updates, field_name, None)
             if val is not None:
@@ -398,7 +420,8 @@ class SQLiteBackend:
             f"SELECT c.rowid as chunk_rowid, c.id as chunk_id, c.resource_id,"  # nosec B608
             f" c.content, c.cid as chunk_cid, c.embedding,"
             f" c.page_number, c.section_title, c.chunk_index,"
-            f" r.name as resource_name, r.trust_tier, r.lifecycle"
+            f" r.name as resource_name, r.trust_tier, r.lifecycle,"
+            f" r.updated_at as resource_updated_at, r.resource_type, r.data_classification"
             f" FROM chunks c JOIN resources r ON c.resource_id = r.id"
             f" WHERE {where_clause} ORDER BY c.chunk_index"
         )
@@ -457,6 +480,9 @@ class SQLiteBackend:
                     trust_tier=TrustTier(row_dict["trust_tier"]),
                     cid=row_dict["chunk_cid"],
                     lifecycle=row_dict["lifecycle"],
+                    updated_at=row_dict.get("resource_updated_at"),
+                    resource_type=row_dict.get("resource_type"),
+                    data_classification=row_dict.get("data_classification"),
                     relevance=raw_score,
                 )
             )
@@ -499,6 +525,43 @@ class SQLiteBackend:
             d["embedding"] = json.loads(d["embedding"]) if d["embedding"] else None
             result.append(Chunk(**d))
         return result
+
+    async def store_provenance(
+        self,
+        provenance_id: str,
+        resource_id: str,
+        uploader_id: str | None,
+        upload_method: str | None,
+        source_description: str,
+        original_hash: str,
+        signature: str | None,
+        verified: bool,
+        created_at: str,
+    ) -> None:
+        """Store a provenance record."""
+        conn = self._get_conn()
+        conn.execute(
+            """INSERT INTO provenance (
+                id, resource_id, uploader_id, upload_method,
+                source_description, original_hash, provenance_signature,
+                signature_verified, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                provenance_id, resource_id, uploader_id, upload_method,
+                source_description, original_hash, signature,
+                1 if verified else 0, created_at,
+            ),
+        )
+        conn.commit()
+
+    async def get_provenance(self, resource_id: str) -> list[dict[str, Any]]:
+        """Get all provenance records for a resource."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM provenance WHERE resource_id = ? ORDER BY created_at",
+            (resource_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     async def close(self) -> None:
         """Close the database connection."""

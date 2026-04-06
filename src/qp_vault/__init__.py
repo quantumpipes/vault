@@ -26,7 +26,7 @@ Quick start:
 Docs: https://github.com/quantumpipes/vault
 """
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 __author__ = "Quantum Pipes Technologies, LLC"
 __license__ = "Apache-2.0"
 

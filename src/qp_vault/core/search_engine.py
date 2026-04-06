@@ -157,10 +157,12 @@ def compute_freshness(
 def apply_trust_weighting(
     results: list[SearchResult],
     config: VaultConfig | None = None,
+    *,
+    layer_boost: float = 1.0,
 ) -> list[SearchResult]:
-    """Apply 2D trust weights and freshness decay to search results.
+    """Apply 2D trust weights, freshness decay, and layer boost to search results.
 
-    Computes composite relevance = raw * organizational_trust * adversarial_multiplier * freshness.
+    Computes composite relevance = raw * organizational_trust * adversarial_multiplier * freshness * layer_boost.
     Re-sorts results by composite score (highest first).
 
     Args:
@@ -181,12 +183,13 @@ def apply_trust_weighting(
         adv_str = adv_status.value if hasattr(adv_status, "value") else str(adv_status or "unverified")
         adv_mult = compute_adversarial_multiplier(adv_str)
 
-        # Freshness: we don't have updated_at on SearchResult, use 1.0 for now
-        freshness = 1.0
+        # Freshness: compute from resource updated_at timestamp
+        result_updated = getattr(result, "updated_at", None)
+        freshness = compute_freshness(result_updated, tier, config) if result_updated else 1.0
 
-        # Composite score: raw * organizational_trust * adversarial_verification * freshness
+        # Composite score: raw * organizational_trust * adversarial_verification * freshness * layer_boost
         raw = result.relevance
-        composite = raw * tw * adv_mult * freshness
+        composite = raw * tw * adv_mult * freshness * layer_boost
 
         weighted.append(
             result.model_copy(
