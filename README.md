@@ -37,10 +37,7 @@ A Vault is a governed store of knowledge resources. Each resource is chunked, ha
 
 Knowledge is not static. Resources move through a lifecycle (DRAFT, REVIEW, ACTIVE, SUPERSEDED, EXPIRED, ARCHIVED), organized into memory layers (OPERATIONAL, STRATEGIC, COMPLIANCE), and verified cryptographically on every read.
 
-```
-∀ knowledge: ∃ provenance
-"For every piece of knowledge, there exists provenance."
-```
+*Knowledge that can't be verified can't be trusted.*
 
 ---
 
@@ -300,7 +297,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md). Bug fixes with tests, new plugins (emb
 
 <div align="center">
 
-**∀ knowledge: ∃ provenance**
+*Knowledge that can't be verified can't be trusted.*
 
 An open-source governed knowledge store
 
