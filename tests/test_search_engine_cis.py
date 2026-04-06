@@ -1,7 +1,7 @@
 # Copyright 2026 Quantum Pipes Technologies, LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for search engine CIS extensions: trust weights, freshness, 2D scoring.
+"""Tests for search engine Membrane extensions: trust weights, freshness, 2D scoring.
 
 Fills gaps: compute_trust_weight, compute_freshness, apply_trust_weighting edge cases.
 """

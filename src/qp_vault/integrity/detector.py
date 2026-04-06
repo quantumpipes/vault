@@ -14,6 +14,7 @@ from __future__ import annotations
 import math
 from collections import Counter
 from datetime import UTC, datetime
+from typing import Any
 
 from qp_vault.models import HealthScore, Resource
 
@@ -104,6 +105,113 @@ def find_orphans(
             orphans.append(r)
 
     return orphans
+
+
+def find_near_duplicates(
+    resources: list[Resource],
+    chunks_by_resource: dict[str, list[Any]] | None = None,
+    *,
+    similarity_threshold: float = 0.85,
+) -> list[tuple[Resource, Resource, float]]:
+    """Find semantically similar resources using chunk embedding comparison.
+
+    Compares resources by their first chunk's embedding. Returns pairs
+    above the similarity threshold.
+
+    Args:
+        resources: Resources to compare.
+        chunks_by_resource: Dict mapping resource_id to list of Chunk objects.
+        similarity_threshold: Minimum cosine similarity to flag as near-duplicate.
+
+    Returns:
+        List of (resource_a, resource_b, similarity_score) tuples.
+    """
+    if not chunks_by_resource:
+        return []
+
+    # Get first-chunk embeddings per resource
+    embeddings: dict[str, list[float]] = {}
+    for r in resources:
+        chunks = chunks_by_resource.get(r.id, [])
+        if chunks and hasattr(chunks[0], "embedding") and chunks[0].embedding:
+            embeddings[r.id] = chunks[0].embedding
+
+    # Pairwise comparison
+    resource_map = {r.id: r for r in resources}
+    pairs: list[tuple[Resource, Resource, float]] = []
+    ids = list(embeddings.keys())
+
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
+            a, b = embeddings[ids[i]], embeddings[ids[j]]
+            if len(a) != len(b) or not a:
+                continue
+            dot = sum(x * y for x, y in zip(a, b, strict=False))
+            norm_a = sum(x * x for x in a) ** 0.5
+            norm_b = sum(x * x for x in b) ** 0.5
+            if norm_a == 0 or norm_b == 0:
+                continue
+            sim = dot / (norm_a * norm_b)
+            if sim >= similarity_threshold:
+                pairs.append((resource_map[ids[i]], resource_map[ids[j]], sim))
+
+    return sorted(pairs, key=lambda x: x[2], reverse=True)
+
+
+def detect_contradictions(
+    resources: list[Resource],
+    chunks_by_resource: dict[str, list[Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Detect potential contradictions between resources.
+
+    Looks for resources with similar topics (high embedding similarity)
+    but different trust tiers or opposing lifecycle states, which may
+    indicate conflicting information.
+
+    This is a heuristic approach. For full NLI-based contradiction
+    detection, an LLM provider is required (future enhancement).
+
+    Args:
+        resources: Resources to analyze.
+        chunks_by_resource: Dict mapping resource_id to chunk lists.
+
+    Returns:
+        List of contradiction records with resource pairs and reasons.
+    """
+    contradictions: list[dict[str, Any]] = []
+
+    # Find resources that are semantically similar but have different trust tiers
+    near_dupes = find_near_duplicates(
+        resources, chunks_by_resource, similarity_threshold=0.75
+    )
+
+    for r_a, r_b, similarity in near_dupes:
+        tier_a = r_a.trust_tier.value if hasattr(r_a.trust_tier, "value") else str(r_a.trust_tier)
+        tier_b = r_b.trust_tier.value if hasattr(r_b.trust_tier, "value") else str(r_b.trust_tier)
+
+        # Flag if semantically similar but different trust tiers
+        if tier_a != tier_b:
+            contradictions.append({
+                "type": "trust_conflict",
+                "resource_a": {"id": r_a.id, "name": r_a.name, "trust_tier": tier_a},
+                "resource_b": {"id": r_b.id, "name": r_b.name, "trust_tier": tier_b},
+                "similarity": similarity,
+                "reason": f"Similar content ({similarity:.0%}) with different trust tiers ({tier_a} vs {tier_b})",
+            })
+
+        # Flag if one is active and one is superseded (potential stale reference)
+        lc_a = r_a.lifecycle.value if hasattr(r_a.lifecycle, "value") else str(r_a.lifecycle)
+        lc_b = r_b.lifecycle.value if hasattr(r_b.lifecycle, "value") else str(r_b.lifecycle)
+        if lc_a == "active" and lc_b == "superseded" or lc_a == "superseded" and lc_b == "active":
+            contradictions.append({
+                "type": "lifecycle_conflict",
+                "resource_a": {"id": r_a.id, "name": r_a.name, "lifecycle": lc_a},
+                "resource_b": {"id": r_b.id, "name": r_b.name, "lifecycle": lc_b},
+                "similarity": similarity,
+                "reason": f"Similar content ({similarity:.0%}) but conflicting lifecycle ({lc_a} vs {lc_b})",
+            })
+
+    return contradictions
 
 
 def compute_health_score(

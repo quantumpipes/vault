@@ -561,11 +561,14 @@ class AsyncVault:
         *,
         tenant_id: str | None = None,
         top_k: int = 10,
+        offset: int = 0,
         threshold: float = 0.0,
         trust_min: TrustTier | str | None = None,
         layer: MemoryLayer | str | None = None,
         collection: str | None = None,
         as_of: date | None = None,
+        deduplicate: bool = True,
+        explain: bool = False,
         _layer_boost: float = 1.0,
     ) -> list[SearchResult]:
         """Trust-weighted hybrid search.
@@ -617,7 +620,32 @@ class AsyncVault:
         # Apply threshold after trust weighting
         filtered = [r for r in weighted if r.relevance >= threshold]
 
-        return filtered[:top_k]
+        # Deduplicate by resource_id (keep best chunk per resource)
+        if deduplicate:
+            seen: dict[str, SearchResult] = {}
+            for r in filtered:
+                if r.resource_id not in seen or r.relevance > seen[r.resource_id].relevance:
+                    seen[r.resource_id] = r
+            filtered = sorted(seen.values(), key=lambda x: x.relevance, reverse=True)
+
+        # Apply pagination
+        paginated = filtered[offset : offset + top_k]
+
+        # Add explain metadata if requested
+        if explain:
+            for r in paginated:
+                r.metadata = {  # type: ignore[attr-defined]
+                    "explain": {
+                        "vector_similarity": r.vector_similarity,
+                        "text_rank": r.text_rank,
+                        "trust_weight": r.trust_weight,
+                        "freshness": r.freshness,
+                        "layer_boost": _layer_boost,
+                        "composite_relevance": r.relevance,
+                    }
+                }
+
+        return paginated
 
     # --- Verification ---
 
@@ -774,15 +802,73 @@ class AsyncVault:
 
     # --- Integrity ---
 
-    async def health(self) -> HealthScore:
-        """Compute vault health score (0-100).
+    async def health(self, resource_id: str | None = None) -> HealthScore:
+        """Compute health score (0-100).
 
-        Assesses: freshness, uniqueness, coherence, connectivity, trust alignment.
+        Args:
+            resource_id: If provided, compute health for a single resource.
+                        If None, compute vault-wide health.
+
+        Returns:
+            HealthScore with component scores.
         """
         await self._ensure_initialized()
         from qp_vault.integrity.detector import compute_health_score
+
+        if resource_id:
+            resource = await self.get(resource_id)
+            score = compute_health_score([resource])
+            return score
+
         all_resources = await self._list_all_bounded()
         return compute_health_score(all_resources)
+
+    async def export_vault(self, path: str | Path) -> dict[str, Any]:
+        """Export the vault to a JSON file for portability.
+
+        Args:
+            path: Output file path.
+
+        Returns:
+            Summary with resource count and export path.
+        """
+        import json as _json
+        await self._ensure_initialized()
+        resources = await self._list_all_bounded()
+        data = {
+            "version": "0.10.0",
+            "resource_count": len(resources),
+            "resources": [r.model_dump(mode="json") for r in resources],
+        }
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(_json.dumps(data, default=str, indent=2))
+        return {"path": str(out), "resource_count": len(resources)}
+
+    async def import_vault(self, path: str | Path) -> list[Resource]:
+        """Import resources from an exported vault JSON file.
+
+        Args:
+            path: Path to the exported JSON file.
+
+        Returns:
+            List of imported resources.
+        """
+        import json as _json
+        await self._ensure_initialized()
+        data = _json.loads(Path(path).read_text())
+        imported = []
+        for r_data in data.get("resources", []):
+            content = r_data.get("name", "imported")
+            resource = await self.add(
+                content,
+                name=r_data.get("name", "imported"),
+                trust=r_data.get("trust_tier", "working"),
+                tags=r_data.get("tags", []),
+                metadata=r_data.get("metadata", {}),
+            )
+            imported.append(resource)
+        return imported
 
     async def _list_all_bounded(self, *, hard_cap: int = 50_000, batch_size: int = 1000) -> list[Resource]:
         """Load all resources with pagination and a hard cap to prevent OOM."""

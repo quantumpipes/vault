@@ -8,8 +8,8 @@ to `trust_tier` (organizational confidence). Together they form the 2D trust
 model where effective RAG weight = trust_tier_weight * adversarial_multiplier.
 
 Status transitions:
-    UNVERIFIED -> VERIFIED  (all CIS stages passed)
-    UNVERIFIED -> SUSPICIOUS (one or more CIS stages flagged)
+    UNVERIFIED -> VERIFIED  (all Membrane stages passed)
+    UNVERIFIED -> SUSPICIOUS (one or more Membrane stages flagged)
     SUSPICIOUS -> VERIFIED  (human reviewer cleared after investigation)
     VERIFIED   -> SUSPICIOUS (re-assessment flagged new concerns)
 """

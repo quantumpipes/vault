@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-04-06
+
+### Added
+- **Search intelligence**: deduplication (one result per resource), pagination offset, explain mode (scoring breakdown)
+- **Knowledge self-healing**: semantic near-duplicate detection, contradiction detection (trust/lifecycle conflicts)
+- **Real-time event streaming**: VaultEventStream for subscribing to vault mutations
+- **Telemetry**: VaultTelemetry with operation counters, latency, error rates
+- **Per-resource health**: vault.health(resource_id) for individual quality assessment
+- **Import/export**: vault.export_vault(path) and vault.import_vault(path) for portable vaults
+
+### Removed
+- `[atlas]` extra (no implementation; removed to avoid confusion)
+
 ## [0.9.0] - 2026-04-06
 
 ### Added

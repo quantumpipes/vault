@@ -178,7 +178,7 @@ def apply_trust_weighting(
         tier = result.trust_tier.value if hasattr(result.trust_tier, "value") else str(result.trust_tier)
         tw = compute_trust_weight(tier, config)
 
-        # CIS 2D trust: multiply by adversarial verification status
+        # Membrane 2D trust: multiply by adversarial verification status
         adv_status = getattr(result, "adversarial_status", None)
         adv_str = adv_status.value if hasattr(adv_status, "value") else str(adv_status or "unverified")
         adv_mult = compute_adversarial_multiplier(adv_str)
