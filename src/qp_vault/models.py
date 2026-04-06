@@ -220,9 +220,9 @@ class CISStageRecord(BaseModel):
     Records are immutable once created.
     """
 
-    id: str
-    resource_id: str
-    stage: CISStage
+    id: str = ""
+    resource_id: str = ""
+    stage: CISStage = CISStage.INGEST
     result: CISResult = CISResult.PASS
     risk_score: float = 0.0
     reasoning: str = ""
@@ -235,9 +235,12 @@ class CISStageRecord(BaseModel):
 class CISPipelineStatus(BaseModel):
     """Aggregate status of the CIS pipeline for a single document."""
 
-    resource_id: str
+    resource_id: str = ""
+    stages: list[CISStageRecord] = Field(default_factory=list)
     stages_completed: list[CISStage] = Field(default_factory=list)
     stages_pending: list[CISStage] = Field(default_factory=list)
+    overall_result: CISResult = CISResult.PASS
+    recommended_status: ResourceStatus = ResourceStatus.INDEXED
     aggregate_risk_score: float = 0.0
     recommended_action: str = "pending"
     stage_results: list[CISStageRecord] = Field(default_factory=list)

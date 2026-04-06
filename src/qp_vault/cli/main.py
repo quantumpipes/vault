@@ -259,5 +259,98 @@ def verify(
             raise typer.Exit(1)
 
 
+@app.command()
+def health(
+    path: str | None = typer.Option(None, "--path", "-p", help="Vault path"),
+) -> None:
+    """Show vault health score."""
+    vault = _get_vault(path)
+    score = vault.health()
+    console.print(f"[bold]Health Score: {score.overall}/100[/bold]")
+    console.print(f"  Freshness:    {score.freshness}")
+    console.print(f"  Uniqueness:   {score.uniqueness}")
+    console.print(f"  Coherence:    {score.coherence}")
+    console.print(f"  Connectivity: {score.connectivity}")
+    console.print(f"  Issues:       {score.issue_count}")
+
+
+@app.command(name="list")
+def list_resources(
+    trust: str | None = typer.Option(None, "--trust", "-t", help="Filter by trust tier"),
+    layer: str | None = typer.Option(None, "--layer", "-l", help="Filter by layer"),
+    tenant: str | None = typer.Option(None, "--tenant", help="Filter by tenant_id"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Max results"),
+    path: str | None = typer.Option(None, "--path", "-p", help="Vault path"),
+) -> None:
+    """List resources in the vault."""
+    vault = _get_vault(path)
+    resources = vault.list(trust=trust, layer=layer, tenant_id=tenant, limit=limit)
+
+    if not resources:
+        console.print("[yellow]No resources found.[/yellow]")
+        return
+
+    table = Table(title=f"{len(resources)} resources")
+    table.add_column("Trust", width=10)
+    table.add_column("Name", width=30)
+    table.add_column("Status", width=10)
+    table.add_column("ID", width=36, style="dim")
+
+    for r in resources:
+        tier = r.trust_tier.value if hasattr(r.trust_tier, "value") else str(r.trust_tier)
+        st = r.status.value if hasattr(r.status, "value") else str(r.status)
+        table.add_row(tier, r.name, st, r.id)
+
+    console.print(table)
+
+
+@app.command()
+def delete(
+    resource_id: str = typer.Argument(..., help="Resource ID to delete"),
+    hard: bool = typer.Option(False, "--hard", help="Permanently delete"),
+    path: str | None = typer.Option(None, "--path", "-p", help="Vault path"),
+) -> None:
+    """Delete a resource."""
+    vault = _get_vault(path)
+    vault.delete(resource_id, hard=hard)
+    mode = "permanently deleted" if hard else "soft-deleted"
+    console.print(f"[green]{mode}[/green]  {resource_id}")
+
+
+@app.command()
+def transition(
+    resource_id: str = typer.Argument(..., help="Resource ID"),
+    target: str = typer.Argument(..., help="Target lifecycle state"),
+    reason: str | None = typer.Option(None, "--reason", "-r", help="Reason"),
+    path: str | None = typer.Option(None, "--path", "-p", help="Vault path"),
+) -> None:
+    """Transition a resource's lifecycle state."""
+    vault = _get_vault(path)
+    try:
+        r = vault.transition(resource_id, target, reason=reason)
+        lc = r.lifecycle.value if hasattr(r.lifecycle, "value") else str(r.lifecycle)
+        console.print(f"[green]Transitioned[/green]  {resource_id} -> {lc}")
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1) from None
+
+
+@app.command()
+def expiring(
+    days: int = typer.Option(90, "--days", "-d", help="Days ahead to check"),
+    path: str | None = typer.Option(None, "--path", "-p", help="Vault path"),
+) -> None:
+    """Show resources expiring within N days."""
+    vault = _get_vault(path)
+    resources = vault.expiring(days=days)
+
+    if not resources:
+        console.print(f"[green]No resources expiring within {days} days.[/green]")
+        return
+
+    for r in resources:
+        console.print(f"  {r.name}  expires {r.valid_until}")
+
+
 if __name__ == "__main__":
     app()

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-04-06
+
+### Added
+- **Content Immune System (CIS)**: Multi-stage content screening pipeline
+  - Innate scan: pattern-based detection (prompt injection, jailbreak, XSS blocklists)
+  - Release gate: risk-proportionate gating (pass/quarantine/reject)
+  - Wired into `vault.add()`: content screened before indexing
+  - Quarantined resources get `ResourceStatus.QUARANTINED`
+- **New CLI commands**: `vault health`, `vault list`, `vault delete`, `vault transition`, `vault expiring`
+- `vault.add_batch(sources)` for bulk import
+- PostgreSQL schema parity: `adversarial_status`, `tenant_id`, `provenance` table, missing indexes
+
 ## [0.8.0] - 2026-04-06
 
 ### Added
