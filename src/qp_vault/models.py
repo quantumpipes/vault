@@ -8,6 +8,9 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from qp_vault.enums import (
+    AdversarialStatus,
+    CISResult,
+    CISStage,
     DataClassification,
     EventType,
     Lifecycle,
@@ -15,6 +18,7 @@ from qp_vault.enums import (
     ResourceStatus,
     ResourceType,
     TrustTier,
+    UploadMethod,
 )
 
 
@@ -39,6 +43,7 @@ class Resource(BaseModel):
     # Status and lifecycle
     status: ResourceStatus = ResourceStatus.PENDING
     lifecycle: Lifecycle = Lifecycle.ACTIVE
+    adversarial_status: AdversarialStatus = AdversarialStatus.UNVERIFIED
     valid_from: date | None = None
     valid_until: date | None = None
     supersedes: str | None = None
@@ -114,6 +119,7 @@ class SearchResult(BaseModel):
 
     # Provenance
     trust_tier: TrustTier = TrustTier.WORKING
+    adversarial_status: AdversarialStatus = AdversarialStatus.UNVERIFIED
     cid: str | None = None
     lifecycle: Lifecycle = Lifecycle.ACTIVE
 
@@ -174,3 +180,57 @@ class HealthScore(BaseModel):
     trust_alignment: float = 0.0
     issue_count: int = 0
     resource_count: int = 0
+
+
+# --- Content Immune System models ---
+
+
+class ContentProvenance(BaseModel):
+    """Cryptographic attestation of a document's origin and chain of custody.
+
+    Every document entering the Vault gets a provenance record signed with
+    Ed25519 (+ optional ML-DSA-65). This creates accountability: who uploaded
+    what, when, and how.
+    """
+
+    id: str
+    resource_id: str
+    uploader_id: str
+    upload_method: UploadMethod = UploadMethod.API
+    source_description: str = ""
+    original_hash: str = ""
+    provenance_signature: str = ""
+    signature_verified: bool = False
+    created_at: datetime = Field(default_factory=_utcnow)
+
+
+class CISStageRecord(BaseModel):
+    """Result of a single CIS pipeline stage evaluation.
+
+    Every stage (INGEST through REMEMBER) creates one record per document.
+    Records are immutable once created.
+    """
+
+    id: str
+    resource_id: str
+    stage: CISStage
+    result: CISResult = CISResult.PASS
+    risk_score: float = 0.0
+    reasoning: str = ""
+    matched_patterns: list[str] = Field(default_factory=list)
+    capsule_id: str | None = None
+    duration_ms: int = 0
+    created_at: datetime = Field(default_factory=_utcnow)
+
+
+class CISPipelineStatus(BaseModel):
+    """Aggregate status of the CIS pipeline for a single document."""
+
+    resource_id: str
+    stages_completed: list[CISStage] = Field(default_factory=list)
+    stages_pending: list[CISStage] = Field(default_factory=list)
+    aggregate_risk_score: float = 0.0
+    recommended_action: str = "pending"
+    stage_results: list[CISStageRecord] = Field(default_factory=list)
+    started_at: datetime | None = None
+    completed_at: datetime | None = None

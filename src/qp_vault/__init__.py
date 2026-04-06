@@ -31,6 +31,9 @@ __author__ = "Quantum Pipes Technologies, LLC"
 __license__ = "Apache-2.0"
 
 from qp_vault.enums import (
+    AdversarialStatus,
+    CISResult,
+    CISStage,
     DataClassification,
     EventType,
     Lifecycle,
@@ -38,6 +41,7 @@ from qp_vault.enums import (
     ResourceStatus,
     ResourceType,
     TrustTier,
+    UploadMethod,
 )
 from qp_vault.exceptions import (
     ChunkingError,
@@ -50,7 +54,10 @@ from qp_vault.exceptions import (
 )
 from qp_vault.models import (
     Chunk,
+    CISPipelineStatus,
+    CISStageRecord,
     Collection,
+    ContentProvenance,
     HealthScore,
     MerkleProof,
     Resource,
@@ -83,6 +90,9 @@ __all__ = [
     "VaultVerificationResult",
     "MerkleProof",
     "VaultEvent",
+    "ContentProvenance",
+    "CISStageRecord",
+    "CISPipelineStatus",
     # Enums
     "TrustTier",
     "DataClassification",
@@ -91,6 +101,10 @@ __all__ = [
     "Lifecycle",
     "MemoryLayer",
     "EventType",
+    "AdversarialStatus",
+    "CISStage",
+    "CISResult",
+    "UploadMethod",
     # Protocols (for implementors)
     "StorageBackend",
     "EmbeddingProvider",
