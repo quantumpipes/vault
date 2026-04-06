@@ -1,0 +1,131 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "qp-vault"
+version = "0.9.0"
+description = "Governed knowledge store for autonomous organizations. Trust tiers, cryptographic audit trails, content-addressed storage, air-gap native."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+authors = [
+    { name = "Quantum Pipes", email = "team@quantumpipes.io" },
+]
+keywords = [
+    "knowledge-store",
+    "vector-search",
+    "trust-tiers",
+    "audit-trail",
+    "content-addressed",
+    "air-gap",
+    "post-quantum",
+    "rag",
+    "enterprise",
+    "governance",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Database",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Security :: Cryptography",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pydantic>=2.12",
+]
+
+[project.optional-dependencies]
+sqlite = [
+    "aiosqlite>=0.22",
+]
+postgres = [
+    "sqlalchemy>=2.0.48",
+    "asyncpg>=0.31",
+    "pgvector>=0.4.2",
+]
+docling = [
+    "docling>=2.73",
+]
+local = [
+    "sentence-transformers>=3.0",
+]
+openai = [
+    "openai>=1.0",
+]
+capsule = [
+    "qp-capsule>=1.5",
+]
+encryption = [
+    "cryptography>=42",
+    "pynacl>=1.6.2",
+]
+integrity = [
+    "numpy>=2.0",
+]
+fastapi = [
+    "fastapi>=0.135",
+]
+atlas = [
+    "gitpython>=3.1",
+]
+cli = [
+    "typer>=0.21",
+    "rich>=14.3",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.25",
+    "pytest-cov>=6.0",
+    "httpx>=0.28",
+    "mypy>=1.14",
+    "ruff>=0.9",
+]
+all = [
+    "qp-vault[sqlite,postgres,docling,capsule,encryption,integrity,fastapi,atlas,cli]",
+]
+
+[project.scripts]
+vault = "qp_vault.cli.main:app"
+
+[project.urls]
+Homepage = "https://github.com/quantumpipes/vault"
+Documentation = "https://docs.quantumpipes.io/vault"
+Repository = "https://github.com/quantumpipes/vault"
+Changelog = "https://github.com/quantumpipes/vault/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qp_vault"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "unit: Unit tests (no external deps)",
+    "integration: Integration tests (may need database)",
+    "e2e: End-to-end tests (full pipeline)",
+    "postgres: Requires PostgreSQL",
+    "slow: Tests that take > 5 seconds",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "TCH"]
+ignore = ["E501"]  # Long SQL strings and complex comprehensions
