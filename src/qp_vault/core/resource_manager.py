@@ -103,6 +103,7 @@ class ResourceManager:
         lifecycle: Lifecycle | str = Lifecycle.ACTIVE,
         valid_from: date | None = None,
         valid_until: date | None = None,
+        tenant_id: str | None = None,
     ) -> Resource:
         """Add a resource from text content.
 
@@ -163,6 +164,7 @@ class ResourceManager:
             lifecycle=lc,
             valid_from=valid_from,
             valid_until=valid_until,
+            tenant_id=tenant_id,
             collection_id=collection,
             layer=mem_layer,
             tags=tags or [],
@@ -204,6 +206,7 @@ class ResourceManager:
     async def list(
         self,
         *,
+        tenant_id: str | None = None,
         trust: TrustTier | str | None = None,
         classification: DataClassification | str | None = None,
         layer: MemoryLayer | str | None = None,
@@ -216,6 +219,7 @@ class ResourceManager:
     ) -> list[Resource]:
         """List resources with filters."""
         filters = ResourceFilter(
+            tenant_id=tenant_id,
             trust_tier=trust.value if hasattr(trust, "value") else trust,
             data_classification=classification.value if hasattr(classification, "value") else classification,
             layer=layer.value if hasattr(layer, "value") else layer,

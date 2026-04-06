@@ -154,11 +154,18 @@ class AsyncVault:
         # Embedding provider
         self._embedder = embedder
 
-        # Audit provider
+        # Audit provider (auto-detect qp-capsule if installed)
         if auditor is not None:
             self._auditor = auditor
         else:
-            self._auditor = LogAuditor(self.path / "audit.jsonl")
+            try:
+                from qp_vault.audit.capsule_auditor import HAS_CAPSULE, CapsuleAuditor
+                if HAS_CAPSULE:
+                    self._auditor = CapsuleAuditor()
+                else:
+                    self._auditor = LogAuditor(self.path / "audit.jsonl")
+            except ImportError:
+                self._auditor = LogAuditor(self.path / "audit.jsonl")
 
         # Parsers and policies
         self._parsers = parsers or []
@@ -213,6 +220,7 @@ class AsyncVault:
         lifecycle: Lifecycle | str = Lifecycle.ACTIVE,
         valid_from: date | None = None,
         valid_until: date | None = None,
+        tenant_id: str | None = None,
     ) -> Resource:
         """Add a resource to the vault.
 
@@ -325,6 +333,7 @@ class AsyncVault:
             lifecycle=lifecycle,
             valid_from=valid_from,
             valid_until=valid_until,
+            tenant_id=tenant_id,
         )
 
     async def get(self, resource_id: str) -> Resource:
@@ -335,6 +344,7 @@ class AsyncVault:
     async def list(
         self,
         *,
+        tenant_id: str | None = None,
         trust: TrustTier | str | None = None,
         classification: DataClassification | str | None = None,
         layer: MemoryLayer | str | None = None,
@@ -348,6 +358,7 @@ class AsyncVault:
         """List resources with optional filters."""
         await self._ensure_initialized()
         return await self._resource_manager.list(
+            tenant_id=tenant_id,
             trust=trust,
             classification=classification,
             layer=layer,
@@ -511,6 +522,7 @@ class AsyncVault:
         self,
         query: str,
         *,
+        tenant_id: str | None = None,
         top_k: int = 10,
         threshold: float = 0.0,
         trust_min: TrustTier | str | None = None,
@@ -551,10 +563,11 @@ class AsyncVault:
             vector_weight=self.config.vector_weight,
             text_weight=self.config.text_weight,
             filters=ResourceFilter(
+                tenant_id=tenant_id,
                 trust_tier=trust_min.value if hasattr(trust_min, "value") else trust_min,
                 layer=layer.value if hasattr(layer, "value") else layer,
                 collection_id=collection,
-            ) if any([trust_min, layer, collection]) else None,
+            ) if any([tenant_id, trust_min, layer, collection]) else None,
             as_of=str(as_of) if as_of else None,
         )
 
@@ -691,6 +704,36 @@ class AsyncVault:
         from qp_vault.core.layer_manager import LayerView
         layer_enum = MemoryLayer(name) if isinstance(name, str) else name
         return LayerView(layer_enum, self, self._layer_manager)
+
+    # --- Collections ---
+
+    async def create_collection(
+        self,
+        name: str,
+        *,
+        description: str = "",
+        tenant_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a new collection."""
+        await self._ensure_initialized()
+        import uuid
+        from datetime import UTC, datetime
+        collection_id = str(uuid.uuid4())
+        now = datetime.now(tz=UTC).isoformat()
+        conn = self._storage._get_conn()  # type: ignore[union-attr]
+        conn.execute(
+            "INSERT INTO collections (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            (collection_id, name, description, now, now),
+        )
+        conn.commit()
+        return {"id": collection_id, "name": name, "description": description}
+
+    async def list_collections(self, *, tenant_id: str | None = None) -> list[dict[str, Any]]:
+        """List all collections."""
+        await self._ensure_initialized()
+        conn = self._storage._get_conn()  # type: ignore[union-attr]
+        rows = conn.execute("SELECT * FROM collections ORDER BY name").fetchall()
+        return [dict(r) for r in rows]
 
     # --- Integrity ---
 
@@ -884,6 +927,16 @@ class Vault:
     def layer(self, name: MemoryLayer | str) -> LayerView:  # type: ignore[return-value]
         """Get a scoped view of a memory layer."""
         return self._async.layer(name)  # type: ignore[return-value]
+
+    def create_collection(self, name: str, **kwargs: Any) -> dict[str, Any]:
+        """Create a new collection."""
+        result: dict[str, Any] = _run_async(self._async.create_collection(name, **kwargs))
+        return result
+
+    def list_collections(self, **kwargs: Any) -> list[dict[str, Any]]:
+        """List all collections."""
+        result: list[dict[str, Any]] = _run_async(self._async.list_collections(**kwargs))
+        return result
 
     def health(self) -> HealthScore:
         """Compute vault health score."""

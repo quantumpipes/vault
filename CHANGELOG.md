@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-06
+
+### Added
+- **Multi-tenancy**: `tenant_id` parameter on `add()`, `list()`, `search()`, and all public methods
+- `tenant_id` column in SQLite and PostgreSQL storage schemas with index
+- Tenant-scoped search: queries filter by `tenant_id` when provided
+- `vault.create_collection()` and `vault.list_collections()` — Collection CRUD
+- Auto-detection of qp-capsule: if installed, `CapsuleAuditor` is used automatically (no manual wiring)
+
 ## [0.6.0] - 2026-04-06
 
 ### Added

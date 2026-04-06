@@ -49,6 +49,9 @@ class Resource(BaseModel):
     supersedes: str | None = None
     superseded_by: str | None = None
 
+    # Multi-tenancy
+    tenant_id: str | None = None
+
     # Organization
     collection_id: str | None = None
     layer: MemoryLayer | None = None
