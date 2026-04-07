@@ -32,12 +32,12 @@ This means official SOPs always surface above drafts, even when drafts are sligh
 
 ```python
 # On creation
-vault.add("SOP content", trust="canonical")
-vault.add("Draft notes", trust="working")
-vault.add("Standup notes", trust="ephemeral")
+vault.add("SOP content", trust_tier="canonical")
+vault.add("Draft notes", trust_tier="working")
+vault.add("Standup notes", trust_tier="ephemeral")
 
 # After creation
-vault.update(resource_id, trust="canonical")
+vault.update(resource_id, trust_tier="canonical")
 ```
 
 Trust changes emit a `TRUST_CHANGE` audit event.

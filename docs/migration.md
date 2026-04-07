@@ -9,12 +9,12 @@ qp-vault 1.0 locks the API. Three parameter renames are the only breaking change
 Affects: `add()`, `list()`, `update()`, `add_batch()`, `replace()`.
 
 ```python
-# Before (v0.16 and earlier)
+# v0.x (old)
 vault.add("document.pdf", trust="canonical")
 vault.list(trust="working")
 vault.update(resource_id, trust="canonical")
 
-# After (v1.0)
+# v1.0 (new)
 vault.add("document.pdf", trust_tier="canonical")
 vault.list(trust_tier="working")
 vault.update(resource_id, trust_tier="canonical")
@@ -25,10 +25,10 @@ vault.update(resource_id, trust_tier="canonical")
 Affects: `search()`, `search_with_facets()`.
 
 ```python
-# Before
+# v0.x (old)
 results = vault.search("query", trust_min="working")
 
-# After
+# v1.0 (new)
 results = vault.search("query", min_trust_tier="working")
 ```
 
@@ -37,14 +37,12 @@ results = vault.search("query", min_trust_tier="working")
 Affects: VaultConfig TOML files and programmatic config.
 
 ```python
-# Before
-from qp_vault.config import VaultConfig, LayerDefaults
-
+# v0.x (old)
 config = VaultConfig(layer_defaults={
     "operational": LayerDefaults(trust="working"),
 })
 
-# After
+# v1.0 (new)
 config = VaultConfig(layer_defaults={
     "operational": LayerDefaults(trust_tier="working"),
 })
@@ -55,14 +53,11 @@ config = VaultConfig(layer_defaults={
 For most codebases, a find-and-replace handles it:
 
 ```bash
-# Parameter renames
 sed -i 's/trust="canonical"/trust_tier="canonical"/g' your_code.py
 sed -i 's/trust="working"/trust_tier="working"/g' your_code.py
 sed -i 's/trust="ephemeral"/trust_tier="ephemeral"/g' your_code.py
 sed -i 's/trust="archived"/trust_tier="archived"/g' your_code.py
 sed -i 's/trust_min=/min_trust_tier=/g' your_code.py
-
-# Config field
 sed -i 's/LayerDefaults(trust=/LayerDefaults(trust_tier=/g' your_code.py
 ```
 

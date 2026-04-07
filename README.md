@@ -165,7 +165,7 @@ vault = Vault("./my-knowledge")
 
 # Add with trust tiers
 vault.add("Incident response: acknowledge within 15 minutes...",
-          name="sop-incident.md", trust="canonical")
+          name="sop-incident.md", trust_tier="canonical")
 
 # Trust-weighted search (deduplicated, with freshness decay)
 results = vault.search("incident response")
@@ -205,7 +205,7 @@ vault = Vault("./knowledge", role="admin")        # + export, import, config
 ### Batch Import
 
 ```python
-resources = vault.add_batch(["doc1.md", "doc2.md", "doc3.md"], trust="working")
+resources = vault.add_batch(["doc1.md", "doc2.md", "doc3.md"], trust_tier="working")
 ```
 
 ### Memory Layers

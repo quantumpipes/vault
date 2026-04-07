@@ -8,8 +8,8 @@ qp-vault supports multi-tenant isolation via `tenant_id` on all operations.
 vault = Vault("./knowledge")
 
 # Add with tenant isolation
-vault.add("Tenant A document", tenant_id="site-123", trust="canonical")
-vault.add("Tenant B document", tenant_id="site-456", trust="working")
+vault.add("Tenant A document", tenant_id="site-123", trust_tier="canonical")
+vault.add("Tenant B document", tenant_id="site-456", trust_tier="working")
 
 # Search scoped to tenant
 results = vault.search("document", tenant_id="site-123")

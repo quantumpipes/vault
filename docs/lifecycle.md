@@ -43,7 +43,7 @@ vault = Vault("./knowledge")
 policy = vault.add(
     "Security policy for remote access...",
     name="security-policy-v2.md",
-    trust="canonical",
+    trust_tier="canonical",
     lifecycle="draft",
 )
 
@@ -69,8 +69,8 @@ except LifecycleError as e:
 When a newer version replaces an older one:
 
 ```python
-v1 = vault.add("Policy v1", name="policy-v1.md", trust="canonical")
-v2 = vault.add("Policy v2 with PQ crypto", name="policy-v2.md", trust="canonical")
+v1 = vault.add("Policy v1", name="policy-v1.md", trust_tier="canonical")
+v2 = vault.add("Policy v2 with PQ crypto", name="policy-v2.md", trust_tier="canonical")
 
 # Supersede: v1 -> SUPERSEDED, linked to v2
 old, new = vault.supersede(v1.id, v2.id)
@@ -108,7 +108,7 @@ from datetime import date
 vault.add(
     "Q4 2025 budget allocation",
     name="budget-q4-2025.md",
-    trust="canonical",
+    trust_tier="canonical",
     valid_from=date(2025, 10, 1),
     valid_until=date(2025, 12, 31),
 )

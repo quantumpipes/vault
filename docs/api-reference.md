@@ -44,7 +44,7 @@ vault.add(
     source: str | Path | bytes,
     *,
     name: str | None = None,
-    trust: TrustTier | str = "working",
+    trust_tier: TrustTier | str = "working",
     classification: DataClassification | str = "internal",
     layer: MemoryLayer | str | None = None,
     collection: str | None = None,
@@ -67,7 +67,7 @@ Content is screened by the Membrane pipeline before indexing. Flagged content is
 vault.add_batch(
     sources: list[str | Path | bytes],
     *,
-    trust: TrustTier | str = "working",
+    trust_tier: TrustTier | str = "working",
     tenant_id: str | None = None,
     **kwargs,
 ) -> list[Resource]
@@ -81,13 +81,23 @@ vault.add_batch(
 vault.get(resource_id: str) -> Resource
 ```
 
+### get_multiple()
+
+```python
+vault.get_multiple(resource_ids: list[str]) -> list[Resource]
+```
+
+Batch retrieval in a single query. Missing IDs are silently omitted.
+
+<!-- VERIFIED: vault.py:473-485 -->
+
 ### get_content()
 
 ```python
 vault.get_content(resource_id: str) -> str
 ```
 
-Reassembles chunks in order to return the full text content.
+Reassembles chunks in order to return the full text content. Quarantined resources raise `VaultError`.
 
 <!-- VERIFIED: vault.py:406-420 -->
 
@@ -97,7 +107,7 @@ Reassembles chunks in order to return the full text content.
 vault.list(
     *,
     tenant_id: str | None = None,
-    trust: TrustTier | str | None = None,
+    trust_tier: TrustTier | str | None = None,
     classification: DataClassification | str | None = None,
     layer: MemoryLayer | str | None = None,
     collection: str | None = None,
@@ -118,7 +128,7 @@ vault.update(
     resource_id: str,
     *,
     name: str | None = None,
-    trust: TrustTier | str | None = None,
+    trust_tier: TrustTier | str | None = None,
     classification: DataClassification | str | None = None,
     tags: list[str] | None = None,
     metadata: dict[str, Any] | None = None,
@@ -146,6 +156,23 @@ Creates a new resource with the new content and supersedes the old one. Returns 
 
 <!-- VERIFIED: vault.py:422-464 -->
 
+### upsert()
+
+```python
+vault.upsert(
+    source: str | Path | bytes,
+    *,
+    name: str | None = None,
+    trust_tier: TrustTier | str = "working",
+    tenant_id: str | None = None,
+    **kwargs,
+) -> Resource
+```
+
+Add-or-replace atomically. If a resource with the same name and tenant exists, supersedes it. Otherwise creates new.
+
+<!-- VERIFIED: vault.py:562-611 -->
+
 ---
 
 ## Search
@@ -160,7 +187,7 @@ vault.search(
     top_k: int = 10,
     offset: int = 0,                    # Pagination
     threshold: float = 0.0,
-    trust_min: TrustTier | str | None = None,
+    min_trust_tier: TrustTier | str | None = None,
     layer: MemoryLayer | str | None = None,
     collection: str | None = None,
     as_of: date | None = None,          # Point-in-time

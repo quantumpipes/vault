@@ -21,6 +21,9 @@ Governed knowledge store for autonomous organizations. Every fact has provenance
 | [Streaming & Telemetry](streaming-and-telemetry.md) | Real-time events, operation metrics |
 | [CLI Reference](cli.md) | All 15 commands |
 | [FastAPI Integration](fastapi.md) | 22+ REST endpoints |
+| [Migration Guide](migration.md) | Breaking changes from v0.x to v1.0 |
+| [Deployment Guide](deployment.md) | PostgreSQL, SSL, encryption, production checklist |
+| [Troubleshooting](troubleshooting.md) | Error codes (VAULT_000-700), common issues |
 
 ## Quick Start
 
@@ -28,7 +31,7 @@ Governed knowledge store for autonomous organizations. Every fact has provenance
 from qp_vault import Vault
 
 vault = Vault("./my-knowledge")
-vault.add("quarterly-report.pdf", trust="canonical")
+vault.add("quarterly-report.pdf", trust_tier="canonical")
 results = vault.search("Q3 revenue projections")
 print(results[0].content, results[0].trust_tier)
 ```

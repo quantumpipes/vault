@@ -55,16 +55,16 @@ Creates `./my-knowledge/` with SQLite database and audit log. No configuration r
 ```python
 # From text
 vault.add("Incident response: acknowledge within 15 minutes...",
-          name="sop-incident.md", trust="canonical")
+          name="sop-incident.md", trust_tier="canonical")
 
 # From a file
-vault.add("path/to/report.pdf", trust="working")
+vault.add("path/to/report.pdf", trust_tier="working")
 
 # With tenant isolation
 vault.add("Tenant-specific content", tenant_id="site-123")
 
 # Batch add
-vault.add_batch(["doc1.md", "doc2.md", "doc3.md"], trust="working")
+vault.add_batch(["doc1.md", "doc2.md", "doc3.md"], trust_tier="working")
 ```
 
 Resources are automatically: chunked, hashed (SHA3-256), screened by Membrane, indexed, and audited.

@@ -37,16 +37,16 @@ vault.add("SOC2 Type II audit completed 2025-12-15",
 Get a scoped view that auto-applies layer defaults:
 
 ```python
-# OPERATIONAL: adds with trust=WORKING by default
+# OPERATIONAL: adds with trust_tier=WORKING by default
 ops = vault.layer(MemoryLayer.OPERATIONAL)
 await ops.add("runbook-content", name="runbook.md")
-# Equivalent to: vault.add(..., trust="working", layer="operational")
+# Equivalent to: vault.add(..., trust_tier="working", layer="operational")
 
-# STRATEGIC: adds with trust=CANONICAL by default
+# STRATEGIC: adds with trust_tier=CANONICAL by default
 strategic = vault.layer(MemoryLayer.STRATEGIC)
 await strategic.add("architecture decision", name="adr.md")
 
-# COMPLIANCE: adds with trust=CANONICAL, and every search is audited
+# COMPLIANCE: adds with trust_tier=CANONICAL, and every search is audited
 compliance = vault.layer(MemoryLayer.COMPLIANCE)
 await compliance.add("audit evidence", name="audit.pdf")
 results = await compliance.search("SOC2")
@@ -103,12 +103,12 @@ from qp_vault.config import VaultConfig, LayerDefaults
 config = VaultConfig(
     layer_defaults={
         "operational": LayerDefaults(
-            trust="working",
+            trust_tier="working",
             half_life_days=60,        # Faster freshness decay
             search_boost=2.0,         # Higher priority in search
         ),
         "compliance": LayerDefaults(
-            trust="canonical",
+            trust_tier="canonical",
             retention="permanent",
             audit_reads=True,
         ),
