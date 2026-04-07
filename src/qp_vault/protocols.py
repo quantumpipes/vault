@@ -173,6 +173,15 @@ class EmbeddingProvider(Protocol):
     @property
     def dimensions(self) -> int: ...
 
+    @property
+    def is_local(self) -> bool:
+        """Whether this embedder runs locally (no network calls).
+
+        Used to enforce DataClassification: CONFIDENTIAL/RESTRICTED content
+        must not be sent to cloud embedding services.
+        """
+        return True
+
     async def embed(self, texts: list[str]) -> list[list[float]]: ...
 
 

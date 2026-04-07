@@ -221,6 +221,10 @@ class AsyncVault:
 
         self._initialized = False
 
+        # Telemetry: operation tracking
+        from qp_vault.telemetry import VaultTelemetry
+        self._telemetry = VaultTelemetry()
+
         # TTL cache for expensive operations (health, status)
         self._cache: dict[str, tuple[float, Any]] = {}
 
@@ -293,6 +297,20 @@ class AsyncVault:
                 f"but operation specified '{tenant_id}'"
             )
         return tenant_id
+
+    async def _tracked(self, operation: str, coro: Any) -> Any:
+        """Run a coroutine with telemetry tracking."""
+        import time as _time
+        start = _time.monotonic()
+        error = False
+        try:
+            return await coro
+        except Exception:
+            error = True
+            raise
+        finally:
+            duration = (_time.monotonic() - start) * 1000
+            self._telemetry.record(operation, duration, error=error)
 
     # --- Resource Operations ---
 
@@ -436,7 +454,7 @@ class AsyncVault:
             if membrane_result.recommended_status.value == "quarantined":
                 _quarantine = True
 
-        resource = await self._resource_manager.add(
+        resource: Resource = await self._tracked("add", self._resource_manager.add(
             text,
             name=name,
             trust_tier=trust_tier,
@@ -449,7 +467,7 @@ class AsyncVault:
             valid_from=valid_from,
             valid_until=valid_until,
             tenant_id=tenant_id,
-        )
+        ))
 
         # If Membrane flagged content, mark as quarantined + suspicious
         if _quarantine:
@@ -468,7 +486,21 @@ class AsyncVault:
     async def get(self, resource_id: str) -> Resource:
         """Get a single resource by ID."""
         await self._ensure_initialized()
-        return await self._resource_manager.get(resource_id)
+        resource = await self._resource_manager.get(resource_id)
+
+        # Audit reads on RESTRICTED resources
+        if resource.data_classification == DataClassification.RESTRICTED:
+            from qp_vault.enums import EventType
+            from qp_vault.models import VaultEvent
+            await self._auditor.record(VaultEvent(
+                event_type=EventType.SEARCH,
+                resource_id=resource_id,
+                resource_name=resource.name,
+                resource_hash=resource.content_hash,
+                details={"classification": "restricted", "operation": "get"},
+            ))
+
+        return resource
 
     async def get_multiple(self, resource_ids: list[str]) -> list[Resource]:
         """Get multiple resources by ID in a single query.
@@ -819,7 +851,7 @@ class AsyncVault:
         )
 
         # Get raw results from storage (with timeout protection)
-        raw_results = await self._with_timeout(self._storage.search(search_query))
+        raw_results = await self._tracked("search", self._with_timeout(self._storage.search(search_query)))
 
         # Apply trust weighting with optional layer boost
         weighted = apply_trust_weighting(raw_results, self.config, layer_boost=_layer_boost)
@@ -1078,10 +1110,18 @@ class AsyncVault:
         await self._ensure_initialized()
         self._check_permission("export_vault")
         resources: list[Resource] = await self._list_all_bounded()
+        export_resources = []
+        for r in resources:
+            r_dict = r.model_dump(mode="json")
+            # Include chunk content for lossless roundtrip
+            chunks = await self._storage.get_chunks_for_resource(r.id)
+            sorted_chunks = sorted(chunks, key=lambda c: c.chunk_index)
+            r_dict["_chunks"] = [{"content": c.content, "cid": c.cid} for c in sorted_chunks]
+            export_resources.append(r_dict)
         data = {
-            "version": "1.0.0",
+            "version": "1.1.0",
             "resource_count": len(resources),
-            "resources": [r.model_dump(mode="json") for r in resources],
+            "resources": export_resources,
         }
         out = Path(path)
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -1103,11 +1143,17 @@ class AsyncVault:
         data = _json.loads(Path(path).read_text())
         imported = []
         for r_data in data.get("resources", []):
-            content = r_data.get("name", "imported")
+            # Reconstruct content from chunks (lossless) or fall back to name
+            chunks_data = r_data.get("_chunks", [])
+            if chunks_data:
+                content = "\n\n".join(c["content"] for c in chunks_data)
+            else:
+                content = r_data.get("name", "imported")
             resource = await self.add(
                 content,
                 name=r_data.get("name", "imported"),
                 trust_tier=r_data.get("trust_tier", "working"),
+                classification=r_data.get("data_classification", "internal"),
                 tags=r_data.get("tags", []),
                 metadata=r_data.get("metadata", {}),
             )
@@ -1164,6 +1210,7 @@ class AsyncVault:
             "layer_details": layer_stats,
             "vault_path": str(self.path),
             "backend": "sqlite",
+            "telemetry": self._telemetry.summary(),
         }
         self._cache_set(cache_key, result)
         return result
@@ -1363,6 +1410,15 @@ class Vault:
         """Get vault status."""
         result: dict[str, Any] = _run_async(self._async.status())
         return result
+
+    def export_vault(self, path: str | Path) -> dict[str, Any]:
+        """Export the vault to a JSON file."""
+        result: dict[str, Any] = _run_async(self._async.export_vault(path))
+        return result
+
+    def import_vault(self, path: str | Path) -> list[Resource]:
+        """Import resources from an exported vault JSON file."""
+        return cast("list[Resource]", _run_async(self._async.import_vault(path)))
 
     def register_embedder(self, embedder: EmbeddingProvider) -> None:
         """Register a custom embedding provider."""

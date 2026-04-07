@@ -38,6 +38,10 @@ class SentenceTransformerEmbedder:
     def dimensions(self) -> int:
         return int(self._dimensions or 0)
 
+    @property
+    def is_local(self) -> bool:
+        return True
+
     async def embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a batch of texts."""
         embeddings = self._model.encode(texts, convert_to_numpy=True)

@@ -21,6 +21,10 @@ class NoopEmbedder:
     def dimensions(self) -> int:
         return 0
 
+    @property
+    def is_local(self) -> bool:
+        return True
+
     async def embed(self, texts: list[str]) -> list[list[float]]:
         """Return empty embeddings (text-only mode)."""
         return [[] for _ in texts]

@@ -139,6 +139,19 @@ class ResourceManager:
                 )
             )
 
+        # Enforce data classification: CONFIDENTIAL/RESTRICTED must use local embedder
+        if self._embedder and data_class in (
+            DataClassification.CONFIDENTIAL,
+            DataClassification.RESTRICTED,
+        ):
+            is_local = getattr(self._embedder, "is_local", True)
+            if not is_local:
+                from qp_vault.exceptions import VaultError
+                raise VaultError(
+                    f"Cannot use cloud embedder for {data_class.value} content. "
+                    "Use a local embedder (SentenceTransformerEmbedder) or NoopEmbedder."
+                )
+
         # Generate embeddings if provider available
         if self._embedder and chunks:
             texts_to_embed = [c.content for c in chunks]

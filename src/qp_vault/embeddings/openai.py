@@ -42,6 +42,10 @@ class OpenAIEmbedder:
     def dimensions(self) -> int:
         return self._dimensions
 
+    @property
+    def is_local(self) -> bool:
+        return False
+
     async def embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings via OpenAI API."""
         response = await self._client.embeddings.create(
