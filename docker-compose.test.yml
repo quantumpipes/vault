@@ -1,0 +1,41 @@
+# Full integration test suite with all external dependencies
+#
+# Usage:
+#   docker compose -f docker-compose.test.yml up --build --abort-on-container-exit
+#
+# Services:
+#   postgres: PostgreSQL 16 + pgvector + pg_trgm
+#   vault-test: Python test runner with ALL extras + liboqs
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: test_vault
+      POSTGRES_USER: vault
+      POSTGRES_PASSWORD: vault_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vault -d test_vault"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    tmpfs:
+      - /var/lib/postgresql/data  # RAM-backed for speed
+
+  vault-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      VAULT_TEST_POSTGRES_DSN: "postgresql://vault:vault_test@postgres:5432/test_vault"
+      VAULT_TEST_ALL_EXTRAS: "1"
+    volumes:
+      - ./tests:/app/tests:ro
+      - ./src:/app/src:ro
+    command: >
+      pytest tests/ -v --tb=short
+      --cov=qp_vault --cov-report=term-missing
+      -x

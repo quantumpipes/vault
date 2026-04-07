@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS qp_vault.resources (
     collection_id TEXT,
     layer TEXT,
     tags JSONB DEFAULT '[]',
-    metadata JSONB DEFAULT '{}',
+    metadata JSONB DEFAULT '{{}}'::jsonb,
     mime_type TEXT,
     size_bytes BIGINT DEFAULT 0,
     chunk_count INTEGER DEFAULT 0,
@@ -579,7 +579,7 @@ class PostgresBackend:
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
                 provenance_id, resource_id, uploader_id, upload_method,
                 source_description, original_hash, signature,
-                verified, created_at,
+                verified, datetime.fromisoformat(created_at) if isinstance(created_at, str) else created_at,
             )
 
     async def get_provenance(self, resource_id: str) -> list[dict[str, Any]]:
@@ -600,7 +600,9 @@ class PostgresBackend:
         async with pool.acquire() as conn:
             await conn.execute(
                 "INSERT INTO qp_vault.collections (id, name, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)",
-                collection_id, name, description, created_at, created_at,
+                collection_id, name, description,
+                datetime.fromisoformat(created_at) if isinstance(created_at, str) else created_at,
+                datetime.fromisoformat(created_at) if isinstance(created_at, str) else created_at,
             )
 
     async def list_collections(self) -> list[dict[str, Any]]:
