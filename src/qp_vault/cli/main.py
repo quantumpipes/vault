@@ -11,6 +11,7 @@ Usage:
 
 import sys
 from pathlib import Path
+from typing import Any
 
 try:
     import typer
@@ -116,6 +117,7 @@ def search(
     table.add_column("Relevance", width=10)
     table.add_column("Content", width=60)
 
+    r: Any
     for i, r in enumerate(results, 1):
         tier = r.trust_tier.value if hasattr(r.trust_tier, "value") else str(r.trust_tier)
         tier_color = {
@@ -342,7 +344,7 @@ def expiring(
 ) -> None:
     """Show resources expiring within N days."""
     vault = _get_vault(path)
-    resources = vault.expiring(days=days)
+    resources: list[Any] = vault.expiring(days=days)
 
     if not resources:
         console.print(f"[green]No resources expiring within {days} days.[/green]")
@@ -401,7 +403,7 @@ def collections(
 ) -> None:
     """List all collections."""
     vault = _get_vault(path)
-    colls = vault.list_collections()
+    colls: list[dict[str, Any]] = vault.list_collections()
     if not colls:
         console.print("[yellow]No collections.[/yellow]")
         return
@@ -416,7 +418,7 @@ def provenance(
 ) -> None:
     """Show provenance records for a resource."""
     vault = _get_vault(path)
-    records = vault.get_provenance(resource_id)
+    records: list[dict[str, Any]] = vault.get_provenance(resource_id)
     if not records:
         console.print("[yellow]No provenance records.[/yellow]")
         return

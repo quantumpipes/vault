@@ -23,6 +23,6 @@ try:
     from qp_vault.encryption.ml_dsa import MLDSASigner
     from qp_vault.encryption.ml_kem import MLKEMKeyManager
 
-    __all__ += ["MLKEMKeyManager", "MLDSASigner", "HybridEncryptor"]  # type: ignore[assignment]
+    __all__ += ["MLKEMKeyManager", "MLDSASigner", "HybridEncryptor"]
 except ImportError:
     pass

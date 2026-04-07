@@ -131,6 +131,7 @@ class SearchResult(BaseModel):
     adversarial_status: AdversarialStatus = AdversarialStatus.UNVERIFIED
     cid: str | None = None
     lifecycle: Lifecycle = Lifecycle.ACTIVE
+    explain_metadata: dict[str, Any] | None = None
 
 
 class VaultEvent(BaseModel):

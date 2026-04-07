@@ -36,8 +36,8 @@ def embedder(name: str) -> Any:
         name: Unique name for this embedder (e.g., "nomic-embed", "openai").
     """
     def decorator(cls: type[T]) -> type[T]:
-        cls._qp_vault_plugin_type = "embedder"  # type: ignore[attr-defined]
-        cls._qp_vault_plugin_name = name  # type: ignore[attr-defined]
+        setattr(cls, "_qp_vault_plugin_type", "embedder")  # noqa: B010
+        setattr(cls, "_qp_vault_plugin_name", name)  # noqa: B010
         return cls
     return decorator
 
@@ -49,8 +49,8 @@ def parser(name: str) -> Any:
         name: Unique name for this parser (e.g., "dicom", "cad").
     """
     def decorator(cls: type[T]) -> type[T]:
-        cls._qp_vault_plugin_type = "parser"  # type: ignore[attr-defined]
-        cls._qp_vault_plugin_name = name  # type: ignore[attr-defined]
+        setattr(cls, "_qp_vault_plugin_type", "parser")  # noqa: B010
+        setattr(cls, "_qp_vault_plugin_name", name)  # noqa: B010
         return cls
     return decorator
 
@@ -62,7 +62,7 @@ def policy(name: str) -> Any:
         name: Unique name for this policy (e.g., "itar", "hipaa").
     """
     def decorator(cls: type[T]) -> type[T]:
-        cls._qp_vault_plugin_type = "policy"  # type: ignore[attr-defined]
-        cls._qp_vault_plugin_name = name  # type: ignore[attr-defined]
+        setattr(cls, "_qp_vault_plugin_type", "policy")  # noqa: B010
+        setattr(cls, "_qp_vault_plugin_name", name)  # noqa: B010
         return cls
     return decorator

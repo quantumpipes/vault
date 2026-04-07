@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from qp_vault.audit.log_auditor import LogAuditor
 from qp_vault.config import VaultConfig
@@ -290,6 +290,7 @@ class AsyncVault:
             except OSError:
                 _is_path = False
         if _is_path:
+            assert not isinstance(source, bytes), "bytes source cannot be a path"
             path = Path(source)
             if name is None:
                 name = path.name
@@ -510,9 +511,11 @@ class AsyncVault:
         """
         await self._ensure_initialized()
         self._check_permission("add_batch")
-        results = []
-        for source in sources:
-            r = await self.add(source, trust=trust, tenant_id=tenant_id, **kwargs)
+        assert sources is not None, "sources must not be None"
+        results: list[Resource] = []
+        src: str | Path | bytes
+        for src in sources:
+            r = await self.add(src, trust=trust, tenant_id=tenant_id, **kwargs)
             results.append(r)
         return results
 
@@ -636,8 +639,8 @@ class AsyncVault:
             text_weight=self.config.text_weight,
             filters=ResourceFilter(
                 tenant_id=tenant_id,
-                trust_tier=trust_min.value if hasattr(trust_min, "value") else trust_min,
-                layer=layer.value if hasattr(layer, "value") else layer,
+                trust_tier=trust_min.value if trust_min is not None and hasattr(trust_min, "value") else trust_min,
+                layer=layer.value if layer is not None and hasattr(layer, "value") else layer,
                 collection_id=collection,
             ) if any([tenant_id, trust_min, layer, collection]) else None,
             as_of=str(as_of) if as_of else None,
@@ -666,7 +669,7 @@ class AsyncVault:
         # Add explain metadata if requested
         if explain:
             for r in paginated:
-                r.metadata = {  # type: ignore[attr-defined]
+                r.explain_metadata = {
                     "explain": {
                         "vector_similarity": r.vector_similarity,
                         "text_rank": r.text_rank,
@@ -689,7 +692,7 @@ class AsyncVault:
         Returns results plus facet counts by trust tier, resource type,
         and data classification.
         """
-        results = await self.search(query, **kwargs)
+        results: list[SearchResult] = await self.search(query, **kwargs)
 
         facets: dict[str, dict[str, int]] = {
             "trust_tier": {},
@@ -850,20 +853,13 @@ class AsyncVault:
         from datetime import UTC, datetime
         collection_id = str(uuid.uuid4())
         now = datetime.now(tz=UTC).isoformat()
-        conn = self._storage._get_conn()  # type: ignore[union-attr]
-        conn.execute(
-            "INSERT INTO collections (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-            (collection_id, name, description, now, now),
-        )
-        conn.commit()
+        await self._storage.store_collection(collection_id, name, description, now)
         return {"id": collection_id, "name": name, "description": description}
 
     async def list_collections(self, *, tenant_id: str | None = None) -> list[dict[str, Any]]:
         """List all collections."""
         await self._ensure_initialized()
-        conn = self._storage._get_conn()  # type: ignore[union-attr]
-        rows = conn.execute("SELECT * FROM collections ORDER BY name").fetchall()
-        return [dict(r) for r in rows]
+        return await self._storage.list_collections()
 
     # --- Integrity ---
 
@@ -901,7 +897,7 @@ class AsyncVault:
         import json as _json
         await self._ensure_initialized()
         self._check_permission("export_vault")
-        resources = await self._list_all_bounded()
+        resources: list[Resource] = await self._list_all_bounded()
         data = {
             "version": "0.10.0",
             "resource_count": len(resources),
@@ -956,7 +952,7 @@ class AsyncVault:
         """Get vault status summary."""
         await self._ensure_initialized()
         self._check_permission("status")
-        all_resources = await self._list_all_bounded()
+        all_resources: list[Resource] = await self._list_all_bounded()
 
         by_status: dict[str, int] = {}
         by_trust: dict[str, int] = {}
@@ -1000,7 +996,12 @@ class AsyncVault:
 
 
 def _run_async(coro: Any) -> Any:
-    """Run an async coroutine synchronously."""
+    """Run an async coroutine synchronously.
+
+    Note: Returns Any because Coroutine[Any, Any, T] is not easily
+    parameterized at the call site. Callers use typed local variables
+    to maintain type safety.
+    """
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -1047,7 +1048,7 @@ class Vault:
 
     def add(self, source: str | Path | bytes, **kwargs: Any) -> Resource:
         """Add a resource to the vault."""
-        return _run_async(self._async.add(source, **kwargs))
+        return cast("Resource", _run_async(self._async.add(source, **kwargs)))
 
     def add_batch(self, sources: list[str | Path | bytes], **kwargs: Any) -> list[Resource]:
         """Add multiple resources in a batch."""
@@ -1056,19 +1057,19 @@ class Vault:
 
     def get(self, resource_id: str) -> Resource:
         """Get a resource by ID."""
-        return _run_async(self._async.get(resource_id))
+        return cast("Resource", _run_async(self._async.get(resource_id)))
 
     def list(self, **kwargs: Any) -> list[Resource]:
         """List resources with optional filters."""
-        return _run_async(self._async.list(**kwargs))
+        return cast("list[Resource]", _run_async(self._async.list(**kwargs)))
 
     def update(self, resource_id: str, **kwargs: Any) -> Resource:
         """Update resource metadata."""
-        return _run_async(self._async.update(resource_id, **kwargs))
+        return cast("Resource", _run_async(self._async.update(resource_id, **kwargs)))
 
     def delete(self, resource_id: str, *, hard: bool = False) -> None:
         """Delete a resource."""
-        return _run_async(self._async.delete(resource_id, hard=hard))
+        _run_async(self._async.delete(resource_id, hard=hard))
 
     def get_content(self, resource_id: str) -> str:
         """Retrieve the full text content of a resource."""
@@ -1092,19 +1093,19 @@ class Vault:
 
     def transition(self, resource_id: str, target: Lifecycle | str, *, reason: str | None = None) -> Resource:
         """Transition lifecycle state."""
-        return _run_async(self._async.transition(resource_id, target, reason=reason))
+        return cast("Resource", _run_async(self._async.transition(resource_id, target, reason=reason)))
 
     def supersede(self, old_id: str, new_id: str) -> tuple[Resource, Resource]:
         """Supersede a resource with a newer version."""
-        return _run_async(self._async.supersede(old_id, new_id))
+        return cast("tuple[Resource, Resource]", _run_async(self._async.supersede(old_id, new_id)))
 
     def expiring(self, *, days: int = 90) -> list[Resource]:
         """Find resources expiring within N days."""
-        return _run_async(self._async.expiring(days=days))
+        return cast("list[Resource]", _run_async(self._async.expiring(days=days)))
 
     def chain(self, resource_id: str) -> list[Resource]:
         """Get supersession chain."""
-        return _run_async(self._async.chain(resource_id))
+        return cast("list[Resource]", _run_async(self._async.chain(resource_id)))
 
     def export_proof(self, resource_id: str) -> MerkleProof:
         """Export Merkle proof for auditors."""
@@ -1121,9 +1122,9 @@ class Vault:
         result: VerificationResult | VaultVerificationResult = _run_async(self._async.verify(resource_id))
         return result
 
-    def layer(self, name: MemoryLayer | str) -> LayerView:  # type: ignore[return-value]
+    def layer(self, name: MemoryLayer | str) -> LayerView:
         """Get a scoped view of a memory layer."""
-        return self._async.layer(name)  # type: ignore[return-value]
+        return self._async.layer(name)
 
     def create_collection(self, name: str, **kwargs: Any) -> dict[str, Any]:
         """Create a new collection."""

@@ -151,7 +151,7 @@ class LayerView:
         If trust is not specified, uses the layer's default trust tier.
         """
         effective_trust = trust or self._layer_config.default_trust
-        return await self._vault.add(
+        return await self._vault.add(  # type: ignore[no-any-return]
             source,
             name=name,
             trust=effective_trust,
@@ -178,7 +178,7 @@ class LayerView:
             )
             await self._vault._auditor.record(event)
 
-        return await self._vault.search(
+        return await self._vault.search(  # type: ignore[no-any-return]
             query,
             top_k=top_k,
             layer=self._layer,
@@ -188,7 +188,7 @@ class LayerView:
 
     async def list(self, **kwargs: Any) -> list[Resource]:
         """List resources in this layer."""
-        return await self._vault.list(layer=self._layer, **kwargs)
+        return await self._vault.list(layer=self._layer, **kwargs)  # type: ignore[no-any-return]
 
     @property
     def config(self) -> LayerConfig:

@@ -23,13 +23,12 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: pip install -e ".[sqlite,fastapi,integrity,cli,dev]"
+      - run: pip install -e ".[sqlite,fastapi,integrity,encryption,cli,dev]"
       - run: mypy src/qp_vault/
 
   test:

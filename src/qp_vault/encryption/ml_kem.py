@@ -78,4 +78,4 @@ class MLKEMKeyManager:
             The shared secret (same as returned by encapsulate).
         """
         kem = oqs.KeyEncapsulation(self.ALGORITHM, secret_key=secret_key)
-        return kem.decap_secret(ciphertext)
+        return kem.decap_secret(ciphertext)  # type: ignore[no-any-return]

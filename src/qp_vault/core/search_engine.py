@@ -180,7 +180,7 @@ def apply_trust_weighting(
 
         # Membrane 2D trust: multiply by adversarial verification status
         adv_status = getattr(result, "adversarial_status", None)
-        adv_str = adv_status.value if hasattr(adv_status, "value") else str(adv_status or "unverified")
+        adv_str = adv_status.value if adv_status is not None and hasattr(adv_status, "value") else str(adv_status or "unverified")
         adv_mult = compute_adversarial_multiplier(adv_str)
 
         # Freshness: compute from resource updated_at timestamp

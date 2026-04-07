@@ -63,7 +63,7 @@ class MLDSASigner:
             The signature bytes.
         """
         sig = oqs.Signature(self.ALGORITHM, secret_key=secret_key)
-        return sig.sign(message)
+        return sig.sign(message)  # type: ignore[no-any-return]
 
     def verify(self, message: bytes, signature: bytes, public_key: bytes) -> bool:
         """Verify an ML-DSA-65 signature.
@@ -77,4 +77,4 @@ class MLDSASigner:
             True if signature is valid.
         """
         sig = oqs.Signature(self.ALGORITHM)
-        return sig.verify(message, signature, public_key)
+        return sig.verify(message, signature, public_key)  # type: ignore[no-any-return]

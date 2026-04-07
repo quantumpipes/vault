@@ -575,6 +575,23 @@ class SQLiteBackend:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    async def store_collection(
+        self, collection_id: str, name: str, description: str, created_at: str
+    ) -> None:
+        """Store a new collection."""
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT INTO collections (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            (collection_id, name, description, created_at, created_at),
+        )
+        conn.commit()
+
+    async def list_collections(self) -> list[dict[str, Any]]:
+        """List all collections."""
+        conn = self._get_conn()
+        rows = conn.execute("SELECT * FROM collections ORDER BY name").fetchall()
+        return [dict(r) for r in rows]
+
     async def close(self) -> None:
         """Close the database connection."""
         if self._conn:

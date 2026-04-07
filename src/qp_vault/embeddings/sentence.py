@@ -36,9 +36,9 @@ class SentenceTransformerEmbedder:
 
     @property
     def dimensions(self) -> int:
-        return self._dimensions  # type: ignore[return-value]
+        return int(self._dimensions)
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a batch of texts."""
         embeddings = self._model.encode(texts, convert_to_numpy=True)
-        return embeddings.tolist()
+        return embeddings.tolist()  # type: ignore[no-any-return]

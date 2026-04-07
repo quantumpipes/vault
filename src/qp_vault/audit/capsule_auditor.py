@@ -68,8 +68,11 @@ class CapsuleAuditor:
             else str(event.event_type)
         )
 
+        capsule_type = getattr(CapsuleType, "VAULT", None) or getattr(CapsuleType, "GENERAL", None)
+        if capsule_type is None:
+            capsule_type = list(CapsuleType)[0]
         capsule = Capsule(
-            type=CapsuleType.VAULT if hasattr(CapsuleType, "VAULT") else CapsuleType.GENERAL,
+            type=capsule_type,
             trigger=TriggerSection(
                 type="vault_operation",
                 source=f"qp-vault/{event_type_val}",

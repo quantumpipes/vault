@@ -121,6 +121,35 @@ python_version = "3.12"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+disable_error_code = ["valid-type"]  # method named list() conflicts with builtin list type
+
+# Optional dependencies: stubs not always available during local development.
+# CI installs the main extras before running mypy. These overrides handle
+# deps that CI does NOT install (capsule, postgres, openai, pq, etc.).
+[[tool.mypy.overrides]]
+module = [
+    "qp_capsule.*",
+    "sentence_transformers.*",
+    "openai.*",
+    "docling.*",
+    "asyncpg.*",
+    "sqlalchemy.*",
+    "pgvector.*",
+    "liboqs.*",
+    "oqs.*",
+    "pynacl.*",
+]
+ignore_missing_imports = true
+
+# FastAPI router decorators and Typer command decorators are untyped in their
+# stubs. Our route/command functions ARE typed — the decorator wrappers just
+# lack stubs. This is a known library limitation, not a code issue.
+[[tool.mypy.overrides]]
+module = [
+    "qp_vault.integrations.fastapi_routes",
+    "qp_vault.cli.main",
+]
+allow_untyped_decorators = true
 
 [tool.ruff]
 target-version = "py312"

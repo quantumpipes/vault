@@ -61,7 +61,7 @@ class AESGCMEncryptor:
             nonce (12 bytes) || ciphertext || tag (16 bytes)
         """
         nonce = os.urandom(12)
-        ciphertext = self._aesgcm.encrypt(nonce, plaintext, associated_data)
+        ciphertext: bytes = self._aesgcm.encrypt(nonce, plaintext, associated_data)
         return nonce + ciphertext
 
     def decrypt(self, data: bytes, associated_data: bytes | None = None) -> bytes:
@@ -82,7 +82,8 @@ class AESGCMEncryptor:
         nonce = data[:12]
         ciphertext = data[12:]
         try:
-            return self._aesgcm.decrypt(nonce, ciphertext, associated_data)
+            plaintext: bytes = self._aesgcm.decrypt(nonce, ciphertext, associated_data)
+            return plaintext
         except Exception as e:
             raise ValueError(f"Decryption failed: {e}") from e
 

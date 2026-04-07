@@ -220,12 +220,12 @@ class ResourceManager:
         """List resources with filters."""
         filters = ResourceFilter(
             tenant_id=tenant_id,
-            trust_tier=trust.value if hasattr(trust, "value") else trust,
-            data_classification=classification.value if hasattr(classification, "value") else classification,
-            layer=layer.value if hasattr(layer, "value") else layer,
+            trust_tier=trust.value if trust is not None and hasattr(trust, "value") else trust,
+            data_classification=classification.value if classification is not None and hasattr(classification, "value") else classification,
+            layer=layer.value if layer is not None and hasattr(layer, "value") else layer,
             collection_id=collection,
-            lifecycle=lifecycle.value if hasattr(lifecycle, "value") else lifecycle,
-            status=status.value if hasattr(status, "value") else status,
+            lifecycle=lifecycle.value if lifecycle is not None and hasattr(lifecycle, "value") else lifecycle,
+            status=status.value if status is not None and hasattr(status, "value") else status,
             tags=tags,
             limit=limit,
             offset=offset,
@@ -245,8 +245,8 @@ class ResourceManager:
         """Update resource metadata."""
         updates = ResourceUpdate(
             name=name,
-            trust_tier=trust.value if hasattr(trust, "value") else trust,
-            data_classification=classification.value if hasattr(classification, "value") else classification,
+            trust_tier=trust.value if trust is not None and hasattr(trust, "value") else trust,
+            data_classification=classification.value if classification is not None and hasattr(classification, "value") else classification,
             tags=tags,
             metadata=metadata,
         )
@@ -260,7 +260,7 @@ class ResourceManager:
                 resource_id=resource_id,
                 resource_name=resource.name,
                 resource_hash=resource.content_hash,
-                details={"new_trust_tier": trust.value if hasattr(trust, "value") else trust},
+                details={"new_trust_tier": trust.value if trust is not None and hasattr(trust, "value") else trust},
             )
             await self._auditor.record(event)
 

@@ -511,6 +511,62 @@ class PostgresBackend:
                 result.append(Chunk(**d))
             return result
 
+    async def store_provenance(
+        self,
+        provenance_id: str,
+        resource_id: str,
+        uploader_id: str | None,
+        upload_method: str | None,
+        source_description: str,
+        original_hash: str,
+        signature: str | None,
+        verified: bool,
+        created_at: str,
+    ) -> None:
+        """Store a provenance record."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """INSERT INTO qp_vault.provenance (
+                    id, resource_id, uploader_id, upload_method,
+                    source_description, original_hash, provenance_signature,
+                    signature_verified, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
+                provenance_id, resource_id, uploader_id, upload_method,
+                source_description, original_hash, signature,
+                verified, created_at,
+            )
+
+    async def get_provenance(self, resource_id: str) -> list[dict[str, Any]]:
+        """Get all provenance records for a resource."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM qp_vault.provenance WHERE resource_id = $1 ORDER BY created_at",
+                resource_id,
+            )
+            return [dict(r) for r in rows]
+
+    async def store_collection(
+        self, collection_id: str, name: str, description: str, created_at: str
+    ) -> None:
+        """Store a new collection."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO qp_vault.collections (id, name, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)",
+                collection_id, name, description, created_at, created_at,
+            )
+
+    async def list_collections(self) -> list[dict[str, Any]]:
+        """List all collections."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM qp_vault.collections ORDER BY name"
+            )
+            return [dict(r) for r in rows]
+
     async def close(self) -> None:
         """Close the connection pool."""
         if self._pool:
