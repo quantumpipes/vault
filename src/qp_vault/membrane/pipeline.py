@@ -1,9 +1,9 @@
 # Copyright 2026 Quantum Pipes Technologies, LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""CIS Pipeline: orchestrates multi-stage content screening.
+"""Membrane Pipeline: orchestrates multi-stage content screening.
 
-Runs content through the Content Immune System stages:
+Runs content through the Membrane stages:
 1. INNATE_SCAN — pattern-based detection (regex, blocklists)
 2. RELEASE — risk-proportionate gating decision
 
@@ -13,21 +13,21 @@ will be added as the pipeline matures.
 
 from __future__ import annotations
 
-from qp_vault.cis.innate_scan import InnateScanConfig, run_innate_scan
-from qp_vault.cis.release_gate import evaluate_release
-from qp_vault.enums import CISResult, CISStage, ResourceStatus
-from qp_vault.models import CISPipelineStatus, CISStageRecord
+from qp_vault.enums import MembraneResult, MembraneStage, ResourceStatus
+from qp_vault.membrane.innate_scan import InnateScanConfig, run_innate_scan
+from qp_vault.membrane.release_gate import evaluate_release
+from qp_vault.models import MembranePipelineStatus, MembraneStageRecord
 
 
-class CISPipeline:
-    """Content Immune System pipeline.
+class MembranePipeline:
+    """Membrane pipeline.
 
     Screens content through multiple stages before allowing indexing.
     Content that fails screening is quarantined.
 
     Args:
         innate_config: Configuration for the innate scan stage.
-        enabled: Whether CIS screening is active. Default True.
+        enabled: Whether Membrane screening is active. Default True.
     """
 
     def __init__(
@@ -39,29 +39,29 @@ class CISPipeline:
         self._innate_config = innate_config
         self._enabled = enabled
 
-    async def screen(self, content: str) -> CISPipelineStatus:
-        """Run content through the CIS pipeline.
+    async def screen(self, content: str) -> MembranePipelineStatus:
+        """Run content through the Membrane pipeline.
 
         Args:
             content: Text content to screen.
 
         Returns:
-            CISPipelineStatus with stage results and overall decision.
+            MembranePipelineStatus with stage results and overall decision.
         """
         if not self._enabled:
-            return CISPipelineStatus(
+            return MembranePipelineStatus(
                 stages=[
-                    CISStageRecord(
-                        stage=CISStage.RELEASE,
-                        result=CISResult.PASS,  # nosec B105
+                    MembraneStageRecord(
+                        stage=MembraneStage.RELEASE,
+                        result=MembraneResult.PASS,  # nosec B105
                         reasoning="Released: screening disabled",
                     ),
                 ],
-                overall_result=CISResult.PASS,  # nosec B105
+                overall_result=MembraneResult.PASS,  # nosec B105
                 recommended_status=ResourceStatus.INDEXED,
             )
 
-        stages: list[CISStageRecord] = []
+        stages: list[MembraneStageRecord] = []
 
         # Stage 1: Innate scan
         innate_result = await run_innate_scan(content, self._innate_config)
@@ -73,12 +73,12 @@ class CISPipeline:
 
         # Determine overall result and recommended status
         overall = release_result.result
-        if overall == CISResult.FAIL or overall == CISResult.FLAG:
+        if overall == MembraneResult.FAIL or overall == MembraneResult.FLAG:
             status = ResourceStatus.QUARANTINED
         else:
             status = ResourceStatus.INDEXED
 
-        return CISPipelineStatus(
+        return MembranePipelineStatus(
             stages=stages,
             overall_result=overall,
             recommended_status=status,

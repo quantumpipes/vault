@@ -13,8 +13,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from qp_vault.enums import CISResult, CISStage
-from qp_vault.models import CISStageRecord
+from qp_vault.enums import MembraneResult, MembraneStage
+from qp_vault.models import MembraneStageRecord
 
 # Default blocklist patterns (prompt injection, jailbreak attempts, data exfiltration)
 DEFAULT_BLOCKLIST: list[str] = [
@@ -47,7 +47,7 @@ class InnateScanConfig:
 async def run_innate_scan(
     content: str,
     config: InnateScanConfig | None = None,
-) -> CISStageRecord:
+) -> MembraneStageRecord:
     """Run innate scan on content.
 
     Checks content against regex blocklist patterns.
@@ -57,7 +57,7 @@ async def run_innate_scan(
         config: Optional scan configuration.
 
     Returns:
-        CISStageRecord with PASS, FLAG, or FAIL result.
+        MembraneStageRecord with PASS, FLAG, or FAIL result.
     """
     if config is None:
         config = InnateScanConfig()
@@ -73,15 +73,15 @@ async def run_innate_scan(
             continue  # Skip malformed patterns
 
     if matches:
-        return CISStageRecord(
-            stage=CISStage.INNATE_SCAN,
-            result=CISResult.FLAG,
+        return MembraneStageRecord(
+            stage=MembraneStage.INNATE_SCAN,
+            result=MembraneResult.FLAG,
             matched_patterns=matches[:5],
             reasoning=f"Matched {len(matches)} blocklist patterns",
         )
 
-    return CISStageRecord(
-        stage=CISStage.INNATE_SCAN,
-        result=CISResult.PASS,  # nosec B105 — CIS stage result, not a password
+    return MembraneStageRecord(
+        stage=MembraneStage.INNATE_SCAN,
+        result=MembraneResult.PASS,  # nosec B105 — Membrane stage result, not a password
         reasoning=f"Checked {len(config.blocklist_patterns)} patterns, none matched",
     )

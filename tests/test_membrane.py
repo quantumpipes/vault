@@ -1,7 +1,7 @@
 # Copyright 2026 Quantum Pipes Technologies, LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for Membrane (CIS) Phase 1.
+"""Tests for Membrane Phase 1.
 
 Covers: enums, models, provenance service, search exclusion, 2D trust scoring.
 """
@@ -19,16 +19,16 @@ from qp_vault.core.search_engine import (
 )
 from qp_vault.enums import (
     AdversarialStatus,
-    CISResult,
-    CISStage,
+    MembraneResult,
+    MembraneStage,
     ResourceStatus,
     TrustTier,
     UploadMethod,
 )
 from qp_vault.models import (
-    CISPipelineStatus,
-    CISStageRecord,
     ContentProvenance,
+    MembranePipelineStatus,
+    MembraneStageRecord,
     Resource,
     SearchResult,
 )
@@ -40,7 +40,7 @@ from qp_vault.provenance import ContentProvenanceService
 
 
 class TestCISEnums:
-    """CIS-specific enum definitions."""
+    """Membrane-specific enum definitions."""
 
     def test_resource_status_quarantined_exists(self):
         assert ResourceStatus.QUARANTINED == "quarantined"
@@ -51,20 +51,20 @@ class TestCISEnums:
         assert AdversarialStatus.SUSPICIOUS == "suspicious"
 
     def test_cis_stage_values(self):
-        assert CISStage.INGEST == "ingest"
-        assert CISStage.INNATE_SCAN == "innate_scan"
-        assert CISStage.ADAPTIVE_SCAN == "adaptive_scan"
-        assert CISStage.CORRELATE == "correlate"
-        assert CISStage.RELEASE == "release"
-        assert CISStage.SURVEIL == "surveil"
-        assert CISStage.PRESENT == "present"
-        assert CISStage.REMEMBER == "remember"
+        assert MembraneStage.INGEST == "ingest"
+        assert MembraneStage.INNATE_SCAN == "innate_scan"
+        assert MembraneStage.ADAPTIVE_SCAN == "adaptive_scan"
+        assert MembraneStage.CORRELATE == "correlate"
+        assert MembraneStage.RELEASE == "release"
+        assert MembraneStage.SURVEIL == "surveil"
+        assert MembraneStage.PRESENT == "present"
+        assert MembraneStage.REMEMBER == "remember"
 
-    def test_cis_result_values(self):
-        assert CISResult.PASS == "pass"
-        assert CISResult.FLAG == "flag"
-        assert CISResult.FAIL == "fail"
-        assert CISResult.SKIP == "skip"
+    def test_membrane_result_values(self):
+        assert MembraneResult.PASS == "pass"
+        assert MembraneResult.FLAG == "flag"
+        assert MembraneResult.FAIL == "fail"
+        assert MembraneResult.SKIP == "skip"
 
     def test_upload_method_values(self):
         assert UploadMethod.UI == "ui"
@@ -102,15 +102,15 @@ class TestCISModels:
         assert not p.signature_verified
 
     def test_cis_stage_record_defaults(self):
-        s = CISStageRecord(
-            id="s1", resource_id="r1", stage=CISStage.INNATE_SCAN
+        s = MembraneStageRecord(
+            id="s1", resource_id="r1", stage=MembraneStage.INNATE_SCAN
         )
-        assert s.result == CISResult.PASS
+        assert s.result == MembraneResult.PASS
         assert s.risk_score == 0.0
         assert s.matched_patterns == []
 
-    def test_cis_pipeline_status_defaults(self):
-        ps = CISPipelineStatus(resource_id="r1")
+    def test_membrane_pipeline_status_defaults(self):
+        ps = MembranePipelineStatus(resource_id="r1")
         assert ps.stages_completed == []
         assert ps.aggregate_risk_score == 0.0
         assert ps.recommended_action == "pending"

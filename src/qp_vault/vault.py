@@ -197,9 +197,9 @@ class AsyncVault:
         from qp_vault.core.layer_manager import LayerManager
         self._layer_manager = LayerManager(config=self.config)
 
-        # CIS pipeline (Content Immune System)
-        from qp_vault.cis.pipeline import CISPipeline
-        self._cis_pipeline: CISPipeline | None = CISPipeline()
+        # Membrane pipeline
+        from qp_vault.membrane.pipeline import MembranePipeline
+        self._membrane_pipeline: MembranePipeline | None = MembranePipeline()
 
         self._initialized = False
 
@@ -337,12 +337,12 @@ class AsyncVault:
         # Strip null bytes from content (prevents storage/search corruption)
         text = text.replace("\x00", "")
 
-        # CIS screening (if pipeline configured)
-        if self._cis_pipeline:
-            cis_result = await self._cis_pipeline.screen(text)
-            if cis_result.recommended_status.value == "quarantined":
+        # Membrane screening (if pipeline configured)
+        if self._membrane_pipeline:
+            membrane_result = await self._membrane_pipeline.screen(text)
+            if membrane_result.recommended_status.value == "quarantined":
                 # Store but quarantine; caller can check resource.status
-                pass  # Status will be set by CIS result below
+                pass  # Status will be set by Membrane result below
 
         return await self._resource_manager.add(
             text,

@@ -9,11 +9,11 @@ from pydantic import BaseModel, Field
 
 from qp_vault.enums import (
     AdversarialStatus,
-    CISResult,
-    CISStage,
     DataClassification,
     EventType,
     Lifecycle,
+    MembraneResult,
+    MembraneStage,
     MemoryLayer,
     ResourceStatus,
     ResourceType,
@@ -213,7 +213,7 @@ class ContentProvenance(BaseModel):
     created_at: datetime = Field(default_factory=_utcnow)
 
 
-class CISStageRecord(BaseModel):
+class MembraneStageRecord(BaseModel):
     """Result of a single Membrane pipeline stage evaluation.
 
     Every stage (INGEST through REMEMBER) creates one record per document.
@@ -222,8 +222,8 @@ class CISStageRecord(BaseModel):
 
     id: str = ""
     resource_id: str = ""
-    stage: CISStage = CISStage.INGEST
-    result: CISResult = CISResult.PASS
+    stage: MembraneStage = MembraneStage.INGEST
+    result: MembraneResult = MembraneResult.PASS
     risk_score: float = 0.0
     reasoning: str = ""
     matched_patterns: list[str] = Field(default_factory=list)
@@ -232,17 +232,17 @@ class CISStageRecord(BaseModel):
     created_at: datetime = Field(default_factory=_utcnow)
 
 
-class CISPipelineStatus(BaseModel):
+class MembranePipelineStatus(BaseModel):
     """Aggregate status of the Membrane pipeline for a single document."""
 
     resource_id: str = ""
-    stages: list[CISStageRecord] = Field(default_factory=list)
-    stages_completed: list[CISStage] = Field(default_factory=list)
-    stages_pending: list[CISStage] = Field(default_factory=list)
-    overall_result: CISResult = CISResult.PASS
+    stages: list[MembraneStageRecord] = Field(default_factory=list)
+    stages_completed: list[MembraneStage] = Field(default_factory=list)
+    stages_pending: list[MembraneStage] = Field(default_factory=list)
+    overall_result: MembraneResult = MembraneResult.PASS
     recommended_status: ResourceStatus = ResourceStatus.INDEXED
     aggregate_risk_score: float = 0.0
     recommended_action: str = "pending"
-    stage_results: list[CISStageRecord] = Field(default_factory=list)
+    stage_results: list[MembraneStageRecord] = Field(default_factory=list)
     started_at: datetime | None = None
     completed_at: datetime | None = None
