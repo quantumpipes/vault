@@ -575,6 +575,16 @@ class PostgresBackend:
             )
             return [dict(r) for r in rows]
 
+    async def count_resources(self, tenant_id: str) -> int:
+        """Count resources for a tenant (atomic, single query)."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchval(
+                "SELECT COUNT(*) FROM qp_vault.resources WHERE tenant_id = $1 AND status != 'deleted'",
+                tenant_id,
+            )
+            return int(row) if row else 0
+
     async def close(self) -> None:
         """Close the connection pool."""
         if self._pool:

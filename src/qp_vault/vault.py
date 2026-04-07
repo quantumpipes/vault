@@ -58,10 +58,13 @@ _MAX_METADATA_VALUE_SIZE = 10_000
 def _sanitize_name(name: str) -> str:
     """Sanitize a resource name for safe storage.
 
-    Strips path components, null bytes, control characters, backslashes.
-    Caps length at 255.
+    Applies Unicode NFC normalization, strips path components, null bytes,
+    control characters, backslashes. Caps length at 255.
     """
     import re
+    import unicodedata
+    # Unicode NFC normalization (prevents homograph collisions)
+    name = unicodedata.normalize("NFC", name)
     # Replace backslashes with forward slashes for cross-platform path stripping
     name = name.replace("\\", "/")
     # Strip path components (takes last segment after /)
@@ -242,11 +245,20 @@ class AsyncVault:
         self._cache.clear()
 
     async def _with_timeout(self, coro: Any) -> Any:
-        """Wrap a coroutine with the configured query timeout."""
+        """Wrap a coroutine with the configured query timeout.
+
+        Uses asyncio.create_task + cancel for proper cleanup. When the
+        timeout fires, the underlying task is cancelled (not left running).
+        """
         timeout_s = self.config.query_timeout_ms / 1000.0
+        task = asyncio.ensure_future(coro)
         try:
-            return await asyncio.wait_for(coro, timeout=timeout_s)
+            return await asyncio.wait_for(asyncio.shield(task), timeout=timeout_s)
         except TimeoutError:
+            task.cancel()
+            import contextlib
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
             raise VaultError(
                 f"Operation timed out after {self.config.query_timeout_ms}ms"
             ) from None
@@ -345,7 +357,10 @@ class AsyncVault:
                 _is_path = False
         if _is_path:
             assert not isinstance(source, bytes), "bytes source cannot be a path"
-            path = Path(source)
+            path = Path(source).resolve()
+            # Security: reject path traversal attempts
+            if ".." in path.parts:
+                raise VaultError("Path traversal detected in source path")
             if name is None:
                 name = path.name
             # Try parsers first
@@ -387,13 +402,10 @@ class AsyncVault:
                     f"({size_mb:.1f}MB provided)"
                 )
 
-        # Per-tenant quota check
+        # Per-tenant quota check (atomic count, no TOCTOU window)
         if tenant_id and self.config.max_resources_per_tenant is not None:
-            from qp_vault.protocols import ResourceFilter
-            existing = await self._storage.list_resources(
-                ResourceFilter(tenant_id=tenant_id, limit=1, offset=self.config.max_resources_per_tenant)
-            )
-            if existing:
+            count = await self._storage.count_resources(tenant_id)
+            if count >= self.config.max_resources_per_tenant:
                 raise VaultError(
                     f"Tenant {tenant_id} has reached the resource limit "
                     f"({self.config.max_resources_per_tenant})"

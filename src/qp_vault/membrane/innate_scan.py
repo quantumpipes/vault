@@ -65,12 +65,17 @@ async def run_innate_scan(
     flags = re.IGNORECASE if not config.case_sensitive else 0
     matches: list[str] = []
 
+    # Limit content length for regex scanning to prevent catastrophic backtracking
+    scan_content = content[:500_000]  # 500KB max for pattern matching
+
     for pattern in config.blocklist_patterns:
         try:
-            if re.search(pattern, content, flags):
+            # Pre-compile to validate pattern; skip if invalid
+            compiled = re.compile(pattern, flags)
+            if compiled.search(scan_content):
                 matches.append(pattern)
-        except re.error:
-            continue  # Skip malformed patterns
+        except (re.error, RecursionError):
+            continue  # Skip malformed or pathological patterns
 
     if matches:
         return MembraneStageRecord(

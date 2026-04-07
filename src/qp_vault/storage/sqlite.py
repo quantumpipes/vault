@@ -592,6 +592,15 @@ class SQLiteBackend:
         rows = conn.execute("SELECT * FROM collections ORDER BY name").fetchall()
         return [dict(r) for r in rows]
 
+    async def count_resources(self, tenant_id: str) -> int:
+        """Count resources for a tenant (atomic, single query)."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT COUNT(*) FROM resources WHERE tenant_id = ? AND status != 'deleted'",
+            (tenant_id,),
+        ).fetchone()
+        return row[0] if row else 0
+
     async def close(self) -> None:
         """Close the database connection."""
         if self._conn:

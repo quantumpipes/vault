@@ -21,7 +21,21 @@ except ImportError:
     print("CLI requires: pip install qp-vault[cli]", file=sys.stderr)
     sys.exit(1)
 
+from qp_vault.exceptions import VaultError
 from qp_vault.vault import Vault
+
+
+def _safe_error_message(e: Exception) -> str:
+    """Return a safe error message for CLI display.
+
+    Uses structured error codes from VaultError. Never exposes
+    internal paths, SQL, or stack traces.
+    """
+    if isinstance(e, VaultError):
+        code = getattr(e, "code", "VAULT_000")
+        return f"[{code}] {e}"
+    return f"Operation failed: {type(e).__name__}"
+
 
 app = typer.Typer(
     name="vault",
@@ -153,7 +167,7 @@ def inspect(
     try:
         resource = vault.get(resource_id)
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        console.print(f"[red]{_safe_error_message(e)}[/red]")
         raise typer.Exit(1) from None
 
     console.print(f"[bold]{resource.name}[/bold]")
@@ -333,7 +347,7 @@ def transition(
         lc = r.lifecycle.value if hasattr(r.lifecycle, "value") else str(r.lifecycle)
         console.print(f"[green]Transitioned[/green]  {resource_id} -> {lc}")
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        console.print(f"[red]{_safe_error_message(e)}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -365,7 +379,7 @@ def content(
         text = vault.get_content(resource_id)
         console.print(text)
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        console.print(f"[red]{_safe_error_message(e)}[/red]")
         raise typer.Exit(1) from None
 
 

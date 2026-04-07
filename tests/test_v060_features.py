@@ -145,13 +145,16 @@ class TestPerResourceHealth:
 class TestQuotas:
     def test_quota_enforcement(self, tmp_path):
         from qp_vault.config import VaultConfig
+        from qp_vault.exceptions import VaultError
         config = VaultConfig(max_resources_per_tenant=2)
         vault = Vault(tmp_path / "quota-vault", config=config)
         vault.add("Doc 1", tenant_id="t1")
         vault.add("Doc 2", tenant_id="t1")
-        # Third should be allowed (quota check uses offset, so 2 existing means no result at offset 2)
-        # This tests the mechanism exists
-        vault.add("Doc 3", tenant_id="t1")  # May or may not raise depending on impl
+        # Third exceeds quota: atomic count check rejects it
+        with pytest.raises(VaultError, match="resource limit"):
+            vault.add("Doc 3", tenant_id="t1")
+        # Different tenant is unaffected
+        vault.add("Doc 1", tenant_id="t2")
 
 
 class TestCollections:

@@ -17,7 +17,7 @@ from datetime import date
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException
+    from fastapi import APIRouter, HTTPException, Query
     from pydantic import BaseModel, Field
     HAS_FASTAPI = True
 except ImportError:
@@ -37,7 +37,7 @@ def _require_fastapi() -> None:
 if HAS_FASTAPI:
 
     class AddResourceRequest(BaseModel):
-        content: str
+        content: str = Field(..., max_length=500_000_000)  # 500MB max
         name: str = "untitled.md"
         trust: str = "working"
         classification: str = "internal"
@@ -137,8 +137,8 @@ def create_vault_router(vault: Any) -> APIRouter:
         layer: str | None = None,
         lifecycle: str | None = None,
         status: str | None = None,
-        limit: int = 50,
-        offset: int = 0,
+        limit: int = Query(50, ge=1, le=1000),
+        offset: int = Query(0, ge=0, le=1_000_000),
     ) -> dict[str, Any]:
         resources = await vault.list(
             trust=trust,

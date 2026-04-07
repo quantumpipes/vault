@@ -134,8 +134,9 @@ class PluginRegistry:
         Any .py file in the directory is imported. Classes decorated with
         @embedder, @parser, or @policy are auto-registered.
 
-        If a manifest.json exists in the directory, plugin files are verified
-        against SHA3-256 hashes before loading.
+        When verify_hashes is True (default), a manifest.json MUST exist in the
+        directory. Each plugin file's SHA3-256 hash is verified against the
+        manifest before loading. Files not in the manifest are rejected.
         """
         if not plugins_dir.is_dir():
             return
@@ -143,7 +144,14 @@ class PluginRegistry:
         # Load manifest for hash verification
         manifest: dict[str, str] = {}
         manifest_path = plugins_dir / "manifest.json"
-        if verify_hashes and manifest_path.exists():
+        if verify_hashes:
+            if not manifest_path.exists():
+                logger.warning(
+                    "Plugin directory %s has no manifest.json. "
+                    "Skipping plugin discovery (verify_hashes=True requires manifest).",
+                    plugins_dir,
+                )
+                return
             import json
             manifest = json.loads(manifest_path.read_text())
 
@@ -151,12 +159,17 @@ class PluginRegistry:
             if py_file.name.startswith("_"):
                 continue
 
-            # Hash verification if manifest exists
-            if manifest and verify_hashes:
+            # Hash verification: reject files not in manifest or with wrong hash
+            if verify_hashes:
                 import hashlib
                 file_hash = hashlib.sha3_256(py_file.read_bytes()).hexdigest()
                 expected = manifest.get(py_file.name)
-                if expected and file_hash != expected:
+                if not expected:
+                    logger.warning(
+                        "Plugin %s not in manifest. Skipping.", py_file.name,
+                    )
+                    continue
+                if file_hash != expected:
                     logger.warning(
                         "Plugin %s hash mismatch (expected %s, got %s). Skipping.",
                         py_file.name, expected[:16], file_hash[:16],

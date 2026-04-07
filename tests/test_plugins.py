@@ -92,6 +92,17 @@ class TestRegistry:
         assert reg.get_parser_for_extension(".zzz") is None
 
 
+def _write_manifest(directory: Path) -> None:
+    """Generate a SHA3-256 manifest for all .py files in a directory."""
+    import hashlib
+    import json
+    manifest = {}
+    for py_file in sorted(directory.glob("*.py")):
+        if not py_file.name.startswith("_"):
+            manifest[py_file.name] = hashlib.sha3_256(py_file.read_bytes()).hexdigest()
+    (directory / "manifest.json").write_text(json.dumps(manifest))
+
+
 class TestPluginsDir:
     def test_discover_from_dir(self, tmp_path: Path):
         """Test loading plugins from a directory."""
@@ -105,6 +116,7 @@ class DirEmbedder:
     async def embed(self, texts):
         return [[0.0] * 8] * len(texts)
 """)
+        _write_manifest(tmp_path)
 
         reg = PluginRegistry()
         reg.discover_plugins_dir(tmp_path)
@@ -112,12 +124,14 @@ class DirEmbedder:
 
     def test_discover_skips_underscore_files(self, tmp_path: Path):
         (tmp_path / "_private.py").write_text("x = 1")
+        _write_manifest(tmp_path)  # Empty manifest (underscore files excluded)
         reg = PluginRegistry()
         reg.discover_plugins_dir(tmp_path)
         assert len(reg.list_embedders()) == 0
 
     def test_discover_skips_broken_files(self, tmp_path: Path):
         (tmp_path / "broken.py").write_text("raise RuntimeError('broken')")
+        _write_manifest(tmp_path)
         reg = PluginRegistry()
         reg.discover_plugins_dir(tmp_path)  # Should not raise
 
@@ -140,11 +154,28 @@ class P1:
     supported_extensions = {".p1"}
     async def parse(self, path): return None
 """)
+        _write_manifest(tmp_path)
 
         reg = PluginRegistry()
         reg.discover_plugins_dir(tmp_path)
         assert "e1" in reg.list_embedders()
         assert "p1" in reg.list_parsers()
+
+    def test_discover_rejects_without_manifest(self, tmp_path: Path):
+        """Plugin discovery requires manifest.json when verify_hashes=True."""
+        (tmp_path / "evil.py").write_text("print('should not execute')")
+        reg = PluginRegistry()
+        reg.discover_plugins_dir(tmp_path, verify_hashes=True)
+        assert len(reg.list_embedders()) == 0
+
+    def test_discover_rejects_file_not_in_manifest(self, tmp_path: Path):
+        """Files not listed in manifest are rejected."""
+        import json
+        (tmp_path / "legit.py").write_text("x = 1")
+        (tmp_path / "manifest.json").write_text(json.dumps({}))  # Empty manifest
+        reg = PluginRegistry()
+        reg.discover_plugins_dir(tmp_path)
+        # legit.py not in manifest, so not loaded
 
 
 class TestEntryPoints:
