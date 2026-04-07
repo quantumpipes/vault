@@ -141,11 +141,13 @@ class AsyncVault:
         config: VaultConfig | None = None,
         plugins_dir: str | Path | None = None,
         tenant_id: str | None = None,
+        role: str | None = None,
     ) -> None:
         self.path = Path(path)
         self.path.mkdir(parents=True, exist_ok=True)
         self.config = config or VaultConfig()
-        self._locked_tenant_id = tenant_id  # If set, all operations are scoped to this tenant
+        self._locked_tenant_id = tenant_id
+        self._role = role  # RBAC: None = no enforcement, "reader"/"writer"/"admin"
 
         # Storage backend
         if storage is not None:
@@ -210,6 +212,11 @@ class AsyncVault:
             await self._storage.initialize()
             self._initialized = True
 
+    def _check_permission(self, operation: str) -> None:
+        """Check RBAC permission for an operation."""
+        from qp_vault.rbac import check_permission
+        check_permission(self._role, operation)
+
     # --- Resource Operations ---
 
     async def add(
@@ -247,6 +254,7 @@ class AsyncVault:
             The created Resource.
         """
         await self._ensure_initialized()
+        self._check_permission("add")
 
         # Validate enum values early (before they reach storage layer)
         try:
@@ -407,6 +415,7 @@ class AsyncVault:
     ) -> Resource:
         """Update resource metadata."""
         await self._ensure_initialized()
+        self._check_permission("update")
         return await self._resource_manager.update(
             resource_id,
             name=name,
@@ -419,6 +428,7 @@ class AsyncVault:
     async def delete(self, resource_id: str, *, hard: bool = False) -> None:
         """Delete a resource (soft by default)."""
         await self._ensure_initialized()
+        self._check_permission("delete")
         await self._resource_manager.delete(resource_id, hard=hard)
 
     async def get_content(self, resource_id: str) -> str:
@@ -433,6 +443,7 @@ class AsyncVault:
             The full text content, with chunks joined by newlines.
         """
         await self._ensure_initialized()
+        self._check_permission("get_content")
         chunks = await self._storage.get_chunks_for_resource(resource_id)
         if not chunks:
             raise VaultError(f"No content found for resource {resource_id}")
@@ -460,6 +471,7 @@ class AsyncVault:
             Tuple of (old_resource, new_resource).
         """
         await self._ensure_initialized()
+        self._check_permission("replace")
         old_resource = await self.get(resource_id)
 
         # Create new version with same metadata
@@ -497,6 +509,7 @@ class AsyncVault:
             List of created Resources.
         """
         await self._ensure_initialized()
+        self._check_permission("add_batch")
         results = []
         for source in sources:
             r = await self.add(source, trust=trust, tenant_id=tenant_id, **kwargs)
@@ -510,6 +523,7 @@ class AsyncVault:
             List of provenance records in chronological order.
         """
         await self._ensure_initialized()
+        self._check_permission("get_provenance")
         return await self._storage.get_provenance(resource_id)
 
     async def set_adversarial_status(self, resource_id: str, status: str) -> Resource:
@@ -523,6 +537,7 @@ class AsyncVault:
             Updated resource.
         """
         await self._ensure_initialized()
+        self._check_permission("set_adversarial_status")
         from qp_vault.protocols import ResourceUpdate
         return await self._storage.update_resource(
             resource_id, ResourceUpdate(adversarial_status=status)
@@ -548,6 +563,7 @@ class AsyncVault:
             ARCHIVED -> (terminal, no transitions)
         """
         await self._ensure_initialized()
+        self._check_permission("transition")
         return await self._lifecycle.transition(resource_id, target, reason=reason)
 
     async def supersede(
@@ -555,6 +571,7 @@ class AsyncVault:
     ) -> tuple[Resource, Resource]:
         """Mark old resource as superseded by new resource."""
         await self._ensure_initialized()
+        self._check_permission("supersede")
         return await self._lifecycle.supersede(old_id, new_id)
 
     async def expiring(self, *, days: int = 90) -> list[Resource]:
@@ -600,6 +617,7 @@ class AsyncVault:
             List of SearchResult sorted by trust-weighted relevance.
         """
         await self._ensure_initialized()
+        self._check_permission("search")
 
         # Generate query embedding if embedder available
         query_embedding = None
@@ -704,6 +722,7 @@ class AsyncVault:
             VerificationResult for single resource, VaultVerificationResult for all.
         """
         await self._ensure_initialized()
+        self._check_permission("verify")
 
         if resource_id:
             return await self._verify_resource(resource_id)
@@ -826,6 +845,7 @@ class AsyncVault:
     ) -> dict[str, Any]:
         """Create a new collection."""
         await self._ensure_initialized()
+        self._check_permission("create_collection")
         import uuid
         from datetime import UTC, datetime
         collection_id = str(uuid.uuid4())
@@ -858,6 +878,7 @@ class AsyncVault:
             HealthScore with component scores.
         """
         await self._ensure_initialized()
+        self._check_permission("health")
         from qp_vault.integrity.detector import compute_health_score
 
         if resource_id:
@@ -879,6 +900,7 @@ class AsyncVault:
         """
         import json as _json
         await self._ensure_initialized()
+        self._check_permission("export_vault")
         resources = await self._list_all_bounded()
         data = {
             "version": "0.10.0",
@@ -901,6 +923,7 @@ class AsyncVault:
         """
         import json as _json
         await self._ensure_initialized()
+        self._check_permission("import_vault")
         data = _json.loads(Path(path).read_text())
         imported = []
         for r_data in data.get("resources", []):
@@ -932,6 +955,7 @@ class AsyncVault:
     async def status(self) -> dict[str, Any]:
         """Get vault status summary."""
         await self._ensure_initialized()
+        self._check_permission("status")
         all_resources = await self._list_all_bounded()
 
         by_status: dict[str, int] = {}

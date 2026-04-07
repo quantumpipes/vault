@@ -66,6 +66,8 @@ class VaultConfig(BaseModel):
     # Limits
     max_file_size_mb: int = 500
     max_resources_per_tenant: int | None = None  # None = unlimited
+    query_timeout_ms: int = 30000  # 30 seconds default
+    health_cache_ttl_seconds: int = 30  # Cache health/status responses
 
     # Plugins
     plugins_dir: str | None = None
