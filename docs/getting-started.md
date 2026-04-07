@@ -27,6 +27,19 @@ pip install qp-vault[cli]            # vault command-line tool (15 commands)
 pip install qp-vault[all]            # Everything
 ```
 
+Combine extras with commas to install exactly what you need:
+
+```bash
+# Production API server with PostgreSQL and encryption
+pip install qp-vault[postgres,encryption,pq,capsule,fastapi]
+
+# Air-gapped deployment with local embeddings and CLI
+pip install qp-vault[local,encryption,cli]
+
+# Development with document processing and integrity checks
+pip install qp-vault[docling,integrity,cli]
+```
+
 ## Create a Vault
 
 ```python
