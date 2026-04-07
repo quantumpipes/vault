@@ -65,10 +65,9 @@ def run_ml_kem_768_kat() -> bool:
     """
     try:
         from qp_vault.encryption.ml_kem import MLKEMKeyManager
+        km = MLKEMKeyManager()
     except ImportError:
-        return True  # PQ crypto not installed, skip (not a failure)
-
-    km = MLKEMKeyManager()
+        return True  # PQ crypto (liboqs) not installed, skip (not a failure)
 
     # Test 1: Roundtrip
     public_key, secret_key = km.generate_keypair()
