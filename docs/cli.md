@@ -6,6 +6,10 @@ The `vault` CLI provides 15 commands for managing governed knowledge stores.
 pip install qp-vault[cli]
 ```
 
+Error messages display structured vault error codes (e.g., `[VAULT_300] Invalid lifecycle transition`) without exposing internal paths, SQL, or stack traces.
+
+<!-- VERIFIED: cli/main.py:28-35 — _safe_error_message -->
+
 ## Commands
 
 ### vault init

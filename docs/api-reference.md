@@ -1,6 +1,6 @@
 # API Reference
 
-Complete Python SDK for qp-vault v0.13.0.
+Complete Python SDK for qp-vault v0.14.0.
 
 ## Constructor
 
@@ -20,7 +20,11 @@ Vault(
 )
 ```
 
-<!-- VERIFIED: vault.py:132-145 -->
+When `tenant_id` is set, the vault enforces tenant isolation: operations auto-inject the locked tenant, and operations with a mismatched `tenant_id` raise `VaultError`.
+
+When `role` is set, all operations are checked against the RBAC permission matrix. Operations exceeding the role's permissions raise `VaultError` with code `VAULT_700`.
+
+<!-- VERIFIED: vault.py:132-145, 257-277 — constructor + _resolve_tenant -->
 
 ### Factory Methods
 

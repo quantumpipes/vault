@@ -1,6 +1,6 @@
 # Security Model
 
-qp-vault's security architecture for v0.13.0.
+qp-vault's security architecture for v0.14.0.
 
 ## Cryptographic Inventory
 
@@ -44,7 +44,8 @@ Quarantined resources get `ResourceStatus.QUARANTINED` and are excluded from sea
 | Input | Validation |
 |-------|-----------|
 | Trust tier | Must be valid enum value |
-| Resource name | Path traversal stripped, null bytes removed, 255 char limit |
+| Resource name | Unicode NFC normalized, path traversal stripped, null bytes removed, 255 char limit |
+| Source path | Resolved and rejected if `..` detected (path traversal protection) |
 | Tags | Max 50 tags, 100 chars each, control chars stripped |
 | Metadata keys | Alphanumeric + dash/underscore/dot, max 100 keys |
 | Metadata values | Max 10,000 bytes per value |
@@ -60,7 +61,9 @@ All queries use parameterized placeholders (`?` for SQLite, `$N` for PostgreSQL)
 
 ## Plugin Security
 
-Plugins loaded from `plugins_dir` are verified against a `manifest.json` containing SHA3-256 hashes before execution. Hash mismatches are logged and the plugin is skipped.
+Plugins loaded from `plugins_dir` require a `manifest.json` (SHA3-256 hashes) by default. Without a manifest, the entire directory is skipped. Files not listed in the manifest are rejected. Hash mismatches are logged and the plugin is skipped.
+
+<!-- VERIFIED: plugins/registry.py:131-176 — manifest required, unlisted files rejected -->
 
 ## Key Management
 
@@ -98,14 +101,21 @@ Every chunk: SHA3-256 CID. Every resource: Merkle root over sorted chunk CIDs. E
 
 | Vector | Protection |
 |--------|------------|
-| Large upload | max_file_size_mb (default 500MB) |
+| Large upload | max_file_size_mb (default 500MB), content max_length 500MB |
 | Unbounded queries | Paginated with 50K hard cap |
 | Batch flooding | Max 100 items per request |
 | Search params | top_k max 1000, query max 10K chars |
+| List params | limit 1-1000, offset 0-1M (FastAPI validated) |
 | Chain cycles | Max 1000 links |
 | FTS5 complexity | Special operators stripped |
-| Tenant flooding | Per-tenant resource quotas |
-| Query timeout | Configurable query_timeout_ms (default 30s) |
+| Tenant flooding | Per-tenant quotas (atomic count, no TOCTOU) |
+| Query timeout | Configurable query_timeout_ms (default 30s), task cancelled on timeout |
+| Health/status abuse | TTL-cached responses (default 30s) |
+| Membrane ReDoS | Content truncated to 500KB for regex scanning |
+
+<!-- VERIFIED: vault.py:247-265 — _with_timeout with task cancellation -->
+<!-- VERIFIED: membrane/innate_scan.py:69 — 500KB scan limit -->
+<!-- VERIFIED: integrations/fastapi_routes.py:140-141 — limit/offset validation -->
 
 ## Threat Model
 
@@ -118,7 +128,9 @@ Every chunk: SHA3-256 CID. Every resource: Merkle root over sorted chunk CIDs. E
 | Data exfiltration | DataClassification blocks CONFIDENTIAL/RESTRICTED |
 | Prompt injection | Membrane innate scan + quarantine |
 | SQL injection | Parameterized queries only |
-| Path traversal | Name sanitization strips path components |
+| Path traversal | Name sanitization + source path resolve rejects `..` |
+| Unicode homographs | NFC normalization prevents visually identical collisions |
+| CLI information leakage | Structured error codes, no raw exception output |
 | FTS5 injection | Query sanitizer strips operators |
 | Audit manipulation | Capsule hash-chains are append-only |
 | Key compromise | ML-KEM-768 (quantum-resistant) + zeroization |

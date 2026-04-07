@@ -38,7 +38,13 @@ Default patterns detect:
 - XSS: `<script>`, `javascript:`
 - Code injection: `eval()`, `exec()`, `__import__()`, `subprocess.`, `os.system()`
 
-<!-- VERIFIED: membrane/innate_scan.py:20-33 — DEFAULT_BLOCKLIST -->
+<!-- VERIFIED: membrane/innate_scan.py:20-35 — DEFAULT_BLOCKLIST -->
+
+## Security Limits
+
+Content is truncated to **500KB** before regex scanning to prevent catastrophic backtracking (ReDoS). Full content is still stored and indexed; only the scan input is bounded. Patterns are pre-compiled for validation before use.
+
+<!-- VERIFIED: membrane/innate_scan.py:69 — 500KB scan_content limit -->
 
 ## Custom Blocklist
 

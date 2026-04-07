@@ -82,14 +82,31 @@ app.include_router(router, prefix="/v1/vault")
 
 ## Input Validation
 
-| Field | Constraint |
-|-------|-----------|
-| `query` | Max 10,000 characters |
-| `top_k` | 1-1,000 |
-| `threshold` | 0.0-1.0 |
-| Batch sources | Max 100 items |
+All endpoints validate inputs at the API boundary before reaching vault logic.
 
-<!-- VERIFIED: integrations/fastapi_routes.py:50-53 — SearchRequest validators -->
+| Field | Constraint | Endpoint |
+|-------|-----------|----------|
+| `content` | Max 500MB | `POST /resources` |
+| `query` | Max 10,000 characters | `POST /search` |
+| `top_k` | 1-1,000 | `POST /search` |
+| `threshold` | 0.0-1.0 | `POST /search` |
+| `limit` | 1-1,000 | `GET /resources` |
+| `offset` | 0-1,000,000 | `GET /resources` |
+| Batch sources | Max 100 items | `POST /batch` |
+| `as_of` | Valid ISO date | `POST /search` |
+
+<!-- VERIFIED: integrations/fastapi_routes.py:40 — content max_length -->
+<!-- VERIFIED: integrations/fastapi_routes.py:51-53 — SearchRequest validators -->
+<!-- VERIFIED: integrations/fastapi_routes.py:140-141 — limit/offset Query validators -->
+
+## Response Caching
+
+`GET /health` and `GET /status` responses are cached with a configurable TTL (default 30 seconds). The cache is invalidated on any write operation (add, update, delete).
+
+Configure via `VaultConfig(health_cache_ttl_seconds=60)`.
+
+<!-- VERIFIED: vault.py:947-955 — health cache -->
+<!-- VERIFIED: vault.py:1026-1031 — status cache -->
 
 ## Error Codes
 

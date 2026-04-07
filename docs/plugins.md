@@ -111,16 +111,37 @@ vault = Vault("./knowledge", plugins_dir="/opt/qp/plugins/")
 
 Drop `.py` files in the plugins directory. Any class decorated with `@embedder`, `@parser`, or `@policy` is auto-discovered.
 
+**A `manifest.json` is required.** This file maps each plugin filename to its SHA3-256 hash. Without it, the entire directory is skipped for security.
+
 ```
 /opt/qp/plugins/
+    manifest.json       # Required: SHA3-256 hashes for each .py file
     my_embedder.py      # Contains @embedder("local-model") class
     dicom_parser.py     # Contains @parser("dicom") class
     itar_policy.py      # Contains @policy("itar") class
 ```
 
-<!-- VERIFIED: plugins/registry.py:126-161 — discover_plugins_dir() loads .py files -->
+Generate the manifest:
 
-Files starting with `_` are skipped. Broken files log a warning and are skipped.
+```python
+import hashlib, json, pathlib
+
+plugins_dir = pathlib.Path("/opt/qp/plugins")
+manifest = {}
+for f in sorted(plugins_dir.glob("*.py")):
+    if not f.name.startswith("_"):
+        manifest[f.name] = hashlib.sha3_256(f.read_bytes()).hexdigest()
+(plugins_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+```
+
+Security rules:
+- Files not listed in the manifest are rejected
+- Hash mismatches are logged and the file is skipped
+- Files starting with `_` are always skipped
+- Broken files log a warning and are skipped
+- To disable hash verification: `discover_plugins_dir(path, verify_hashes=False)` (not recommended)
+
+<!-- VERIFIED: plugins/registry.py:131-189 — manifest required, hash verification -->
 
 ## Discovery Order
 

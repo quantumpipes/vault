@@ -269,14 +269,34 @@ config = VaultConfig(
 vault = Vault("./knowledge", config=config)
 ```
 
-Additional config fields added in v0.6-v0.13:
+Additional config fields added in v0.6-v0.14:
 
 ```python
 config = VaultConfig(
-    max_resources_per_tenant=1000,    # Per-tenant quota (v0.11)
-    query_timeout_ms=30000,           # 30s query timeout (v0.13)
-    health_cache_ttl_seconds=30,      # Cache health responses (v0.13)
+    max_resources_per_tenant=1000,    # Per-tenant quota, atomic count enforcement (v0.11)
+    query_timeout_ms=30000,           # Query timeout with task cancellation (v0.14)
+    health_cache_ttl_seconds=30,      # TTL cache for health/status responses (v0.14)
 )
 ```
 
 <!-- VERIFIED: config.py:18-86 — VaultConfig fields and defaults -->
+
+## Security Architecture (v0.14.0)
+
+```
++-------------------------------------------------------------------+
+|  TENANT ISOLATION  _resolve_tenant: lock, auto-inject, reject     |
++-------------------------------------------------------------------+
+|  RBAC              _check_permission: 30+ operations gated        |
++-------------------------------------------------------------------+
+|  INPUT VALIDATION  Unicode NFC, path traversal, null bytes, limits|
++-------------------------------------------------------------------+
+|  MEMBRANE          Innate scan (500KB regex) + Release gate       |
++-------------------------------------------------------------------+
+|  TIMEOUT           _with_timeout: asyncio cancel + cleanup        |
++-------------------------------------------------------------------+
+|  AUDIT             VaultEvent for every mutation + Capsule chain   |
++-------------------------------------------------------------------+
+```
+
+<!-- VERIFIED: vault.py:215-277 — permission, tenant, timeout methods -->
