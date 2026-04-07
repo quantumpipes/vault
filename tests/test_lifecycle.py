@@ -75,8 +75,8 @@ class TestLifecycleTransitions:
 
 class TestSupersession:
     def test_supersede(self, vault):
-        v1 = vault.add("Policy v1", name="policy-v1.md", trust="canonical")
-        v2 = vault.add("Policy v2", name="policy-v2.md", trust="canonical")
+        v1 = vault.add("Policy v1", name="policy-v1.md", trust_tier="canonical")
+        v2 = vault.add("Policy v2", name="policy-v2.md", trust_tier="canonical")
 
         old, new = vault.supersede(v1.id, v2.id)
 

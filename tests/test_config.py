@@ -105,11 +105,11 @@ text_weight = 0.2
 class TestLayerDefaults:
     def test_defaults(self):
         ld = LayerDefaults()
-        assert ld.trust == "working"
+        assert ld.trust_tier == "working"
         assert ld.half_life_days == 180
         assert ld.audit_reads is False
 
     def test_custom(self):
-        ld = LayerDefaults(trust="canonical", retention="permanent", audit_reads=True)
-        assert ld.trust == "canonical"
+        ld = LayerDefaults(trust_tier="canonical", retention="permanent", audit_reads=True)
+        assert ld.trust_tier == "canonical"
         assert ld.retention == "permanent"

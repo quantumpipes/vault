@@ -32,12 +32,12 @@ def populated_client(client):
     client.post("/v1/vault/resources", json={
         "content": "Incident response SOP for critical outages.",
         "name": "sop-incident.md",
-        "trust": "canonical",
+        "trust_tier": "canonical",
     })
     client.post("/v1/vault/resources", json={
         "content": "Draft onboarding process improvements.",
         "name": "draft-onboard.md",
-        "trust": "working",
+        "trust_tier": "working",
     })
     return client
 
@@ -82,7 +82,7 @@ class TestResourceEndpoints:
         resource_id = add_resp.json()["data"]["id"]
 
         resp = client.put(f"/v1/vault/resources/{resource_id}", json={
-            "trust": "canonical",
+            "trust_tier": "canonical",
             "tags": ["important"],
         })
         assert resp.status_code == 200

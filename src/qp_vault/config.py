@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 class LayerDefaults(BaseModel):
     """Default settings for a memory layer."""
 
-    trust: str = "working"
+    trust_tier: str = "working"
     half_life_days: int = 180
     search_boost: float = 1.0
     retention: str = "standard"
@@ -78,13 +78,13 @@ class VaultConfig(BaseModel):
     layer_defaults: dict[str, LayerDefaults] = Field(
         default_factory=lambda: {
             "operational": LayerDefaults(
-                trust="working", half_life_days=90, search_boost=1.5
+                trust_tier="working", half_life_days=90, search_boost=1.5
             ),
             "strategic": LayerDefaults(
-                trust="canonical", half_life_days=365, search_boost=1.0
+                trust_tier="canonical", half_life_days=365, search_boost=1.0
             ),
             "compliance": LayerDefaults(
-                trust="canonical",
+                trust_tier="canonical",
                 retention="permanent",
                 audit_reads=True,
             ),

@@ -17,14 +17,14 @@ def backend(tmp_path):
     return SQLiteBackend(tmp_path / "test.db")
 
 
-def _make_resource(id: str = "r-1", name: str = "test.md", trust: str = "working") -> Resource:
+def _make_resource(id: str = "r-1", name: str = "test.md", trust_tier: str = "working") -> Resource:
     now = datetime.now(tz=UTC)
     return Resource(
         id=id,
         name=name,
         content_hash="abc123",
         cid=f"vault://sha3-256/abc123_{id}",
-        trust_tier=TrustTier(trust),
+        trust_tier=TrustTier(trust_tier),
         status=ResourceStatus.PENDING,
         created_at=now,
         updated_at=now,
@@ -96,8 +96,8 @@ class TestSQLiteResourceCRUD:
     @pytest.mark.asyncio
     async def test_list_with_trust_filter(self, backend):
         await backend.initialize()
-        await backend.store_resource(_make_resource("r-1", trust="canonical"))
-        await backend.store_resource(_make_resource("r-2", trust="working"))
+        await backend.store_resource(_make_resource("r-1", trust_tier="canonical"))
+        await backend.store_resource(_make_resource("r-2", trust_tier="working"))
         resources = await backend.list_resources(ResourceFilter(trust_tier="canonical"))
         assert len(resources) == 1
         assert resources[0].trust_tier == TrustTier.CANONICAL

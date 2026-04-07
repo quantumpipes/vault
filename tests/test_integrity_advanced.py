@@ -8,11 +8,11 @@ from qp_vault.integrity.detector import detect_contradictions, find_near_duplica
 from qp_vault.models import Chunk, Resource
 
 
-def _resource(name: str, trust: str = "working", lifecycle: str = "active") -> Resource:
+def _resource(name: str, trust_tier: str = "working", lifecycle: str = "active") -> Resource:
     now = datetime.now(tz=UTC)
     return Resource(
         id=f"r-{name}", name=name, content_hash=f"h-{name}", cid=f"v://h-{name}",
-        trust_tier=trust, lifecycle=lifecycle, created_at=now, updated_at=now,
+        trust_tier=trust_tier, lifecycle=lifecycle, created_at=now, updated_at=now,
     )
 
 
@@ -61,8 +61,8 @@ class TestNearDuplicates:
 
 class TestContradictions:
     def test_trust_conflict_detected(self):
-        r1 = _resource("a.md", trust="canonical")
-        r2 = _resource("b.md", trust="working")
+        r1 = _resource("a.md", trust_tier="canonical")
+        r2 = _resource("b.md", trust_tier="working")
         chunks = {
             r1.id: _chunks(r1.id, [1.0, 0.0]),
             r2.id: _chunks(r2.id, [0.99, 0.1]),  # Similar content, different trust
@@ -83,8 +83,8 @@ class TestContradictions:
         assert len(lc_conflicts) >= 1
 
     def test_no_contradictions_when_aligned(self):
-        r1 = _resource("a.md", trust="canonical")
-        r2 = _resource("b.md", trust="canonical")
+        r1 = _resource("a.md", trust_tier="canonical")
+        r2 = _resource("b.md", trust_tier="canonical")
         chunks = {
             r1.id: _chunks(r1.id, [1.0, 0.0]),
             r2.id: _chunks(r2.id, [0.99, 0.1]),

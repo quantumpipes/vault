@@ -20,7 +20,7 @@ sop = vault.add(
     "When an incident is detected, the on-call engineer must "
     "acknowledge within 15 minutes and classify severity.",
     name="sop-incident-response.md",
-    trust="canonical",        # 1.5x search boost
+    trust_tier="canonical",        # 1.5x search boost
     layer="operational",      # Operational memory
 )
 print(f"Added: {sop.name} [{sop.trust_tier.value}] ({sop.chunk_count} chunks)")
@@ -30,7 +30,7 @@ draft = vault.add(
     "Draft proposal for new onboarding process. "
     "Current onboarding takes 3 weeks. We propose reducing to 2 weeks.",
     name="draft-onboarding.md",
-    trust="working",
+    trust_tier="working",
     lifecycle="draft",
 )
 print(f"Added: {draft.name} [{draft.trust_tier.value}]")

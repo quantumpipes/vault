@@ -19,7 +19,7 @@ from qp_vault.models import Resource
 
 def _make_resource(
     name: str = "test.md",
-    trust: str = "working",
+    trust_tier: str = "working",
     age_days: int = 0,
     content_hash: str | None = None,
     collection_id: str | None = None,
@@ -32,7 +32,7 @@ def _make_resource(
         name=name,
         content_hash=content_hash or f"hash-{name}",
         cid=f"vault://sha3-256/hash-{name}",
-        trust_tier=trust,
+        trust_tier=trust_tier,
         collection_id=collection_id,
         tags=tags or [],
         layer=layer,
@@ -135,8 +135,8 @@ class TestStaleness:
         assert compute_staleness_score(r_volatile) > compute_staleness_score(r_normal)
 
     def test_canonical_decays_slower(self):
-        r_canonical = _make_resource(trust="canonical", age_days=180)
-        r_ephemeral = _make_resource(trust="ephemeral", age_days=180)
+        r_canonical = _make_resource(trust_tier="canonical", age_days=180)
+        r_ephemeral = _make_resource(trust_tier="ephemeral", age_days=180)
         assert compute_staleness_score(r_canonical) < compute_staleness_score(r_ephemeral)
 
 
@@ -195,8 +195,8 @@ class TestHealthScore:
 
     def test_fresh_unique_vault_high_health(self):
         resources = [
-            _make_resource("a.md", age_days=0, collection_id="c-1", tags=["tagged"], trust="canonical"),
-            _make_resource("b.md", age_days=0, collection_id="c-1", tags=["tagged"], trust="working"),
+            _make_resource("a.md", age_days=0, collection_id="c-1", tags=["tagged"], trust_tier="canonical"),
+            _make_resource("b.md", age_days=0, collection_id="c-1", tags=["tagged"], trust_tier="working"),
         ]
         score = compute_health_score(resources)
         assert score.overall > 70
@@ -222,8 +222,8 @@ class TestHealthScore:
 
 class TestVaultHealth:
     def test_vault_health(self, vault):
-        vault.add("Resource 1", name="r1.md", trust="canonical")
-        vault.add("Resource 2", name="r2.md", trust="working")
+        vault.add("Resource 1", name="r1.md", trust_tier="canonical")
+        vault.add("Resource 2", name="r2.md", trust_tier="working")
         score = vault.health()
         assert isinstance(score, HealthScore)
         assert score.resource_count == 2

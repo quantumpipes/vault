@@ -27,7 +27,7 @@ class TestGetContent:
 
 class TestReplace:
     def test_replace_creates_new_version(self, vault):
-        r1 = vault.add("Version 1 content", name="doc.md", trust="canonical")
+        r1 = vault.add("Version 1 content", name="doc.md", trust_tier="canonical")
         old, new = vault.replace(r1.id, "Version 2 content")
         assert old.id == r1.id
         assert new.id != r1.id
@@ -65,8 +65,8 @@ class TestSearchFacets:
     @pytest.mark.asyncio
     async def test_search_with_facets(self, tmp_path):
         vault = AsyncVault(tmp_path / "facet-vault")
-        await vault.add("Canonical doc about security", trust="canonical", name="sec.md")
-        await vault.add("Working draft about security", trust="working", name="draft.md")
+        await vault.add("Canonical doc about security", trust_tier="canonical", name="sec.md")
+        await vault.add("Working draft about security", trust_tier="working", name="draft.md")
         result = await vault.search_with_facets("security")
         assert "facets" in result
         assert "trust_tier" in result["facets"]
@@ -131,7 +131,7 @@ class TestMembranePipeline:
 
 class TestPerResourceHealth:
     def test_health_single_resource(self, vault):
-        r = vault.add("Healthy doc", name="healthy.md", trust="canonical")
+        r = vault.add("Healthy doc", name="healthy.md", trust_tier="canonical")
         score = vault.health(r.id)
         assert score.resource_count == 1
 

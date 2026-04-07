@@ -301,7 +301,7 @@ class AsyncVault:
         source: str | Path | bytes,
         *,
         name: str | None = None,
-        trust: TrustTier | str = TrustTier.WORKING,
+        trust_tier: TrustTier | str = TrustTier.WORKING,
         classification: DataClassification | str = DataClassification.INTERNAL,
         layer: MemoryLayer | str | None = None,
         collection: str | None = None,
@@ -317,7 +317,7 @@ class AsyncVault:
         Args:
             source: File path, text string, or bytes content.
             name: Display name (auto-detected from path if not provided).
-            trust: Trust tier (canonical, working, ephemeral, archived).
+            trust_tier: Trust tier (canonical, working, ephemeral, archived).
             classification: Data classification level.
             layer: Memory layer (operational, strategic, compliance).
             collection: Collection ID to add resource to.
@@ -336,8 +336,8 @@ class AsyncVault:
 
         # Validate enum values early (before they reach storage layer)
         try:
-            if isinstance(trust, str):
-                trust = TrustTier(trust)
+            if isinstance(trust_tier, str):
+                trust_tier = TrustTier(trust_tier)
             if isinstance(classification, str):
                 classification = DataClassification(classification)
             if isinstance(lifecycle, str):
@@ -439,7 +439,7 @@ class AsyncVault:
         resource = await self._resource_manager.add(
             text,
             name=name,
-            trust=trust,
+            trust_tier=trust_tier,
             classification=classification,
             layer=layer,
             collection=collection,
@@ -474,7 +474,7 @@ class AsyncVault:
         self,
         *,
         tenant_id: str | None = None,
-        trust: TrustTier | str | None = None,
+        trust_tier: TrustTier | str | None = None,
         classification: DataClassification | str | None = None,
         layer: MemoryLayer | str | None = None,
         collection: str | None = None,
@@ -489,7 +489,7 @@ class AsyncVault:
         tenant_id = self._resolve_tenant(tenant_id)
         return await self._resource_manager.list(
             tenant_id=tenant_id,
-            trust=trust,
+            trust_tier=trust_tier,
             classification=classification,
             layer=layer,
             collection=collection,
@@ -505,7 +505,7 @@ class AsyncVault:
         resource_id: str,
         *,
         name: str | None = None,
-        trust: TrustTier | str | None = None,
+        trust_tier: TrustTier | str | None = None,
         classification: DataClassification | str | None = None,
         tags: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
@@ -516,7 +516,7 @@ class AsyncVault:
         result = await self._resource_manager.update(
             resource_id,
             name=name,
-            trust=trust,
+            trust_tier=trust_tier,
             classification=classification,
             tags=tags,
             metadata=metadata,
@@ -586,7 +586,7 @@ class AsyncVault:
         new_resource = await self.add(
             new_content,
             name=old_resource.name,
-            trust=old_resource.trust_tier,
+            trust_tier=old_resource.trust_tier,
             classification=old_resource.data_classification,
             layer=old_resource.layer,
             collection=old_resource.collection_id,
@@ -601,7 +601,7 @@ class AsyncVault:
         self,
         sources: list[str | Path | bytes],
         *,
-        trust: TrustTier | str = TrustTier.WORKING,
+        trust_tier: TrustTier | str = TrustTier.WORKING,
         tenant_id: str | None = None,
         **kwargs: Any,
     ) -> list[Resource]:
@@ -609,7 +609,7 @@ class AsyncVault:
 
         Args:
             sources: List of file paths, text strings, or bytes.
-            trust: Default trust tier for all resources.
+            trust_tier: Default trust tier for all resources.
             tenant_id: Optional tenant scope.
             **kwargs: Additional args passed to each add() call.
 
@@ -623,7 +623,7 @@ class AsyncVault:
         results: list[Resource] = []
         src: str | Path | bytes
         for src in sources:
-            r = await self.add(src, trust=trust, tenant_id=tenant_id, **kwargs)
+            r = await self.add(src, trust_tier=trust_tier, tenant_id=tenant_id, **kwargs)
             results.append(r)
         return results
 
@@ -705,7 +705,7 @@ class AsyncVault:
         top_k: int = 10,
         offset: int = 0,
         threshold: float = 0.0,
-        trust_min: TrustTier | str | None = None,
+        min_trust_tier: TrustTier | str | None = None,
         layer: MemoryLayer | str | None = None,
         collection: str | None = None,
         as_of: date | None = None,
@@ -719,7 +719,7 @@ class AsyncVault:
             query: Search query text.
             top_k: Maximum number of results.
             threshold: Minimum relevance score.
-            trust_min: Minimum trust tier for results.
+            min_trust_tier: Minimum trust tier for results.
             layer: Filter to specific memory layer.
             collection: Filter to specific collection.
             as_of: Point-in-time search (returns resources active at that date).
@@ -748,10 +748,10 @@ class AsyncVault:
             text_weight=self.config.text_weight,
             filters=ResourceFilter(
                 tenant_id=tenant_id,
-                trust_tier=trust_min.value if trust_min is not None and hasattr(trust_min, "value") else trust_min,
+                trust_tier=min_trust_tier.value if min_trust_tier is not None and hasattr(min_trust_tier, "value") else min_trust_tier,
                 layer=layer.value if layer is not None and hasattr(layer, "value") else layer,
                 collection_id=collection,
-            ) if any([tenant_id, trust_min, layer, collection]) else None,
+            ) if any([tenant_id, min_trust_tier, layer, collection]) else None,
             as_of=str(as_of) if as_of else None,
         )
 
@@ -1044,7 +1044,7 @@ class AsyncVault:
             resource = await self.add(
                 content,
                 name=r_data.get("name", "imported"),
-                trust=r_data.get("trust_tier", "working"),
+                trust_tier=r_data.get("trust_tier", "working"),
                 tags=r_data.get("tags", []),
                 metadata=r_data.get("metadata", {}),
             )

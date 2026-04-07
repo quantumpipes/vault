@@ -21,7 +21,7 @@ class TestEnumValidation:
 
     def test_invalid_trust_tier(self, vault):
         with pytest.raises(VaultError, match="Invalid parameter"):
-            vault.add("content", trust="BOGUS")
+            vault.add("content", trust_tier="BOGUS")
 
     def test_invalid_classification(self, vault):
         with pytest.raises(VaultError, match="Invalid parameter"):
@@ -36,19 +36,19 @@ class TestEnumValidation:
             vault.add("content", layer="marketing")
 
     def test_valid_string_enums_accepted(self, vault):
-        r = vault.add("content", trust="canonical", lifecycle="draft",
+        r = vault.add("content", trust_tier="canonical", lifecycle="draft",
                        classification="confidential", layer="compliance")
         assert r.trust_tier == TrustTier.CANONICAL
         assert r.lifecycle == Lifecycle.DRAFT
 
     def test_enum_objects_accepted(self, vault):
-        r = vault.add("content", trust=TrustTier.EPHEMERAL)
+        r = vault.add("content", trust_tier=TrustTier.EPHEMERAL)
         assert r.trust_tier == TrustTier.EPHEMERAL
 
     def test_case_sensitive(self, vault):
         """Enum values are case-sensitive (lowercase only)."""
         with pytest.raises(VaultError, match="Invalid parameter"):
-            vault.add("content", trust="CANONICAL")
+            vault.add("content", trust_tier="CANONICAL")
 
 
 class TestNameSanitization:

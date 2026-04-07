@@ -39,7 +39,7 @@ if HAS_FASTAPI:
     class AddResourceRequest(BaseModel):
         content: str = Field(..., max_length=500_000_000)  # 500MB max
         name: str = "untitled.md"
-        trust: str = "working"
+        trust_tier: str = "working"
         classification: str = "internal"
         layer: str | None = None
         collection: str | None = None
@@ -51,7 +51,7 @@ if HAS_FASTAPI:
         query: str = Field(..., max_length=10000)
         top_k: int = Field(10, ge=1, le=1000)
         threshold: float = Field(0.0, ge=0.0, le=1.0)
-        trust_min: str | None = None
+        min_trust_tier: str | None = None
         layer: str | None = None
         collection: str | None = None
         as_of: str | None = None
@@ -68,7 +68,7 @@ if HAS_FASTAPI:
 
     class UpdateResourceRequest(BaseModel):
         name: str | None = None
-        trust: str | None = None
+        trust_tier: str | None = None
         classification: str | None = None
         tags: list[str] | None = None
         metadata: dict[str, Any] | None = None
@@ -121,7 +121,7 @@ def create_vault_router(vault: Any) -> APIRouter:
         resource = await vault.add(
             req.content,
             name=req.name,
-            trust=req.trust,
+            trust_tier=req.trust_tier,
             classification=req.classification,
             layer=req.layer,
             collection=req.collection,
@@ -133,7 +133,7 @@ def create_vault_router(vault: Any) -> APIRouter:
 
     @router.get("/resources")
     async def list_resources(
-        trust: str | None = None,
+        trust_tier: str | None = None,
         layer: str | None = None,
         lifecycle: str | None = None,
         status: str | None = None,
@@ -141,7 +141,7 @@ def create_vault_router(vault: Any) -> APIRouter:
         offset: int = Query(0, ge=0, le=1_000_000),
     ) -> dict[str, Any]:
         resources = await vault.list(
-            trust=trust,
+            trust_tier=trust_tier,
             layer=layer,
             lifecycle=lifecycle,
             status=status,
@@ -164,7 +164,7 @@ def create_vault_router(vault: Any) -> APIRouter:
             resource = await vault.update(
                 resource_id,
                 name=req.name,
-                trust=req.trust,
+                trust_tier=req.trust_tier,
                 classification=req.classification,
                 tags=req.tags,
                 metadata=req.metadata,
@@ -222,7 +222,7 @@ def create_vault_router(vault: Any) -> APIRouter:
             req.query,
             top_k=req.top_k,
             threshold=req.threshold,
-            trust_min=req.trust_min,
+            min_trust_tier=req.min_trust_tier,
             layer=req.layer,
             collection=req.collection,
             as_of=as_of,
@@ -281,7 +281,7 @@ def create_vault_router(vault: Any) -> APIRouter:
         result = await vault.search_with_facets(
             req.query,
             top_k=req.top_k,
-            trust_min=req.trust_min,
+            min_trust_tier=req.min_trust_tier,
             layer=req.layer,
             as_of=as_of_date,
         )
@@ -295,11 +295,11 @@ def create_vault_router(vault: Any) -> APIRouter:
         sources = req.get("sources", [])
         if len(sources) > 100:
             raise HTTPException(status_code=400, detail="Batch limited to 100 items")
-        trust = req.get("trust", "working")
+        trust_tier = req.get("trust_tier", "working")
         tenant_id = req.get("tenant_id")
         resources = await vault.add_batch(
             [s.get("content", "") if isinstance(s, dict) else s for s in sources],
-            trust=trust,
+            trust_tier=trust_tier,
             tenant_id=tenant_id,
         )
         return {"data": [r.model_dump() for r in resources], "meta": {"count": len(resources)}}

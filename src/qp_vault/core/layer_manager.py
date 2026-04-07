@@ -77,7 +77,7 @@ class LayerManager:
                 layer = MemoryLayer(name)
                 if layer in self._configs:
                     lc = self._configs[layer]
-                    lc.default_trust = TrustTier(defaults.trust)
+                    lc.default_trust = TrustTier(defaults.trust_tier)
                     lc.freshness_half_life_days = defaults.half_life_days
                     lc.search_boost = defaults.search_boost
                     lc.retention = defaults.retention
@@ -143,18 +143,18 @@ class LayerView:
         source: Any,
         *,
         name: str | None = None,
-        trust: TrustTier | str | None = None,
+        trust_tier: TrustTier | str | None = None,
         **kwargs: Any,
     ) -> Resource:
         """Add a resource to this layer.
 
-        If trust is not specified, uses the layer's default trust tier.
+        If trust_tier is not specified, uses the layer's default trust tier.
         """
-        effective_trust = trust or self._layer_config.default_trust
+        effective_trust = trust_tier or self._layer_config.default_trust
         return await self._vault.add(  # type: ignore[no-any-return]
             source,
             name=name,
-            trust=effective_trust,
+            trust_tier=effective_trust,
             layer=self._layer,
             **kwargs,
         )

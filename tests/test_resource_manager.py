@@ -117,7 +117,7 @@ class TestResourceManagerCRUD:
     @pytest.mark.asyncio
     async def test_update_trust(self, manager, auditor):
         r = await manager.add("Test", name="test.md")
-        updated = await manager.update(r.id, trust="canonical")
+        updated = await manager.update(r.id, trust_tier="canonical")
         assert updated.trust_tier == "canonical"
         # Should emit trust_change event
         trust_events = [e for e in auditor.events if e.event_type == EventType.TRUST_CHANGE]

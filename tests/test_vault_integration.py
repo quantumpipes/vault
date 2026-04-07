@@ -37,21 +37,21 @@ def populated_vault(vault):
         "acknowledge within 15 minutes. Severity is classified as "
         "P0 (critical), P1 (high), P2 (medium), or P3 (low).",
         name="sop-incident.md",
-        trust="canonical",
+        trust_tier="canonical",
     )
     vault.add(
         "Draft proposal for new employee onboarding process. "
         "The current onboarding takes 3 weeks. We propose reducing "
         "to 2 weeks by parallelizing equipment setup and access provisioning.",
         name="draft-onboarding.md",
-        trust="working",
+        trust_tier="working",
     )
     vault.add(
         "Meeting notes from engineering standup 2026-03-15. "
         "Discussed migration to new auth service. Blocker: legacy "
         "API clients need updated tokens.",
         name="standup-notes.md",
-        trust="ephemeral",
+        trust_tier="ephemeral",
     )
     return vault
 
@@ -67,7 +67,7 @@ class TestVaultAdd:
         assert r.cid.startswith("vault://sha3-256/")
 
     def test_add_with_trust_tier(self, vault):
-        r = vault.add("Canonical document", trust="canonical", name="canon.md")
+        r = vault.add("Canonical document", trust_tier="canonical", name="canon.md")
         assert r.trust_tier == TrustTier.CANONICAL
 
     def test_add_with_classification(self, vault):
@@ -124,7 +124,7 @@ class TestVaultList:
         assert len(resources) == 3
 
     def test_list_by_trust(self, populated_vault):
-        canonical = populated_vault.list(trust=TrustTier.CANONICAL)
+        canonical = populated_vault.list(trust_tier=TrustTier.CANONICAL)
         assert len(canonical) == 1
         assert canonical[0].trust_tier == TrustTier.CANONICAL
 
@@ -178,8 +178,8 @@ class TestVaultSearch:
 
 class TestVaultUpdate:
     def test_update_trust_tier(self, vault):
-        r = vault.add("Doc", name="doc.md", trust="working")
-        updated = vault.update(r.id, trust="canonical")
+        r = vault.add("Doc", name="doc.md", trust_tier="working")
+        updated = vault.update(r.id, trust_tier="canonical")
         assert updated.trust_tier == "canonical"
 
     def test_update_tags(self, vault):

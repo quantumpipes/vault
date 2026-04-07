@@ -94,7 +94,7 @@ class ResourceManager:
         text: str,
         *,
         name: str = "untitled",
-        trust: TrustTier | str = TrustTier.WORKING,
+        trust_tier: TrustTier | str = TrustTier.WORKING,
         classification: DataClassification | str = DataClassification.INTERNAL,
         layer: MemoryLayer | str | None = None,
         collection: str | None = None,
@@ -113,7 +113,7 @@ class ResourceManager:
         now = datetime.now(tz=UTC)
 
         # Normalize enums
-        trust_tier = TrustTier(trust) if isinstance(trust, str) else trust
+        trust_tier = TrustTier(trust_tier) if isinstance(trust_tier, str) else trust_tier
         data_class = DataClassification(classification) if isinstance(classification, str) else classification
         lc = Lifecycle(lifecycle) if isinstance(lifecycle, str) else lifecycle
         mem_layer = MemoryLayer(layer) if isinstance(layer, str) else layer
@@ -207,7 +207,7 @@ class ResourceManager:
         self,
         *,
         tenant_id: str | None = None,
-        trust: TrustTier | str | None = None,
+        trust_tier: TrustTier | str | None = None,
         classification: DataClassification | str | None = None,
         layer: MemoryLayer | str | None = None,
         collection: str | None = None,
@@ -220,7 +220,7 @@ class ResourceManager:
         """List resources with filters."""
         filters = ResourceFilter(
             tenant_id=tenant_id,
-            trust_tier=trust.value if trust is not None and hasattr(trust, "value") else trust,
+            trust_tier=trust_tier.value if trust_tier is not None and hasattr(trust_tier, "value") else trust_tier,
             data_classification=classification.value if classification is not None and hasattr(classification, "value") else classification,
             layer=layer.value if layer is not None and hasattr(layer, "value") else layer,
             collection_id=collection,
@@ -237,7 +237,7 @@ class ResourceManager:
         resource_id: str,
         *,
         name: str | None = None,
-        trust: TrustTier | str | None = None,
+        trust_tier: TrustTier | str | None = None,
         classification: DataClassification | str | None = None,
         tags: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
@@ -245,7 +245,7 @@ class ResourceManager:
         """Update resource metadata."""
         updates = ResourceUpdate(
             name=name,
-            trust_tier=trust.value if trust is not None and hasattr(trust, "value") else trust,
+            trust_tier=trust_tier.value if trust_tier is not None and hasattr(trust_tier, "value") else trust_tier,
             data_classification=classification.value if classification is not None and hasattr(classification, "value") else classification,
             tags=tags,
             metadata=metadata,
@@ -254,13 +254,13 @@ class ResourceManager:
         resource = await self._storage.update_resource(resource_id, updates)
 
         # Audit trust changes
-        if trust and self._auditor:
+        if trust_tier and self._auditor:
             event = VaultEvent(
                 event_type=EventType.TRUST_CHANGE,
                 resource_id=resource_id,
                 resource_name=resource.name,
                 resource_hash=resource.content_hash,
-                details={"new_trust_tier": trust.value if trust is not None and hasattr(trust, "value") else trust},
+                details={"new_trust_tier": trust_tier.value if trust_tier is not None and hasattr(trust_tier, "value") else trust_tier},
             )
             await self._auditor.record(event)
 

@@ -19,7 +19,7 @@ Quick start:
     from qp_vault import Vault
 
     vault = Vault("./my-knowledge")
-    vault.add("quarterly-report.pdf", trust="canonical")
+    vault.add("quarterly-report.pdf", trust_tier="canonical")
     results = vault.search("Q3 revenue projections")
     print(results[0].content, results[0].trust_tier)
 

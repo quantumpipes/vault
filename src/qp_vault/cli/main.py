@@ -98,7 +98,7 @@ def add(
     resource = vault.add(
         source,
         name=display_name,
-        trust=trust,
+        trust_tier=trust,
         layer=layer,
         tags=tag_list,
     )
@@ -300,7 +300,7 @@ def list_resources(
 ) -> None:
     """List resources in the vault."""
     vault = _get_vault(path)
-    resources = vault.list(trust=trust, layer=layer, tenant_id=tenant, limit=limit)
+    resources = vault.list(trust_tier=trust, layer=layer, tenant_id=tenant, limit=limit)
 
     if not resources:
         console.print("[yellow]No resources found.[/yellow]")
