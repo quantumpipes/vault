@@ -188,7 +188,9 @@ class PostgresBackend:
     - pip install qp-vault[postgres]
     """
 
-    def __init__(self, dsn: str, *, embedding_dimensions: int = 768) -> None:
+    def __init__(
+        self, dsn: str, *, embedding_dimensions: int = 768, command_timeout: float = 30.0
+    ) -> None:
         if not HAS_ASYNCPG:
             raise ImportError(
                 "asyncpg is required for PostgresBackend. "
@@ -196,12 +198,18 @@ class PostgresBackend:
             )
         self._dsn = dsn
         self._dimensions = embedding_dimensions
+        self._command_timeout = command_timeout
         self._pool: Any = None
 
     async def _get_pool(self) -> Any:
         """Get or create connection pool."""
         if self._pool is None:
-            self._pool = await asyncpg.create_pool(self._dsn, min_size=2, max_size=10)
+            self._pool = await asyncpg.create_pool(
+                self._dsn,
+                min_size=2,
+                max_size=10,
+                command_timeout=self._command_timeout,
+            )
         return self._pool
 
     async def initialize(self) -> None:

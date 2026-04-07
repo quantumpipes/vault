@@ -207,6 +207,9 @@ class AsyncVault:
 
         self._initialized = False
 
+        # TTL cache for expensive operations (health, status)
+        self._cache: dict[str, tuple[float, Any]] = {}
+
     async def _ensure_initialized(self) -> None:
         if not self._initialized:
             await self._storage.initialize()
@@ -216,6 +219,56 @@ class AsyncVault:
         """Check RBAC permission for an operation."""
         from qp_vault.rbac import check_permission
         check_permission(self._role, operation)
+
+    def _cache_get(self, key: str) -> Any | None:
+        """Get a cached value if TTL has not expired."""
+        import time
+        entry = self._cache.get(key)
+        if entry is None:
+            return None
+        cached_at, value = entry
+        if time.monotonic() - cached_at > self.config.health_cache_ttl_seconds:
+            del self._cache[key]
+            return None
+        return value
+
+    def _cache_set(self, key: str, value: Any) -> None:
+        """Cache a value with current timestamp."""
+        import time
+        self._cache[key] = (time.monotonic(), value)
+
+    def _cache_invalidate(self) -> None:
+        """Invalidate all cached values (after writes)."""
+        self._cache.clear()
+
+    async def _with_timeout(self, coro: Any) -> Any:
+        """Wrap a coroutine with the configured query timeout."""
+        timeout_s = self.config.query_timeout_ms / 1000.0
+        try:
+            return await asyncio.wait_for(coro, timeout=timeout_s)
+        except TimeoutError:
+            raise VaultError(
+                f"Operation timed out after {self.config.query_timeout_ms}ms"
+            ) from None
+
+    def _resolve_tenant(self, tenant_id: str | None) -> str | None:
+        """Resolve effective tenant_id, enforcing lock if set.
+
+        When the vault is locked to a tenant (via __init__ tenant_id):
+        - If caller provides no tenant_id, auto-inject the locked tenant.
+        - If caller provides a matching tenant_id, allow it.
+        - If caller provides a different tenant_id, reject.
+        """
+        if self._locked_tenant_id is None:
+            return tenant_id
+        if tenant_id is None:
+            return self._locked_tenant_id
+        if tenant_id != self._locked_tenant_id:
+            raise VaultError(
+                f"Tenant mismatch: vault is locked to '{self._locked_tenant_id}' "
+                f"but operation specified '{tenant_id}'"
+            )
+        return tenant_id
 
     # --- Resource Operations ---
 
@@ -255,6 +308,7 @@ class AsyncVault:
         """
         await self._ensure_initialized()
         self._check_permission("add")
+        tenant_id = self._resolve_tenant(tenant_id)
 
         # Validate enum values early (before they reach storage layer)
         try:
@@ -355,7 +409,7 @@ class AsyncVault:
                 # Store but quarantine; caller can check resource.status
                 pass  # Status will be set by Membrane result below
 
-        return await self._resource_manager.add(
+        resource = await self._resource_manager.add(
             text,
             name=name,
             trust=trust,
@@ -369,6 +423,8 @@ class AsyncVault:
             valid_until=valid_until,
             tenant_id=tenant_id,
         )
+        self._cache_invalidate()
+        return resource
 
     async def get(self, resource_id: str) -> Resource:
         """Get a resource by ID."""
@@ -391,6 +447,7 @@ class AsyncVault:
     ) -> list[Resource]:
         """List resources with optional filters."""
         await self._ensure_initialized()
+        tenant_id = self._resolve_tenant(tenant_id)
         return await self._resource_manager.list(
             tenant_id=tenant_id,
             trust=trust,
@@ -417,7 +474,7 @@ class AsyncVault:
         """Update resource metadata."""
         await self._ensure_initialized()
         self._check_permission("update")
-        return await self._resource_manager.update(
+        result = await self._resource_manager.update(
             resource_id,
             name=name,
             trust=trust,
@@ -425,12 +482,15 @@ class AsyncVault:
             tags=tags,
             metadata=metadata,
         )
+        self._cache_invalidate()
+        return result
 
     async def delete(self, resource_id: str, *, hard: bool = False) -> None:
         """Delete a resource (soft by default)."""
         await self._ensure_initialized()
         self._check_permission("delete")
         await self._resource_manager.delete(resource_id, hard=hard)
+        self._cache_invalidate()
 
     async def get_content(self, resource_id: str) -> str:
         """Retrieve the full text content of a resource.
@@ -511,6 +571,7 @@ class AsyncVault:
         """
         await self._ensure_initialized()
         self._check_permission("add_batch")
+        tenant_id = self._resolve_tenant(tenant_id)
         assert sources is not None, "sources must not be None"
         results: list[Resource] = []
         src: str | Path | bytes
@@ -621,6 +682,7 @@ class AsyncVault:
         """
         await self._ensure_initialized()
         self._check_permission("search")
+        tenant_id = self._resolve_tenant(tenant_id)
 
         # Generate query embedding if embedder available
         query_embedding = None
@@ -646,8 +708,8 @@ class AsyncVault:
             as_of=str(as_of) if as_of else None,
         )
 
-        # Get raw results from storage
-        raw_results = await self._storage.search(search_query)
+        # Get raw results from storage (with timeout protection)
+        raw_results = await self._with_timeout(self._storage.search(search_query))
 
         # Apply trust weighting with optional layer boost
         weighted = apply_trust_weighting(raw_results, self.config, layer_boost=_layer_boost)
@@ -849,6 +911,7 @@ class AsyncVault:
         """Create a new collection."""
         await self._ensure_initialized()
         self._check_permission("create_collection")
+        tenant_id = self._resolve_tenant(tenant_id)
         import uuid
         from datetime import UTC, datetime
         collection_id = str(uuid.uuid4())
@@ -879,11 +942,18 @@ class AsyncVault:
 
         if resource_id:
             resource = await self.get(resource_id)
-            score = compute_health_score([resource])
-            return score
+            return compute_health_score([resource])
+
+        # Use cached result if available
+        cache_key = "health:vault"
+        cached: HealthScore | None = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
 
         all_resources = await self._list_all_bounded()
-        return compute_health_score(all_resources)
+        result = compute_health_score(all_resources)
+        self._cache_set(cache_key, result)
+        return result
 
     async def export_vault(self, path: str | Path) -> dict[str, Any]:
         """Export the vault to a JSON file for portability.
@@ -899,7 +969,7 @@ class AsyncVault:
         self._check_permission("export_vault")
         resources: list[Resource] = await self._list_all_bounded()
         data = {
-            "version": "0.10.0",
+            "version": "0.14.0",
             "resource_count": len(resources),
             "resources": [r.model_dump(mode="json") for r in resources],
         }
@@ -952,6 +1022,13 @@ class AsyncVault:
         """Get vault status summary."""
         await self._ensure_initialized()
         self._check_permission("status")
+
+        # Use cached result if available
+        cache_key = "status:vault"
+        cached_status: dict[str, Any] | None = self._cache_get(cache_key)
+        if cached_status is not None:
+            return cached_status
+
         all_resources: list[Resource] = await self._list_all_bounded()
 
         by_status: dict[str, int] = {}
@@ -969,7 +1046,7 @@ class AsyncVault:
 
         layer_stats = self._layer_manager.get_stats(all_resources)
 
-        return {
+        result = {
             "total_resources": len(all_resources),
             "by_status": by_status,
             "by_trust_tier": by_trust,
@@ -978,6 +1055,8 @@ class AsyncVault:
             "vault_path": str(self.path),
             "backend": "sqlite",
         }
+        self._cache_set(cache_key, result)
+        return result
 
     # --- Plugin Registration ---
 
