@@ -1,6 +1,6 @@
 <div align="center">
 
-# qp-vault
+# QP Vault
 
 **The governed knowledge store for autonomous organizations.**
 
@@ -20,21 +20,21 @@ Every document has a trust tier that weights search results. Every chunk has a S
 A Vault is a governed store of knowledge resources. Each resource is screened by the Membrane, chunked, hashed, trust-classified, and indexed for hybrid search. RBAC controls who can read, write, or administer.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                          VAULT                              │
-├──────────────┬──────────────────────────────────────────────┤
-│  RBAC        │  READER · WRITER · ADMIN permission matrix   │
-│  MEMBRANE    │  Innate scan → Release gate → Index/Quarantine│
-│  INGEST      │  Parse → Chunk → SHA3-256 CID → Embed → Store│
-│  GOVERN      │  Trust tiers · Lifecycle · Data classification│
-│  RETRIEVE    │  Hybrid search · Trust-weighted · Time-travel │
-│  VERIFY      │  Merkle tree · CID per chunk · Proof export  │
-│  AUDIT       │  Every write → VaultEvent → Capsule (opt.)   │
-│  ENCRYPT     │  AES-256-GCM · ML-KEM-768 · ML-DSA-65       │
-├──────────────┴──────────────────────────────────────────────┤
-│  Trust weights: CANONICAL 1.5x · WORKING 1.0x · EPHEMERAL 0.7x│
-│  FIPS 202 · FIPS 197 · FIPS 203 · FIPS 204                    │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                          VAULT                                  │
+├──────────────┬──────────────────────────────────────────────────┤
+│  RBAC        │  READER · WRITER · ADMIN permission matrix       │
+│  MEMBRANE    │  Innate scan → Release gate → Index/Quarantine   │
+│  INGEST      │  Parse → Chunk → SHA3-256 CID → Embed → Store    │
+│  GOVERN      │  Trust tiers · Lifecycle · Data classification   │
+│  RETRIEVE    │  Hybrid search · Trust-weighted · Time-travel    │
+│  VERIFY      │  Merkle tree · CID per chunk · Proof export      │
+│  AUDIT       │  Every write → VaultEvent → Capsule (opt.)       │
+│  ENCRYPT     │  AES-256-GCM · ML-KEM-768 · ML-DSA-65            │
+├──────────────┴──────────────────────────────────────────────────┤
+│  Trust weights: CANONICAL 1.5x · WORKING 1.0x · EPHEMERAL 0.7x  │
+│  FIPS 202 · FIPS 197 · FIPS 203 · FIPS 204                      │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 *Knowledge that can't be verified can't be trusted.*
