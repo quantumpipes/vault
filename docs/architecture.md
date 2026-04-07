@@ -281,7 +281,7 @@ config = VaultConfig(
 
 <!-- VERIFIED: config.py:18-86 — VaultConfig fields and defaults -->
 
-## Security Architecture (v0.14.0)
+## Security Architecture (v0.15.0)
 
 ```
 +-------------------------------------------------------------------+

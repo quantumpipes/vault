@@ -1,6 +1,6 @@
 # Security Model
 
-qp-vault's security architecture for v0.14.0.
+qp-vault's security architecture for v0.15.0.
 
 ## Cryptographic Inventory
 
@@ -37,7 +37,9 @@ Content is screened before indexing:
 1. **Innate scan**: Regex blocklist (prompt injection, jailbreak, XSS, code injection)
 2. **Release gate**: Pass/quarantine/reject decision
 
-Quarantined resources get `ResourceStatus.QUARANTINED` and are excluded from search. See [Membrane](membrane.md).
+Content that **fails** screening is rejected outright (`VaultError`). Flagged content is stored but quarantined: excluded from search AND `get_content()`. Quarantined resources get `adversarial_status=SUSPICIOUS` persisted to storage. See [Membrane](membrane.md).
+
+<!-- VERIFIED: vault.py:424-460 — FAIL rejects, quarantine blocks get_content -->
 
 ## Input Validation
 
@@ -134,4 +136,5 @@ Every chunk: SHA3-256 CID. Every resource: Merkle root over sorted chunk CIDs. E
 | FTS5 injection | Query sanitizer strips operators |
 | Audit manipulation | Capsule hash-chains are append-only |
 | Key compromise | ML-KEM-768 (quantum-resistant) + zeroization |
-| Plugin RCE | SHA3-256 manifest hash verification |
+| Plugin RCE | SHA3-256 manifest hash verification (required) |
+| Database eavesdropping | PostgreSQL SSL by default; SQLite 0600 permissions |

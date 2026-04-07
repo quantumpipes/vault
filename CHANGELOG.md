@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-04-06
+
+### Security
+- **Membrane blocks dangerous content**: FAIL result rejects outright (raises VaultError). Quarantined resources excluded from `get_content()`. Adversarial status set to SUSPICIOUS on quarantine
+- **PostgreSQL SSL by default**: `asyncpg` pool uses SSL unless `sslmode=disable` in DSN. New config: `postgres_ssl` (default True), `postgres_ssl_verify` (default False)
+- **SQLite file permissions**: New databases created with `0600` (owner-only rw). WAL and SHM files also restricted
+- **ML-KEM-768 FIPS KAT**: Roundtrip + tampered-ciphertext Known Answer Test added to `run_all_kat()`
+
+### Fixed
+- **Provenance self-sign trusted**: Self-signed attestations now `signature_verified=True` (was False when no verify_fn)
+
 ## [0.14.0] - 2026-04-06
 
 ### Added
@@ -211,7 +222,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Max file size enforcement (configurable)
 - Content null byte stripping on ingest
 
-[unreleased]: https://github.com/quantumpipes/vault/compare/v0.14.0...HEAD
+[unreleased]: https://github.com/quantumpipes/vault/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/quantumpipes/vault/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/quantumpipes/vault/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/quantumpipes/vault/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/quantumpipes/vault/compare/v0.11.0...v0.12.0
