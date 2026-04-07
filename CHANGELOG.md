@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-04-06
+
+### Added
+- **Membrane ADAPTIVE_SCAN**: LLM-based semantic content screening (Stage 3 of 8). Detects obfuscated prompt injection, encoded payloads, social engineering, and semantic attacks that regex patterns miss
+- **LLMScreener Protocol**: Pluggable interface for any LLM backend. Implements structural subtyping (same pattern as EmbeddingProvider)
+- **OllamaScreener**: Air-gap-safe screener using local Ollama instance. Hardened system prompt isolates content-under-review from instructions
+- **ScreeningResult dataclass**: Structured result with risk_score (0.0-1.0), reasoning, and flags list
+- `llm_screener` parameter on `Vault()` and `AsyncVault()` constructors
+- Aggregate risk scoring in MembranePipelineStatus (max of non-skipped stages)
+
+### Security
+- Adaptive scan is optional: without an `llm_screener`, the stage SKIPs (no LLM dependency required)
+- Content truncated to configurable max (default 4000 chars) before LLM evaluation
+- LLM errors are caught and result in SKIP (never blocks ingestion due to LLM failure)
+- System prompt hardened: content placed in `<document>` block, explicit instruction not to follow commands within it
+
 ## [0.15.0] - 2026-04-06
 
 ### Security
@@ -222,7 +238,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Max file size enforcement (configurable)
 - Content null byte stripping on ingest
 
-[unreleased]: https://github.com/quantumpipes/vault/compare/v0.15.0...HEAD
+[unreleased]: https://github.com/quantumpipes/vault/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/quantumpipes/vault/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/quantumpipes/vault/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/quantumpipes/vault/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/quantumpipes/vault/compare/v0.12.0...v0.13.0

@@ -26,7 +26,7 @@ Quick start:
 Docs: https://github.com/quantumpipes/vault
 """
 
-__version__ = "0.15.0"
+__version__ = "0.16.0"
 __author__ = "Quantum Pipes Technologies, LLC"
 __license__ = "Apache-2.0"
 
@@ -69,8 +69,10 @@ from qp_vault.models import (
 from qp_vault.protocols import (
     AuditProvider,
     EmbeddingProvider,
+    LLMScreener,
     ParserProvider,
     PolicyProvider,
+    ScreeningResult,
     StorageBackend,
 )
 
@@ -111,6 +113,8 @@ __all__ = [
     "AuditProvider",
     "ParserProvider",
     "PolicyProvider",
+    "LLMScreener",
+    "ScreeningResult",
     # Exceptions
     "VaultError",
     "StorageError",

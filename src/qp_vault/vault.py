@@ -34,6 +34,7 @@ from qp_vault.models import (
 from qp_vault.protocols import (
     AuditProvider,
     EmbeddingProvider,
+    LLMScreener,
     ParserProvider,
     PolicyProvider,
     SearchQuery,
@@ -150,6 +151,7 @@ class AsyncVault:
         plugins_dir: str | Path | None = None,
         tenant_id: str | None = None,
         role: str | None = None,
+        llm_screener: LLMScreener | None = None,
     ) -> None:
         self.path = Path(path)
         self.path.mkdir(parents=True, exist_ok=True)
@@ -209,9 +211,13 @@ class AsyncVault:
         from qp_vault.core.layer_manager import LayerManager
         self._layer_manager = LayerManager(config=self.config)
 
-        # Membrane pipeline
+        # Membrane pipeline (with optional LLM-based adaptive scan)
+        from qp_vault.membrane.adaptive_scan import AdaptiveScanConfig
         from qp_vault.membrane.pipeline import MembranePipeline
-        self._membrane_pipeline: MembranePipeline | None = MembranePipeline()
+        adaptive_config = AdaptiveScanConfig(screener=llm_screener) if llm_screener else None
+        self._membrane_pipeline: MembranePipeline | None = MembranePipeline(
+            adaptive_config=adaptive_config,
+        )
 
         self._initialized = False
 
@@ -1010,7 +1016,7 @@ class AsyncVault:
         self._check_permission("export_vault")
         resources: list[Resource] = await self._list_all_bounded()
         data = {
-            "version": "0.15.0",
+            "version": "0.16.0",
             "resource_count": len(resources),
             "resources": [r.model_dump(mode="json") for r in resources],
         }
@@ -1156,6 +1162,7 @@ class Vault:
         plugins_dir: str | Path | None = None,
         tenant_id: str | None = None,
         role: str | None = None,
+        llm_screener: LLMScreener | None = None,
     ) -> None:
         """Create a synchronous Vault instance.
 
@@ -1170,6 +1177,7 @@ class Vault:
             plugins_dir: Directory for local plugin discovery (air-gap mode).
             tenant_id: Lock vault to a single tenant (enforced on all operations).
             role: RBAC role ("reader", "writer", "admin", or None for no enforcement).
+            llm_screener: LLM screener for Membrane ADAPTIVE_SCAN (optional).
         """
         self._async = AsyncVault(
             path,
@@ -1182,6 +1190,7 @@ class Vault:
             plugins_dir=plugins_dir,
             tenant_id=tenant_id,
             role=role,
+            llm_screener=llm_screener,
         )
 
     def add(self, source: str | Path | bytes, **kwargs: Any) -> Resource:

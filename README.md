@@ -8,7 +8,7 @@ Every document has a trust tier that weights search results. Every chunk has a S
 
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Tests](https://img.shields.io/badge/Tests-520_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-543_passing-brightgreen.svg)](tests/)
 [![Crypto](https://img.shields.io/badge/Crypto-SHA3--256%20%C2%B7%20AES--256--GCM%20%C2%B7%20ML--KEM--768%20%C2%B7%20ML--DSA--65-purple.svg)](#security)
 
 </div>

@@ -196,3 +196,33 @@ class PolicyProvider(Protocol):
     async def evaluate(
         self, resource: Resource, action: str, context: dict[str, Any]
     ) -> PolicyResult: ...
+
+
+@dataclass
+class ScreeningResult:
+    """Result of LLM-based content screening."""
+
+    risk_score: float = 0.0  # 0.0 (safe) to 1.0 (dangerous)
+    reasoning: str = ""
+    flags: list[str] | None = None  # e.g. ["prompt_injection", "encoded_payload"]
+
+
+@runtime_checkable
+class LLMScreener(Protocol):
+    """LLM-based content screening for the Membrane ADAPTIVE_SCAN stage.
+
+    Implementations can use any LLM backend: Anthropic (Claude), OpenAI (GPT),
+    Ollama (local/air-gap), or custom. The screener evaluates content for
+    adversarial intent that regex patterns cannot catch.
+    """
+
+    async def screen(self, content: str) -> ScreeningResult:
+        """Evaluate content for adversarial intent.
+
+        Args:
+            content: Text content to screen (may be truncated by caller).
+
+        Returns:
+            ScreeningResult with risk_score, reasoning, and optional flags.
+        """
+        ...
