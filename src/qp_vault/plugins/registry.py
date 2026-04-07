@@ -127,18 +127,41 @@ class PluginRegistry:
             except Exception as e:
                 logger.debug("Entry point group %s unavailable: %s", group, e)
 
-    def discover_plugins_dir(self, plugins_dir: Path) -> None:
+    def discover_plugins_dir(self, plugins_dir: Path, *, verify_hashes: bool = True) -> None:
         """Load plugins from a local directory (air-gap mode).
 
         Any .py file in the directory is imported. Classes decorated with
         @embedder, @parser, or @policy are auto-registered.
+
+        If a manifest.json exists in the directory, plugin files are verified
+        against SHA3-256 hashes before loading.
         """
         if not plugins_dir.is_dir():
             return
 
+        # Load manifest for hash verification
+        manifest: dict[str, str] = {}
+        manifest_path = plugins_dir / "manifest.json"
+        if verify_hashes and manifest_path.exists():
+            import json
+            manifest = json.loads(manifest_path.read_text())
+
         for py_file in sorted(plugins_dir.glob("*.py")):
             if py_file.name.startswith("_"):
                 continue
+
+            # Hash verification if manifest exists
+            if manifest and verify_hashes:
+                import hashlib
+                file_hash = hashlib.sha3_256(py_file.read_bytes()).hexdigest()
+                expected = manifest.get(py_file.name)
+                if expected and file_hash != expected:
+                    logger.warning(
+                        "Plugin %s hash mismatch (expected %s, got %s). Skipping.",
+                        py_file.name, expected[:16], file_hash[:16],
+                    )
+                    continue
+
             try:
                 module_name = f"qp_vault_plugin_{py_file.stem}"
                 spec = importlib.util.spec_from_file_location(module_name, py_file)

@@ -140,10 +140,12 @@ class AsyncVault:
         policies: list[PolicyProvider] | None = None,
         config: VaultConfig | None = None,
         plugins_dir: str | Path | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         self.path = Path(path)
         self.path.mkdir(parents=True, exist_ok=True)
         self.config = config or VaultConfig()
+        self._locked_tenant_id = tenant_id  # If set, all operations are scoped to this tenant
 
         # Storage backend
         if storage is not None:

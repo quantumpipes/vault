@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "qp-vault"
-version = "0.11.0"
+version = "0.12.0"
 description = "Governed knowledge store for autonomous organizations. Trust tiers, cryptographic audit trails, content-addressed storage, air-gap native."
 readme = "README.md"
 license = "Apache-2.0"
@@ -68,6 +68,9 @@ encryption = [
     "cryptography>=42",
     "pynacl>=1.6.2",
 ]
+pq = [
+    "liboqs-python>=0.14.1",
+]
 integrity = [
     "numpy>=2.0",
 ]
@@ -87,7 +90,7 @@ dev = [
     "ruff>=0.9",
 ]
 all = [
-    "qp-vault[sqlite,postgres,docling,local,openai,capsule,encryption,integrity,fastapi,cli]",
+    "qp-vault[sqlite,postgres,docling,local,openai,capsule,encryption,pq,integrity,fastapi,cli]",
 ]
 
 [project.scripts]
