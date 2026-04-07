@@ -22,6 +22,24 @@ services:
     tmpfs:
       - /var/lib/postgresql/data  # RAM-backed for speed
 
+  ollama:
+    image: ollama/ollama:latest
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["ollama", "pull", "llama3.2"]
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+
   vault-test:
     build:
       context: .
@@ -29,8 +47,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
     environment:
       VAULT_TEST_POSTGRES_DSN: "postgresql://vault:vault_test@postgres:5432/test_vault"
+      VAULT_TEST_OLLAMA: "1"
+      OLLAMA_HOST: "http://ollama:11434"
       VAULT_TEST_ALL_EXTRAS: "1"
     volumes:
       - ./tests:/app/tests:ro
