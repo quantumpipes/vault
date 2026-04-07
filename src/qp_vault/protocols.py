@@ -96,6 +96,10 @@ class StorageBackend(Protocol):
         """Retrieve a resource by ID, or None if not found."""
         ...
 
+    async def get_resources(self, resource_ids: list[str]) -> list[Resource]:
+        """Retrieve multiple resources by ID (batch)."""
+        ...
+
     async def list_resources(self, filters: ResourceFilter) -> list[Resource]:
         """List resources matching filter criteria."""
         ...

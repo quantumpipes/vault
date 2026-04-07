@@ -286,6 +286,18 @@ class SQLiteBackend:
             return None
         return _resource_from_row(dict(row))
 
+    async def get_resources(self, resource_ids: list[str]) -> list[Resource]:
+        """Retrieve multiple resources by ID (batch)."""
+        if not resource_ids:
+            return []
+        conn = self._get_conn()
+        placeholders = ",".join("?" for _ in resource_ids)
+        rows = conn.execute(
+            f"SELECT * FROM resources WHERE id IN ({placeholders})",  # noqa: S608
+            resource_ids,
+        ).fetchall()
+        return [_resource_from_row(dict(r)) for r in rows]
+
     async def list_resources(self, filters: ResourceFilter) -> list[Resource]:
         """List resources matching filters."""
         conn = self._get_conn()

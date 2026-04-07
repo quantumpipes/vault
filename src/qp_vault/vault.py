@@ -466,9 +466,21 @@ class AsyncVault:
         return resource
 
     async def get(self, resource_id: str) -> Resource:
-        """Get a resource by ID."""
+        """Get a single resource by ID."""
         await self._ensure_initialized()
         return await self._resource_manager.get(resource_id)
+
+    async def get_multiple(self, resource_ids: list[str]) -> list[Resource]:
+        """Get multiple resources by ID in a single query.
+
+        Args:
+            resource_ids: List of resource IDs to retrieve.
+
+        Returns:
+            List of found Resources (missing IDs silently omitted).
+        """
+        await self._ensure_initialized()
+        return await self._storage.get_resources(resource_ids)
 
     async def list(
         self,
@@ -557,6 +569,57 @@ class AsyncVault:
             raise VaultError(f"No content found for resource {resource_id}")
         sorted_chunks = sorted(chunks, key=lambda c: c.chunk_index)
         return "\n\n".join(c.content for c in sorted_chunks)
+
+    async def upsert(
+        self,
+        source: str | Path | bytes,
+        *,
+        name: str | None = None,
+        trust_tier: TrustTier | str = TrustTier.WORKING,
+        tenant_id: str | None = None,
+        **kwargs: Any,
+    ) -> Resource:
+        """Add or replace a resource atomically.
+
+        If a resource with the same name (and tenant_id) exists, replaces it.
+        Otherwise, creates a new resource. The old version is superseded.
+
+        Args:
+            source: File path, text string, or bytes content.
+            name: Resource name to match on (required for upsert semantics).
+            trust_tier: Trust tier for the resource.
+            tenant_id: Tenant scope.
+            **kwargs: Additional args passed to add().
+
+        Returns:
+            The created or updated Resource.
+        """
+        await self._ensure_initialized()
+        self._check_permission("add")
+        tenant_id = self._resolve_tenant(tenant_id)
+
+        # Resolve name for matching
+        if name is None and isinstance(source, Path):
+            name = source.name
+        if name is None and isinstance(source, str) and len(source) < _MAX_PATH_STRING_LENGTH:
+            try:
+                p = Path(source)
+                if p.exists():
+                    name = p.name
+            except OSError:
+                pass
+
+        # Find existing resource with same name + tenant
+        if name:
+            from qp_vault.protocols import ResourceFilter
+            existing = await self._storage.list_resources(
+                ResourceFilter(tenant_id=tenant_id, limit=1)
+            )
+            for r in existing:
+                if r.name == name:
+                    return (await self.replace(r.id, source if isinstance(source, str) else str(source)))[1]
+
+        return await self.add(source, name=name, trust_tier=trust_tier, tenant_id=tenant_id, **kwargs)
 
     async def replace(
         self,
@@ -1206,6 +1269,10 @@ class Vault:
         """Get a resource by ID."""
         return cast("Resource", _run_async(self._async.get(resource_id)))
 
+    def get_multiple(self, resource_ids: list[str]) -> list[Resource]:
+        """Get multiple resources by ID in a single query."""
+        return cast("list[Resource]", _run_async(self._async.get_multiple(resource_ids)))
+
     def list(self, **kwargs: Any) -> list[Resource]:
         """List resources with optional filters."""
         return cast("list[Resource]", _run_async(self._async.list(**kwargs)))
@@ -1227,6 +1294,10 @@ class Vault:
         """Replace a resource's content atomically. Returns (old, new)."""
         result: tuple[Resource, Resource] = _run_async(self._async.replace(resource_id, new_content, reason=reason))
         return result
+
+    def upsert(self, source: str | Path | bytes, **kwargs: Any) -> Resource:
+        """Add or replace a resource atomically."""
+        return cast("Resource", _run_async(self._async.upsert(source, **kwargs)))
 
     def get_provenance(self, resource_id: str) -> list[dict[str, Any]]:
         """Get provenance records for a resource."""

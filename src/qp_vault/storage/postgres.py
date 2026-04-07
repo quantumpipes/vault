@@ -311,6 +311,19 @@ class PostgresBackend:
                 return None
             return _resource_from_record(dict(row))
 
+    async def get_resources(self, resource_ids: list[str]) -> list[Resource]:
+        """Retrieve multiple resources by ID (batch)."""
+        if not resource_ids:
+            return []
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            placeholders = ", ".join(f"${i + 1}" for i in range(len(resource_ids)))
+            rows = await conn.fetch(
+                f"SELECT * FROM qp_vault.resources WHERE id IN ({placeholders})",  # noqa: S608
+                *resource_ids,
+            )
+            return [_resource_from_record(dict(r)) for r in rows]
+
     async def list_resources(self, filters: ResourceFilter) -> list[Resource]:
         """List resources matching filters."""
         pool = await self._get_pool()
