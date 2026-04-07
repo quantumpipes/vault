@@ -91,7 +91,7 @@ class AdversarialStatus(StrEnum):
     """Flagged by one or more Membrane stages. Multiplier: 0.3x."""
 
 
-class CISStage(StrEnum):
+class MembraneStage(StrEnum):
     """Membrane pipeline stages."""
 
     INGEST = "ingest"
@@ -119,7 +119,7 @@ class CISStage(StrEnum):
     """Stage 8: Attack Pattern Registry feedback loop."""
 
 
-class CISResult(StrEnum):
+class MembraneResult(StrEnum):
     """Result of a single Membrane stage evaluation."""
 
     PASS = "pass"  # nosec B105 — Membrane stage result, not a password
@@ -202,7 +202,7 @@ class EventType(StrEnum):
     SUPERSEDE = "supersede"
     VERIFY = "verify"
     SEARCH = "search"
-    CIS_SCAN = "cis_scan"
-    CIS_RELEASE = "cis_release"
-    CIS_FLAG = "cis_flag"
+    MEMBRANE_SCAN = "cis_scan"
+    MEMBRANE_RELEASE = "cis_release"
+    MEMBRANE_FLAG = "cis_flag"
     ADVERSARIAL_STATUS_CHANGE = "adversarial_status_change"

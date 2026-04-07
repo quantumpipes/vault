@@ -1,7 +1,7 @@
 # Copyright 2026 Quantum Pipes Technologies, LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for Membrane (CIS) Phase 2.
+"""Tests for Membrane Phase 2.
 
 Covers: AdversarialVerifier, source diversity, approval budgets, anomaly detection.
 """

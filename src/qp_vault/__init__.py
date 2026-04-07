@@ -32,11 +32,11 @@ __license__ = "Apache-2.0"
 
 from qp_vault.enums import (
     AdversarialStatus,
-    CISResult,
-    CISStage,
     DataClassification,
     EventType,
     Lifecycle,
+    MembraneResult,
+    MembraneStage,
     MemoryLayer,
     ResourceStatus,
     ResourceType,
@@ -54,11 +54,11 @@ from qp_vault.exceptions import (
 )
 from qp_vault.models import (
     Chunk,
-    CISPipelineStatus,
-    CISStageRecord,
     Collection,
     ContentProvenance,
     HealthScore,
+    MembranePipelineStatus,
+    MembraneStageRecord,
     MerkleProof,
     Resource,
     SearchResult,
@@ -91,8 +91,8 @@ __all__ = [
     "MerkleProof",
     "VaultEvent",
     "ContentProvenance",
-    "CISStageRecord",
-    "CISPipelineStatus",
+    "MembraneStageRecord",
+    "MembranePipelineStatus",
     # Enums
     "TrustTier",
     "DataClassification",
@@ -102,8 +102,8 @@ __all__ = [
     "MemoryLayer",
     "EventType",
     "AdversarialStatus",
-    "CISStage",
-    "CISResult",
+    "MembraneStage",
+    "MembraneResult",
     "UploadMethod",
     # Protocols (for implementors)
     "StorageBackend",
