@@ -43,7 +43,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
-      - run: pip install -e ".[sqlite,fastapi,integrity,cli,dev]"
+      - run: pip install -e ".[sqlite,fastapi,integrity,encryption,cli,dev]"
       - run: pytest tests/ -v --tb=short --cov=qp_vault --cov-report=term-missing
 
   publish:
