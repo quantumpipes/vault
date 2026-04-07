@@ -48,9 +48,9 @@ if HAS_FASTAPI:
         lifecycle: str = "active"
 
     class SearchRequest(BaseModel):
-        query: str
-        top_k: int = 10
-        threshold: float = 0.0
+        query: str = Field(..., max_length=10000)
+        top_k: int = Field(10, ge=1, le=1000)
+        threshold: float = Field(0.0, ge=0.0, le=1.0)
         trust_min: str | None = None
         layer: str | None = None
         collection: str | None = None
@@ -293,6 +293,8 @@ def create_vault_router(vault: Any) -> APIRouter:
     @router.post("/batch")
     async def add_batch(req: dict[str, Any]) -> dict[str, Any]:
         sources = req.get("sources", [])
+        if len(sources) > 100:
+            raise HTTPException(status_code=400, detail="Batch limited to 100 items")
         trust = req.get("trust", "working")
         tenant_id = req.get("tenant_id")
         resources = await vault.add_batch(

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-04-06
+
+### Added
+- **Post-quantum cryptography (delivered)**:
+  - `MLKEMKeyManager` — ML-KEM-768 key encapsulation (FIPS 203)
+  - `MLDSASigner` — ML-DSA-65 digital signatures (FIPS 204)
+  - `HybridEncryptor` — ML-KEM-768 + AES-256-GCM hybrid encryption
+  - `[pq]` installation extra: `pip install qp-vault[pq]`
+- **Input bounds**: `top_k` capped at 1000, `threshold` range 0-1, query max 10K chars
+- **Batch limits**: max 100 items per `/batch` request
+- **Plugin hash verification**: `manifest.json` with SHA3-256 hashes in plugins_dir
+- **Tenant-locked vault**: `Vault(path, tenant_id="x")` enforces single-tenant scope
+
+### Security
+- SearchRequest Pydantic validators prevent unbounded parameter attacks
+- Plugin files verified against manifest before execution
+
 ## [0.11.0] - 2026-04-06
 
 ### Added
