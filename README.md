@@ -4,12 +4,12 @@
 
 **The governed knowledge store for autonomous organizations.**
 
-Every document has a trust tier that weights search results. Every chunk has a SHA3-256 content ID. Every mutation is auditable. The entire vault is verifiable via Merkle tree. Air-gap native.
+Every document has a trust tier that weights search results. Every chunk has a SHA3-256 content ID. Every mutation is auditable. The entire vault is verifiable via Merkle tree. Content is screened by a Membrane before indexing. Access is controlled by RBAC. Air-gap native. Post-quantum ready.
 
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Tests](https://img.shields.io/badge/Tests-448_passing-brightgreen.svg)](tests/)
-[![Crypto](https://img.shields.io/badge/Crypto-SHA3--256%20%C2%B7%20Ed25519-purple.svg)](#security)
+[![Tests](https://img.shields.io/badge/Tests-518_passing-brightgreen.svg)](tests/)
+[![Crypto](https://img.shields.io/badge/Crypto-SHA3--256%20%C2%B7%20AES--256--GCM%20%C2%B7%20ML--KEM--768%20%C2%B7%20ML--DSA--65-purple.svg)](#security)
 
 </div>
 
@@ -17,24 +17,25 @@ Every document has a trust tier that weights search results. Every chunk has a S
 
 ## The Architecture
 
-A Vault is a governed store of knowledge resources. Each resource is chunked, hashed, trust-classified, and indexed for hybrid search. The trust tier directly affects which results surface first.
+A Vault is a governed store of knowledge resources. Each resource is screened by the Membrane, chunked, hashed, trust-classified, and indexed for hybrid search. RBAC controls who can read, write, or administer.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                          VAULT                              │
 ├──────────────┬──────────────────────────────────────────────┤
+│  RBAC        │  READER · WRITER · ADMIN permission matrix   │
+│  MEMBRANE    │  Innate scan → Release gate → Index/Quarantine│
 │  INGEST      │  Parse → Chunk → SHA3-256 CID → Embed → Store│
 │  GOVERN      │  Trust tiers · Lifecycle · Data classification│
 │  RETRIEVE    │  Hybrid search · Trust-weighted · Time-travel │
 │  VERIFY      │  Merkle tree · CID per chunk · Proof export  │
 │  AUDIT       │  Every write → VaultEvent → Capsule (opt.)   │
+│  ENCRYPT     │  AES-256-GCM · ML-KEM-768 · ML-DSA-65       │
 ├──────────────┴──────────────────────────────────────────────┤
 │  Trust weights: CANONICAL 1.5x · WORKING 1.0x · EPHEMERAL 0.7x│
-│  SHA3-256 content IDs · Merkle root · Ed25519+ML-DSA-65 audit │
+│  FIPS 202 · FIPS 197 · FIPS 203 · FIPS 204                    │
 └─────────────────────────────────────────────────────────────┘
 ```
-
-Knowledge is not static. Resources move through a lifecycle (DRAFT, REVIEW, ACTIVE, SUPERSEDED, EXPIRED, ARCHIVED), organized into memory layers (OPERATIONAL, STRATEGIC, COMPLIANCE), and verified cryptographically on every read.
 
 *Knowledge that can't be verified can't be trusted.*
 
@@ -95,7 +96,7 @@ Trust is not metadata. It is a scoring function.
 Search ranking formula:
 
 ```
-relevance = (0.7 × vector_similarity + 0.3 × text_rank) × trust_weight × freshness_decay
+relevance = (0.7 × vector_similarity + 0.3 × text_rank) × trust_weight × freshness_decay × layer_boost
 ```
 
 Where `freshness_decay = exp(-age_days / half_life × ln2)`. A 180-day-old WORKING document retains 50% freshness. A CANONICAL document of the same age retains 70%.
@@ -111,8 +112,6 @@ DRAFT ──→ REVIEW ──→ ACTIVE ──→ SUPERSEDED ──→ ARCHIVED
                         │
                      ACTIVE (re-activate)
 ```
-
-Supersession creates a linked chain. Point-in-time search returns historically correct results.
 
 ```python
 vault.transition(r.id, "review", reason="Ready for security team")
@@ -134,16 +133,26 @@ pip install qp-vault
 
 | Command | What You Get | Dependencies |
 |---|---|---|
-| `pip install qp-vault` | SQLite, trust search, CAS, Merkle, lifecycle | **1** (pydantic) |
+| `pip install qp-vault` | SQLite, trust search, CAS, Merkle, lifecycle, Membrane, RBAC | **1** (pydantic) |
 | `pip install qp-vault[postgres]` | + PostgreSQL + pgvector hybrid search | + sqlalchemy, asyncpg, pgvector |
+| `pip install qp-vault[encryption]` | + AES-256-GCM encryption at rest | + cryptography, pynacl |
+| `pip install qp-vault[pq]` | + ML-KEM-768 + ML-DSA-65 post-quantum crypto | + liboqs-python |
 | `pip install qp-vault[capsule]` | + Cryptographic audit trail | + [qp-capsule](https://github.com/quantumpipes/capsule) |
 | `pip install qp-vault[docling]` | + 25+ format document processing (PDF, DOCX, etc.) | + docling |
-| `pip install qp-vault[encryption]` | + AES-256-GCM encryption at rest | + cryptography, pynacl |
 | `pip install qp-vault[local]` | + Local embeddings (sentence-transformers, air-gap safe) | + sentence-transformers |
 | `pip install qp-vault[openai]` | + OpenAI embeddings (cloud) | + openai |
-| `pip install qp-vault[fastapi]` | + REST API (15+ endpoints) | + fastapi |
-| `pip install qp-vault[cli]` | + `vault` command-line tool | + typer, rich |
+| `pip install qp-vault[integrity]` | + Near-duplicate + contradiction detection | + numpy |
+| `pip install qp-vault[fastapi]` | + REST API (22+ endpoints) | + fastapi |
+| `pip install qp-vault[cli]` | + `vault` command-line tool (15 commands) | + typer, rich |
 | `pip install qp-vault[all]` | Everything | All of the above |
+
+Combine extras with commas:
+
+```bash
+pip install qp-vault[postgres,encryption,pq,capsule,fastapi]   # Production API server
+pip install qp-vault[local,encryption,cli]                       # Air-gapped deployment
+pip install qp-vault[docling,integrity,cli]                      # Development
+```
 
 ---
 
@@ -157,19 +166,46 @@ vault = Vault("./my-knowledge")
 # Add with trust tiers
 vault.add("Incident response: acknowledge within 15 minutes...",
           name="sop-incident.md", trust="canonical")
-vault.add("Draft proposal for new onboarding process...",
-          name="draft-onboard.md", trust="working")
 
-# Trust-weighted search
+# Trust-weighted search (deduplicated, with freshness decay)
 results = vault.search("incident response")
-# CANONICAL surfaces first (1.5x), even at lower raw similarity
+
+# Retrieve full content
+text = vault.get_content(results[0].resource_id)
+
+# Replace content (atomic: creates new version, supersedes old)
+old, new = vault.replace(resource_id, "Updated policy v2 content")
 
 # Verify integrity
 result = vault.verify()
-print(result.merkle_root)  # Changes if any content is modified
+print(result.merkle_root)
 
 # Export proof for auditors
 proof = vault.export_proof(resource_id)
+```
+
+### Multi-Tenancy
+
+```python
+vault.add("content", tenant_id="site-123")
+vault.search("query", tenant_id="site-123")      # Scoped to tenant
+
+# Or lock the vault to a single tenant
+vault = Vault("./knowledge", tenant_id="site-123")
+```
+
+### RBAC
+
+```python
+vault = Vault("./knowledge", role="reader")       # Search, get, verify only
+vault = Vault("./knowledge", role="writer")       # + add, update, delete
+vault = Vault("./knowledge", role="admin")        # + export, import, config
+```
+
+### Batch Import
+
+```python
+resources = vault.add_batch(["doc1.md", "doc2.md", "doc3.md"], trust="working")
 ```
 
 ### Memory Layers
@@ -180,20 +216,21 @@ from qp_vault import MemoryLayer
 ops = vault.layer(MemoryLayer.OPERATIONAL)        # SOPs, runbooks (boost=1.5x)
 strategic = vault.layer(MemoryLayer.STRATEGIC)     # ADRs, decisions (trust=CANONICAL)
 compliance = vault.layer(MemoryLayer.COMPLIANCE)   # Audit evidence (reads audited)
-
-await ops.add("deploy-runbook.md")                 # Layer defaults auto-applied
-await compliance.search("SOC2")                     # This search is logged
 ```
 
 ### Health Scoring
 
 ```python
-score = vault.health()
-# score.overall:      85.0/100
-# score.freshness:    92.0  (are documents current?)
-# score.uniqueness:   100.0 (no duplicates?)
-# score.coherence:    80.0  (no contradictions?)
-# score.connectivity: 70.0  (are docs organized?)
+score = vault.health()                # Vault-wide (0-100)
+score = vault.health(resource.id)     # Per-resource
+```
+
+### Content Screening (Membrane)
+
+Content is screened before indexing. Prompt injection, jailbreak, XSS, and code injection attempts are quarantined.
+
+```python
+vault.add("ignore all previous instructions")  # Quarantined automatically
 ```
 
 ### Plugin System
@@ -206,15 +243,43 @@ class MyEmbedder:
     dimensions = 768
     async def embed(self, texts):
         return my_model.encode(texts)
-
-@parser("dicom")
-class DicomParser:
-    supported_extensions = {".dcm"}
-    async def parse(self, path):
-        return ParseResult(text=extract_dicom(path))
 ```
 
-Three discovery methods: explicit registration, entry_points (pip packages), or `--plugins-dir` (air-gap: drop `.py` files, no install needed).
+Three discovery methods: explicit registration, entry_points, or `--plugins-dir` (air-gap).
+
+### Encryption
+
+```python
+from qp_vault.encryption import AESGCMEncryptor, HybridEncryptor
+
+# Classical
+enc = AESGCMEncryptor()
+ciphertext = enc.encrypt(b"secret")
+
+# Post-quantum hybrid (ML-KEM-768 + AES-256-GCM)
+enc = HybridEncryptor()
+pub, sec = enc.generate_keypair()
+ciphertext = enc.encrypt(b"classified", pub)
+```
+
+### Event Streaming
+
+```python
+from qp_vault.streaming import VaultEventStream
+
+stream = VaultEventStream()
+vault = AsyncVault("./knowledge", auditor=stream)
+
+async for event in stream.subscribe():
+    print(f"{event.event_type}: {event.resource_name}")
+```
+
+### Import / Export
+
+```python
+await vault.export_vault("backup.json")
+await vault.import_vault("backup.json")
+```
 
 ### CLI
 
@@ -222,13 +287,17 @@ Three discovery methods: explicit registration, entry_points (pip packages), or 
 vault init ./knowledge
 vault add report.pdf --trust canonical
 vault search "revenue projections" --top-k 5
-vault inspect <resource-id>
+vault list --trust canonical --tenant site-123
 vault verify
 vault health
-vault status
+vault delete <id>
+vault transition <id> review --reason "Ready for review"
+vault content <id>
+vault replace <id> new-version.md
+vault export backup.json
 ```
 
-Exit codes: `0` = pass, `1` = fail. Designed for CI: `vault verify && deploy`.
+15 commands. Exit codes: `0` = pass, `1` = fail. Designed for CI: `vault verify && deploy`.
 
 ### FastAPI
 
@@ -237,7 +306,8 @@ from qp_vault.integrations.fastapi_routes import create_vault_router
 
 router = create_vault_router(vault)
 app.include_router(router, prefix="/v1/vault")
-# 15+ endpoints: resources CRUD, search, verify, health, lifecycle, proof
+# 22+ endpoints: resources, search, faceted search, verify, health,
+# lifecycle, collections, provenance, batch, export, content
 ```
 
 ---
@@ -247,12 +317,19 @@ app.include_router(router, prefix="/v1/vault")
 | Layer | Algorithm | Standard | Purpose |
 |---|---|---|---|
 | Content integrity | SHA3-256 | FIPS 202 | Tamper-evident CIDs and Merkle roots |
-| Audit signatures | Ed25519 + ML-DSA-65 | FIPS 186-5, FIPS 204 | Via [qp-capsule](https://github.com/quantumpipes/capsule) (optional) |
-| Encryption at rest | AES-256-GCM | FIPS 197 | `pip install qp-vault[encryption]` |
-| Search integrity | Parameterized SQL | -- | No string interpolation, FTS5 sanitized |
+| Symmetric encryption | AES-256-GCM | FIPS 197 | Data at rest |
+| Key encapsulation | ML-KEM-768 | FIPS 203 | Post-quantum key exchange |
+| Digital signatures | ML-DSA-65 | FIPS 204 | Post-quantum provenance signing |
+| Audit signatures | Ed25519 | FIPS 186-5 | Via [qp-capsule](https://github.com/quantumpipes/capsule) |
+| Hybrid encryption | ML-KEM-768 + AES-256-GCM | FIPS 203+197 | Quantum-resistant data encryption |
+| Content screening | Membrane pipeline | -- | Prompt injection, jailbreak, XSS detection |
+| Access control | RBAC | -- | Reader / Writer / Admin roles |
 | Input validation | Pydantic + custom | -- | Enum checks, name/tag/metadata limits |
+| Plugin verification | SHA3-256 manifest | -- | Hash-verified plugin loading |
+| Key management | ctypes memset | -- | Secure key zeroization |
+| Self-testing | FIPS KAT | -- | SHA3-256 + AES-256-GCM known answer tests |
 
-No deprecated cryptography. No runtime network dependencies. Air-gapped operation supported. 100/100 security score. Full threat model in [docs/security.md](docs/security.md).
+No deprecated cryptography. No runtime network dependencies. Air-gapped operation supported. Full threat model in [docs/security.md](docs/security.md).
 
 ---
 
@@ -279,6 +356,11 @@ Each independently useful. Together, the governed AI platform for autonomous org
 | [Trust Tiers](docs/trust-tiers.md) | Developers, Product |
 | [Knowledge Lifecycle](docs/lifecycle.md) | Developers, Compliance |
 | [Memory Layers](docs/memory-layers.md) | Developers, Architects |
+| [Multi-Tenancy](docs/multi-tenancy.md) | Developers, SaaS |
+| [Encryption](docs/encryption.md) | Developers, Security |
+| [RBAC](docs/rbac.md) | Developers, Compliance |
+| [Membrane](docs/membrane.md) | Developers, Security |
+| [Streaming & Telemetry](docs/streaming-and-telemetry.md) | DevOps, Observability |
 | [Plugin Development](docs/plugins.md) | SDK Authors |
 | [Security Model](docs/security.md) | CISOs, Security Teams |
 | [CLI Reference](docs/cli.md) | DevOps, Developers |
