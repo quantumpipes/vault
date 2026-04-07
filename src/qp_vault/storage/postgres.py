@@ -622,6 +622,22 @@ class PostgresBackend:
             )
             return int(row) if row else 0
 
+    async def find_by_cid(self, cid: str, tenant_id: str | None = None) -> Resource | None:
+        """Find a resource by content ID (for deduplication)."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            if tenant_id:
+                row = await conn.fetchrow(
+                    "SELECT * FROM qp_vault.resources WHERE cid = $1 AND tenant_id = $2 AND status != 'deleted' LIMIT 1",
+                    cid, tenant_id,
+                )
+            else:
+                row = await conn.fetchrow(
+                    "SELECT * FROM qp_vault.resources WHERE cid = $1 AND status != 'deleted' LIMIT 1",
+                    cid,
+                )
+            return _resource_from_record(dict(row)) if row else None
+
     async def close(self) -> None:
         """Close the connection pool."""
         if self._pool:

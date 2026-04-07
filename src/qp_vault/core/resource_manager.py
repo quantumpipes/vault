@@ -164,6 +164,11 @@ class ResourceManager:
         content_hash = compute_resource_hash(chunk_cids) if chunk_cids else compute_cid(text).split("/")[-1]
         resource_cid = f"vault://sha3-256/{content_hash}"
 
+        # Content deduplication: return existing resource if same CID + tenant
+        existing = await self._storage.find_by_cid(resource_cid, tenant_id=tenant_id)
+        if existing:
+            return existing
+
         # Create resource
         resource = Resource(
             id=resource_id,

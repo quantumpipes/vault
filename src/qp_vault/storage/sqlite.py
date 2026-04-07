@@ -629,6 +629,21 @@ class SQLiteBackend:
         ).fetchone()
         return row[0] if row else 0
 
+    async def find_by_cid(self, cid: str, tenant_id: str | None = None) -> Resource | None:
+        """Find a resource by content ID (for deduplication)."""
+        conn = self._get_conn()
+        if tenant_id:
+            row = conn.execute(
+                "SELECT * FROM resources WHERE cid = ? AND tenant_id = ? AND status != 'deleted' LIMIT 1",
+                (cid, tenant_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT * FROM resources WHERE cid = ? AND status != 'deleted' LIMIT 1",
+                (cid,),
+            ).fetchone()
+        return _resource_from_row(dict(row)) if row else None
+
     async def close(self) -> None:
         """Close the database connection."""
         if self._conn:

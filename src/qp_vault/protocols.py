@@ -165,6 +165,10 @@ class StorageBackend(Protocol):
         """Count non-deleted resources for a tenant (atomic)."""
         ...
 
+    async def find_by_cid(self, cid: str, tenant_id: str | None = None) -> Resource | None:
+        """Find an existing resource by content ID (for deduplication)."""
+        ...
+
 
 @runtime_checkable
 class EmbeddingProvider(Protocol):

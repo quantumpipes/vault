@@ -56,8 +56,8 @@ class PluginRegistry:
         """Invoke all registered hooks for an event."""
         for callback in self._hooks.get(event, []):
             try:
-                import asyncio
-                if asyncio.iscoroutinefunction(callback):
+                import inspect
+                if inspect.iscoroutinefunction(callback):
                     await callback(**kwargs)
                 else:
                     callback(**kwargs)

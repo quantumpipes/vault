@@ -220,6 +220,7 @@ class AsyncVault:
         )
 
         self._initialized = False
+        self._search_count = 0
 
         # Telemetry: operation tracking
         from qp_vault.telemetry import VaultTelemetry
@@ -481,7 +482,13 @@ class AsyncVault:
             )
 
         self._cache_invalidate()
+        await self._fire_hook("post_add", resource=resource)
         return resource
+
+    async def _fire_hook(self, event: str, **kwargs: Any) -> None:
+        """Fire plugin hooks (silent on failure)."""
+        from qp_vault.plugins.registry import get_registry
+        await get_registry().fire_hooks(event, **kwargs)
 
     async def get(self, resource_id: str) -> Resource:
         """Get a single resource by ID."""
@@ -566,6 +573,7 @@ class AsyncVault:
             metadata=metadata,
         )
         self._cache_invalidate()
+        await self._fire_hook("post_update", resource=result)
         return result
 
     async def delete(self, resource_id: str, *, hard: bool = False) -> None:
@@ -574,6 +582,7 @@ class AsyncVault:
         self._check_permission("delete")
         await self._resource_manager.delete(resource_id, hard=hard)
         self._cache_invalidate()
+        await self._fire_hook("post_delete", resource_id=resource_id)
 
     async def get_content(self, resource_id: str) -> str:
         """Retrieve the full text content of a resource.
@@ -770,7 +779,9 @@ class AsyncVault:
         """
         await self._ensure_initialized()
         self._check_permission("transition")
-        return await self._lifecycle.transition(resource_id, target, reason=reason)
+        result = await self._lifecycle.transition(resource_id, target, reason=reason)
+        await self._fire_hook("post_transition", resource=result, target=target)
+        return result
 
     async def supersede(
         self, old_id: str, new_id: str
@@ -825,6 +836,13 @@ class AsyncVault:
         await self._ensure_initialized()
         self._check_permission("search")
         tenant_id = self._resolve_tenant(tenant_id)
+
+        # Lazy expiration: check every 100 searches
+        self._search_count += 1
+        if self.config.auto_expire and self._search_count % 100 == 0:
+            import contextlib
+            with contextlib.suppress(Exception):
+                await self._lifecycle.check_expirations()
 
         # Generate query embedding if embedder available
         query_embedding = None
@@ -884,6 +902,7 @@ class AsyncVault:
                     }
                 }
 
+        await self._fire_hook("post_search", query=query, results=paginated)
         return paginated
 
     async def search_with_facets(
@@ -1229,6 +1248,23 @@ class AsyncVault:
     def register_policy(self, policy: PolicyProvider) -> None:
         """Register a governance policy."""
         self._policies.append(policy)
+
+    async def start_expiration_monitor(self, interval_seconds: int = 3600) -> None:
+        """Start a background task to auto-expire resources.
+
+        Checks for expired resources (past valid_until) and transitions
+        them to ARCHIVED. Runs every interval_seconds (default: 1 hour).
+
+        Call this once after initialization for long-running services.
+        """
+        async def _monitor() -> None:
+            while True:
+                await asyncio.sleep(interval_seconds)
+                import contextlib
+                with contextlib.suppress(Exception):
+                    await self._lifecycle.check_expirations()
+
+        self._expiration_task = asyncio.create_task(_monitor())
 
 
 def _run_async(coro: Any) -> Any:
