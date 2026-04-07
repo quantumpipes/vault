@@ -48,11 +48,16 @@ if TYPE_CHECKING:
 
 # --- Input Sanitization ---
 
+_MAX_NAME_LENGTH = 255
 _MAX_TAG_LENGTH = 100
 _MAX_TAGS = 50
 _MAX_METADATA_KEYS = 100
 _MAX_METADATA_KEY_LENGTH = 100
 _MAX_METADATA_VALUE_SIZE = 10_000
+_MAX_PATH_STRING_LENGTH = 4096
+_BYTES_PER_MB = 1024 * 1024
+_LIST_HARD_CAP = 50_000
+_LIST_BATCH_SIZE = 1000
 
 
 def _sanitize_name(name: str) -> str:
@@ -75,14 +80,14 @@ def _sanitize_name(name: str) -> str:
     name = name.strip(". ")
     if not name or name in (".", ".."):
         return "untitled"
-    return name[:255]
+    return name[:_MAX_NAME_LENGTH]
 
 
 def _sanitize_tags(tags: list[str]) -> list[str]:
     """Validate and sanitize tag list."""
     import re
     if len(tags) > _MAX_TAGS:
-        raise VaultError(f"Too many tags ({len(tags)}). Maximum: {_MAX_TAGS}")
+        raise VaultError(f"Too many tags ({len(tags)}), maximum {_MAX_TAGS}")
     clean: list[str] = []
     for tag in tags:
         if not isinstance(tag, str):
@@ -102,7 +107,7 @@ def _validate_metadata(metadata: dict[str, Any]) -> None:
     """Validate metadata keys and values for size and safety."""
     import re
     if len(metadata) > _MAX_METADATA_KEYS:
-        raise VaultError(f"Too many metadata keys ({len(metadata)}). Maximum: {_MAX_METADATA_KEYS}")
+        raise VaultError(f"Too many metadata keys ({len(metadata)}), maximum {_MAX_METADATA_KEYS}")
     for key, value in metadata.items():
         if not isinstance(key, str):
             raise VaultError(f"Metadata key must be a string, got {type(key).__name__}")
@@ -214,6 +219,7 @@ class AsyncVault:
         self._cache: dict[str, tuple[float, Any]] = {}
 
     async def _ensure_initialized(self) -> None:
+        """Initialize storage backend on first use (lazy init)."""
         if not self._initialized:
             await self._storage.initialize()
             self._initialized = True
@@ -350,7 +356,7 @@ class AsyncVault:
         # Resolve source to text
         # Guard against Path() on very long strings (OSError: filename too long)
         _is_path = isinstance(source, Path)
-        if not _is_path and isinstance(source, str) and len(source) < 4096:
+        if not _is_path and isinstance(source, str) and len(source) < _MAX_PATH_STRING_LENGTH:
             try:
                 _is_path = Path(source).exists()
             except OSError:
@@ -395,7 +401,7 @@ class AsyncVault:
 
         # Enforce max file size
         if self.config.max_file_size_mb is not None:
-            size_mb = len(text.encode("utf-8")) / (1024 * 1024)
+            size_mb = len(text.encode("utf-8")) / _BYTES_PER_MB
             if size_mb > self.config.max_file_size_mb:
                 raise VaultError(
                     f"Content exceeds max size of {self.config.max_file_size_mb}MB "
@@ -1016,7 +1022,7 @@ class AsyncVault:
             imported.append(resource)
         return imported
 
-    async def _list_all_bounded(self, *, hard_cap: int = 50_000, batch_size: int = 1000) -> list[Resource]:
+    async def _list_all_bounded(self, *, hard_cap: int = _LIST_HARD_CAP, batch_size: int = _LIST_BATCH_SIZE) -> list[Resource]:
         """Load all resources with pagination and a hard cap to prevent OOM."""
         all_resources: list[Resource] = []
         offset = 0
@@ -1125,7 +1131,23 @@ class Vault:
         policies: list[PolicyProvider] | None = None,
         config: VaultConfig | None = None,
         plugins_dir: str | Path | None = None,
+        tenant_id: str | None = None,
+        role: str | None = None,
     ) -> None:
+        """Create a synchronous Vault instance.
+
+        Args:
+            path: Directory path for vault storage.
+            storage: Custom storage backend (default: SQLite).
+            embedder: Custom embedding provider.
+            auditor: Custom audit provider (default: auto-detect Capsule or JSON log).
+            parsers: Custom file parsers.
+            policies: Governance policy providers.
+            config: Vault configuration overrides.
+            plugins_dir: Directory for local plugin discovery (air-gap mode).
+            tenant_id: Lock vault to a single tenant (enforced on all operations).
+            role: RBAC role ("reader", "writer", "admin", or None for no enforcement).
+        """
         self._async = AsyncVault(
             path,
             storage=storage,
@@ -1135,6 +1157,8 @@ class Vault:
             policies=policies,
             config=config,
             plugins_dir=plugins_dir,
+            tenant_id=tenant_id,
+            role=role,
         )
 
     def add(self, source: str | Path | bytes, **kwargs: Any) -> Resource:
