@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-04-06
+
+### Added
+- **Tenant lock enforcement**: `Vault(path, tenant_id="x")` now actively rejects operations with mismatched `tenant_id` and auto-injects the locked tenant when none is provided
+- **Query timeouts**: `_with_timeout()` wraps storage search with `asyncio.wait_for` and proper task cancellation on timeout. PostgreSQL pool gets `command_timeout` parameter
+- **Health/status response caching**: TTL-based cache (default 30s via `health_cache_ttl_seconds`) avoids full vault scans on repeated calls; cache invalidated on add/update/delete
+- **Atomic tenant quotas**: `count_resources()` Protocol method replaces the previous list+offset approach, eliminating TOCTOU race condition
+
+### Security
+- **Plugin manifest required**: `manifest.json` is now mandatory when `verify_hashes=True` (default). Files not listed in manifest are rejected. Entire directory skipped if manifest missing
+- **FastAPI validation**: `limit` (1-1000), `offset` (0-1M), `content` max_length (500MB) validated at API boundary
+- **Path traversal protection**: `add()` resolves paths and rejects those containing `..`
+- **ReDoS protection**: Membrane innate scan truncates content to 500KB before regex matching
+- **CLI error sanitization**: `_safe_error_message()` returns structured error codes, never raw exception details
+- **Unicode normalization**: `_sanitize_name()` applies NFC normalization to prevent homograph collisions
+- **Timeout cancellation**: Timed-out tasks are cancelled (not left running in background)
+
+### Fixed
+- **Sync Vault missing tenant_id/role**: `Vault.__init__` now accepts and passes `tenant_id` and `role` to `AsyncVault` (was silently ignoring both)
+- **mypy strict compliance**: 0 errors across 54 source files without disabling checks
+- **Abstraction leak**: `create_collection()` and `list_collections()` now use Protocol methods instead of directly accessing `_get_conn()`
+- **None-safety**: Added null checks before `.value` access in resource_manager and search_engine
+
+### Changed
+- All magic numbers extracted to named constants
+- All 16 StorageBackend Protocol methods have docstrings
+- Error message punctuation normalized
+
 ## [0.13.0] - 2026-04-07
 
 ### Added
@@ -183,7 +211,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Max file size enforcement (configurable)
 - Content null byte stripping on ingest
 
-[unreleased]: https://github.com/quantumpipes/vault/compare/v0.5.0...HEAD
+[unreleased]: https://github.com/quantumpipes/vault/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/quantumpipes/vault/compare/v0.13.0...v0.14.0
+[0.13.0]: https://github.com/quantumpipes/vault/compare/v0.12.0...v0.13.0
+[0.12.0]: https://github.com/quantumpipes/vault/compare/v0.11.0...v0.12.0
+[0.11.0]: https://github.com/quantumpipes/vault/compare/v0.10.0...v0.11.0
+[0.10.0]: https://github.com/quantumpipes/vault/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/quantumpipes/vault/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/quantumpipes/vault/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/quantumpipes/vault/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/quantumpipes/vault/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/quantumpipes/vault/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/quantumpipes/vault/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/quantumpipes/vault/compare/v0.2.0...v0.3.0
