@@ -197,15 +197,31 @@ class SQLiteBackend:
             self._conn.execute("PRAGMA foreign_keys=ON")
         return self._conn
 
+    @staticmethod
+    def _restrict_file_permissions(path: Path) -> None:
+        """Set file to owner-only read/write (0600)."""
+        import os
+        import stat
+        if path.exists():
+            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+
     async def initialize(self) -> None:
         """Create tables and indexes."""
         import contextlib
 
+        created = not self.db_path.exists()
         conn = self._get_conn()
         conn.executescript(_SCHEMA)
         with contextlib.suppress(sqlite3.OperationalError):
             conn.executescript(_FTS_SCHEMA)
         conn.commit()
+
+        # Restrict file permissions on new databases (owner-only rw)
+        if created:
+            self._restrict_file_permissions(self.db_path)
+            for suffix in ("-wal", "-shm"):
+                wal_path = self.db_path.with_name(self.db_path.name + suffix)
+                self._restrict_file_permissions(wal_path)
 
     async def store_resource(self, resource: Resource) -> str:
         """Store a resource. Returns resource ID."""

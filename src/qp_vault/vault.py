@@ -421,11 +421,14 @@ class AsyncVault:
         text = text.replace("\x00", "")
 
         # Membrane screening (if pipeline configured)
+        _quarantine = False
         if self._membrane_pipeline:
+            from qp_vault.enums import MembraneResult
             membrane_result = await self._membrane_pipeline.screen(text)
+            if membrane_result.overall_result == MembraneResult.FAIL:
+                raise VaultError("Content rejected by Membrane screening")
             if membrane_result.recommended_status.value == "quarantined":
-                # Store but quarantine; caller can check resource.status
-                pass  # Status will be set by Membrane result below
+                _quarantine = True
 
         resource = await self._resource_manager.add(
             text,
@@ -441,6 +444,18 @@ class AsyncVault:
             valid_until=valid_until,
             tenant_id=tenant_id,
         )
+
+        # If Membrane flagged content, mark as quarantined + suspicious
+        if _quarantine:
+            from qp_vault.protocols import ResourceUpdate
+            await self._storage.update_resource(
+                resource.id,
+                ResourceUpdate(adversarial_status="suspicious"),
+            )
+            resource = resource.model_copy(
+                update={"status": ResourceStatus.QUARANTINED, "adversarial_status": "suspicious"}
+            )
+
         self._cache_invalidate()
         return resource
 
@@ -523,6 +538,14 @@ class AsyncVault:
         """
         await self._ensure_initialized()
         self._check_permission("get_content")
+
+        # Block content retrieval for quarantined resources
+        resource = await self._resource_manager.get(resource_id)
+        if resource.status == ResourceStatus.QUARANTINED:
+            raise VaultError(
+                f"Resource {resource_id} is quarantined by Membrane screening"
+            )
+
         chunks = await self._storage.get_chunks_for_resource(resource_id)
         if not chunks:
             raise VaultError(f"No content found for resource {resource_id}")
@@ -987,7 +1010,7 @@ class AsyncVault:
         self._check_permission("export_vault")
         resources: list[Resource] = await self._list_all_bounded()
         data = {
-            "version": "0.14.0",
+            "version": "0.15.0",
             "resource_count": len(resources),
             "resources": [r.model_dump(mode="json") for r in resources],
         }

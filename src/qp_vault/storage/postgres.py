@@ -189,7 +189,13 @@ class PostgresBackend:
     """
 
     def __init__(
-        self, dsn: str, *, embedding_dimensions: int = 768, command_timeout: float = 30.0
+        self,
+        dsn: str,
+        *,
+        embedding_dimensions: int = 768,
+        command_timeout: float = 30.0,
+        ssl: bool = True,
+        ssl_verify: bool = False,
     ) -> None:
         if not HAS_ASYNCPG:
             raise ImportError(
@@ -199,17 +205,35 @@ class PostgresBackend:
         self._dsn = dsn
         self._dimensions = embedding_dimensions
         self._command_timeout = command_timeout
+        self._ssl = ssl
+        self._ssl_verify = ssl_verify
         self._pool: Any = None
 
     async def _get_pool(self) -> Any:
         """Get or create connection pool."""
         if self._pool is None:
-            self._pool = await asyncpg.create_pool(
-                self._dsn,
-                min_size=2,
-                max_size=10,
-                command_timeout=self._command_timeout,
-            )
+            import ssl as _ssl
+
+            ssl_context: Any = None
+            if "sslmode=disable" in self._dsn:
+                ssl_context = False
+            elif self._ssl:
+                ssl_context = _ssl.create_default_context()
+                if not self._ssl_verify:
+                    ssl_context.check_hostname = False
+                    ssl_context.verify_mode = _ssl.CERT_NONE
+
+            pool_kwargs: dict[str, Any] = {
+                "min_size": 2,
+                "max_size": 10,
+                "command_timeout": self._command_timeout,
+            }
+            if ssl_context is not None and ssl_context is not False:
+                pool_kwargs["ssl"] = ssl_context
+            elif ssl_context is False:
+                pass  # Explicitly disabled via DSN
+
+            self._pool = await asyncpg.create_pool(self._dsn, **pool_kwargs)
         return self._pool
 
     async def initialize(self) -> None:

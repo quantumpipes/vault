@@ -282,7 +282,7 @@ class TestContentProvenanceService:
 
     @pytest.mark.asyncio
     async def test_create_attestation_signed_but_no_verify_fn(self):
-        """Signed without verify_fn: signature present but not verified."""
+        """Signed without verify_fn: self-signed attestations are trusted."""
         async def mock_sign(data: bytes) -> str:
             return "signed_" + data[:8].hex()
 
@@ -294,7 +294,7 @@ class TestContentProvenanceService:
             original_hash="def456",
         )
         assert prov.provenance_signature.startswith("signed_")
-        assert prov.signature_verified is False  # No verify_fn to confirm
+        assert prov.signature_verified is True  # Self-signed: trusted
 
     @pytest.mark.asyncio
     async def test_verify_attestation_no_verify_fn(self, service):

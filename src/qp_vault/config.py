@@ -26,6 +26,8 @@ class VaultConfig(BaseModel):
     # Storage
     backend: str = "sqlite"
     postgres_dsn: str | None = None
+    postgres_ssl: bool = True  # Require SSL for PostgreSQL connections
+    postgres_ssl_verify: bool = False  # Allow self-signed certs (dev-friendly default)
 
     # Chunking
     chunk_target_tokens: int = 512
