@@ -13,11 +13,17 @@ Zero config. SQLite backend, trust-weighted search, content-addressed storage, M
 For additional features:
 
 ```bash
+pip install qp-vault[sqlite]         # Async SQLite (aiosqlite)
+pip install qp-vault[postgres]       # PostgreSQL + pgvector hybrid search
 pip install qp-vault[encryption]     # AES-256-GCM encryption at rest
 pip install qp-vault[pq]             # ML-KEM-768 + ML-DSA-65 post-quantum crypto
-pip install qp-vault[cli]            # vault command-line tool (15 commands)
-pip install qp-vault[fastapi]        # 22+ REST API endpoints
+pip install qp-vault[capsule]        # Cryptographic audit trail via qp-capsule
+pip install qp-vault[docling]        # 25+ document formats (PDF, DOCX, PPTX, etc.)
 pip install qp-vault[local]          # Local embeddings (sentence-transformers, air-gap)
+pip install qp-vault[openai]         # OpenAI embeddings (cloud)
+pip install qp-vault[integrity]      # Near-duplicate + contradiction detection (numpy)
+pip install qp-vault[fastapi]        # 22+ REST API endpoints
+pip install qp-vault[cli]            # vault command-line tool (15 commands)
 pip install qp-vault[all]            # Everything
 ```
 
