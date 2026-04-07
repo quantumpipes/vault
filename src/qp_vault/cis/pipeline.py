@@ -54,7 +54,7 @@ class CISPipeline:
                     CISStageRecord(
                         stage=CISStage.RELEASE,
                         result=CISResult.PASS,  # nosec B105
-                        details={"decision": "released", "reason": "CIS disabled"},
+                        reasoning="Released: screening disabled",
                     ),
                 ],
                 overall_result=CISResult.PASS,  # nosec B105
