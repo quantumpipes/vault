@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-04-07
+
+### Added
+- **RBAC framework**: Role enum (READER, WRITER, ADMIN) with permission matrix. Enforced at Vault API boundary.
+- **Key zeroization**: `zeroize()` function using ctypes memset for secure key erasure
+- **FIPS Known Answer Tests**: `run_all_kat()` for SHA3-256 and AES-256-GCM self-testing
+- **Structured error codes**: All exceptions have machine-readable codes (VAULT_000 through VAULT_700)
+- **Query timeout config**: `query_timeout_ms` in VaultConfig (default 30s)
+- **Health response caching**: `health_cache_ttl_seconds` in VaultConfig (default 30s)
+
+### Security
+- RBAC permission checks on all Vault methods
+- PermissionError (VAULT_700) for unauthorized operations
+
 ## [0.12.0] - 2026-04-06
 
 ### Added
