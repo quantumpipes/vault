@@ -640,6 +640,15 @@ class PostgresBackend:
                 )
             return _resource_from_record(dict(row)) if row else None
 
+    async def get_embedding_dimension(self) -> int | None:
+        """Return embedding dimension from first chunk with embeddings, or None."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchval(
+                "SELECT vector_dims(embedding) FROM qp_vault.chunks WHERE embedding IS NOT NULL LIMIT 1"
+            )
+            return int(row) if row else None
+
     async def close(self) -> None:
         """Close the connection pool."""
         if self._pool:

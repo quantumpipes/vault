@@ -213,10 +213,17 @@ class AsyncVault:
 
         # Membrane pipeline (with optional LLM-based adaptive scan)
         from qp_vault.membrane.adaptive_scan import AdaptiveScanConfig
+        from qp_vault.membrane.correlate import CorrelateConfig
         from qp_vault.membrane.pipeline import MembranePipeline
+        from qp_vault.membrane.remember import get_attack_registry
         adaptive_config = AdaptiveScanConfig(screener=llm_screener) if llm_screener else None
+        correlate_config = CorrelateConfig(
+            screener=llm_screener, vault=self, tenant_id=tenant_id,
+        ) if llm_screener else None
         self._membrane_pipeline: MembranePipeline | None = MembranePipeline(
             adaptive_config=adaptive_config,
+            correlate_config=correlate_config,
+            attack_registry=get_attack_registry(),
         )
 
         self._initialized = False
@@ -233,6 +240,17 @@ class AsyncVault:
         """Initialize storage backend on first use (lazy init)."""
         if not self._initialized:
             await self._storage.initialize()
+
+            # Check embedding dimension consistency
+            if self._embedder and self._embedder.dimensions > 0:
+                existing_dim = await self._storage.get_embedding_dimension()
+                if existing_dim is not None and existing_dim != self._embedder.dimensions:
+                    raise VaultError(
+                        f"Embedding dimension mismatch: existing={existing_dim}, "
+                        f"new={self._embedder.dimensions}. Cannot mix embedders. "
+                        "Re-embed all resources or use a compatible model."
+                    )
+
             self._initialized = True
 
     def _check_permission(self, operation: str) -> None:
@@ -801,6 +819,42 @@ class AsyncVault:
         await self._ensure_initialized()
         return await self._lifecycle.chain(resource_id)
 
+    async def diff(self, old_id: str, new_id: str) -> dict[str, Any]:
+        """Compare two resource versions (unified diff).
+
+        Args:
+            old_id: The older resource ID.
+            new_id: The newer resource ID.
+
+        Returns:
+            Dict with old_id, new_id, additions, deletions, and diff text.
+        """
+        await self._ensure_initialized()
+        import difflib
+
+        old_content = await self.get_content(old_id)
+        new_content = await self.get_content(new_id)
+
+        old_resource = await self.get(old_id)
+        new_resource = await self.get(new_id)
+
+        diff_lines = list(difflib.unified_diff(
+            old_content.splitlines(keepends=True),
+            new_content.splitlines(keepends=True),
+            fromfile=old_resource.name,
+            tofile=new_resource.name,
+        ))
+
+        return {
+            "old_id": old_id,
+            "new_id": new_id,
+            "old_name": old_resource.name,
+            "new_name": new_resource.name,
+            "additions": sum(1 for line in diff_lines if line.startswith("+") and not line.startswith("+++")),
+            "deletions": sum(1 for line in diff_lines if line.startswith("-") and not line.startswith("---")),
+            "diff": "".join(diff_lines),
+        }
+
     # --- Search ---
 
     async def search(
@@ -901,6 +955,10 @@ class AsyncVault:
                         "composite_relevance": r.relevance,
                     }
                 }
+
+        # SURVEIL: query-time re-evaluation
+        from qp_vault.membrane.surveil import apply_surveil
+        paginated = apply_surveil(paginated)
 
         await self._fire_hook("post_search", query=query, results=paginated)
         return paginated
@@ -1407,6 +1465,11 @@ class Vault:
     def chain(self, resource_id: str) -> list[Resource]:
         """Get supersession chain."""
         return cast("list[Resource]", _run_async(self._async.chain(resource_id)))
+
+    def diff(self, old_id: str, new_id: str) -> dict[str, Any]:
+        """Compare two resource versions."""
+        result: dict[str, Any] = _run_async(self._async.diff(old_id, new_id))
+        return result
 
     def export_proof(self, resource_id: str) -> MerkleProof:
         """Export Merkle proof for auditors."""

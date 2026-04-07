@@ -169,6 +169,10 @@ class StorageBackend(Protocol):
         """Find an existing resource by content ID (for deduplication)."""
         ...
 
+    async def get_embedding_dimension(self) -> int | None:
+        """Return the embedding dimension of stored vectors, or None if empty."""
+        ...
+
 
 @runtime_checkable
 class EmbeddingProvider(Protocol):

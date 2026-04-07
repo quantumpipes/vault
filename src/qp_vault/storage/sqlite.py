@@ -644,6 +644,18 @@ class SQLiteBackend:
             ).fetchone()
         return _resource_from_row(dict(row)) if row else None
 
+    async def get_embedding_dimension(self) -> int | None:
+        """Return embedding dimension from first chunk with embeddings, or None."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT embedding FROM chunks WHERE embedding IS NOT NULL AND embedding != '[]' LIMIT 1"
+        ).fetchone()
+        if row and row["embedding"]:
+            import json
+            emb = json.loads(row["embedding"])
+            return len(emb) if isinstance(emb, list) else None
+        return None
+
     async def close(self) -> None:
         """Close the database connection."""
         if self._conn:

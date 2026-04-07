@@ -4,9 +4,11 @@
 """Membrane Pipeline: orchestrates multi-stage content screening.
 
 Runs content through the Membrane stages:
-1. INNATE_SCAN: pattern-based detection (regex, blocklists)
-2. ADAPTIVE_SCAN: LLM-based semantic screening (optional, requires LLMScreener)
-3. RELEASE: risk-proportionate gating decision
+1. REMEMBER: check against known attack pattern registry (fast pre-check)
+2. INNATE_SCAN: pattern-based detection (regex, blocklists)
+3. ADAPTIVE_SCAN: LLM-based semantic screening (optional)
+4. CORRELATE: cross-document contradiction detection (optional)
+5. RELEASE: risk-proportionate gating decision
 
 Stages are sequential. Each produces a MembraneStageRecord. The release
 gate aggregates all prior results into a final pass/quarantine/reject decision.
@@ -23,6 +25,8 @@ from qp_vault.models import MembranePipelineStatus, MembraneStageRecord
 
 if TYPE_CHECKING:
     from qp_vault.membrane.adaptive_scan import AdaptiveScanConfig
+    from qp_vault.membrane.correlate import CorrelateConfig
+    from qp_vault.membrane.remember import AttackRegistry
 
 
 class MembranePipeline:
@@ -34,7 +38,8 @@ class MembranePipeline:
     Args:
         innate_config: Configuration for the innate scan stage.
         adaptive_config: Configuration for the adaptive (LLM) scan stage.
-                        If None or screener is None, adaptive scan is skipped.
+        correlate_config: Configuration for cross-document correlation.
+        attack_registry: Attack pattern registry for the REMEMBER stage.
         enabled: Whether Membrane screening is active. Default True.
     """
 
@@ -43,10 +48,14 @@ class MembranePipeline:
         *,
         innate_config: InnateScanConfig | None = None,
         adaptive_config: AdaptiveScanConfig | None = None,
+        correlate_config: CorrelateConfig | None = None,
+        attack_registry: AttackRegistry | None = None,
         enabled: bool = True,
     ) -> None:
         self._innate_config = innate_config
         self._adaptive_config = adaptive_config
+        self._correlate_config = correlate_config
+        self._attack_registry = attack_registry
         self._enabled = enabled
 
     async def screen(self, content: str) -> MembranePipelineStatus:
@@ -73,16 +82,26 @@ class MembranePipeline:
 
         stages: list[MembraneStageRecord] = []
 
-        # Stage 1: Innate scan (regex patterns)
+        # Stage 1: REMEMBER (fast pre-check against known attack patterns)
+        from qp_vault.membrane.remember import run_remember
+        remember_result = await run_remember(content, self._attack_registry)
+        stages.append(remember_result)
+
+        # Stage 2: Innate scan (regex patterns)
         innate_result = await run_innate_scan(content, self._innate_config)
         stages.append(innate_result)
 
-        # Stage 2: Adaptive scan (LLM-based, optional)
+        # Stage 3: Adaptive scan (LLM-based, optional)
         from qp_vault.membrane.adaptive_scan import run_adaptive_scan
         adaptive_result = await run_adaptive_scan(content, self._adaptive_config)
         stages.append(adaptive_result)
 
-        # Stage 3: Release gate (aggregates all prior results)
+        # Stage 4: Correlate (cross-document contradiction, optional)
+        from qp_vault.membrane.correlate import run_correlate
+        correlate_result = await run_correlate(content, self._correlate_config)
+        stages.append(correlate_result)
+
+        # Stage 5: Release gate (aggregates all prior results)
         release_result = await evaluate_release(stages)
         stages.append(release_result)
 
@@ -96,6 +115,13 @@ class MembranePipeline:
         # Compute aggregate risk score from non-skipped stages
         risk_scores = [s.risk_score for s in stages if s.result != MembraneResult.SKIP]
         aggregate_risk = max(risk_scores) if risk_scores else 0.0
+
+        # Learn from flagged content (feed REMEMBER registry)
+        if overall in (MembraneResult.FAIL, MembraneResult.FLAG) and self._attack_registry:
+            all_flags = []
+            for s in stages:
+                all_flags.extend(s.matched_patterns)
+            self._attack_registry.learn(content, all_flags, aggregate_risk)
 
         return MembranePipelineStatus(
             stages=stages,
