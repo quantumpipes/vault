@@ -36,7 +36,7 @@ class SentenceTransformerEmbedder:
 
     @property
     def dimensions(self) -> int:
-        return int(self._dimensions)
+        return int(self._dimensions or 0)
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a batch of texts."""

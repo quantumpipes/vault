@@ -235,9 +235,16 @@ class TestVaultStatus:
 
 
 class TestVaultAuditTrail:
-    def test_audit_log_created(self, vault):
+    def test_audit_log_created(self, tmp_path):
+        """Audit trail is created when LogAuditor is used explicitly."""
+        from qp_vault.audit.log_auditor import LogAuditor
+
+        log_path = tmp_path / "audit-vault" / "audit.jsonl"
+        vault = Vault(
+            tmp_path / "audit-vault",
+            auditor=LogAuditor(log_path),
+        )
         vault.add("Audit test", name="audit.md")
-        log_path = vault._async.path / "audit.jsonl"
         assert log_path.exists()
 
         import json
