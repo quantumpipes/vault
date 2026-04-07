@@ -35,23 +35,23 @@ async def evaluate_release(
     has_flag = any(r.result == CISResult.FLAG for r in stage_records)
 
     if has_fail:
-        failed_stages = [r.stage.value for r in stage_records if r.result == CISResult.FAIL]
+        failed = [r.stage.value for r in stage_records if r.result == CISResult.FAIL]
         return CISStageRecord(
             stage=CISStage.RELEASE,
             result=CISResult.FAIL,
-            details={"decision": "rejected", "failed_stages": failed_stages},
+            reasoning=f"Rejected: {', '.join(failed)} failed",
         )
 
     if has_flag:
-        flagged_stages = [r.stage.value for r in stage_records if r.result == CISResult.FLAG]
+        flagged = [r.stage.value for r in stage_records if r.result == CISResult.FLAG]
         return CISStageRecord(
             stage=CISStage.RELEASE,
             result=CISResult.FLAG,
-            details={"decision": "quarantined", "flagged_stages": flagged_stages},
+            reasoning=f"Quarantined: {', '.join(flagged)} flagged",
         )
 
     return CISStageRecord(
         stage=CISStage.RELEASE,
         result=CISResult.PASS,  # nosec B105
-        details={"decision": "released", "stages_passed": len(stage_records)},
+        reasoning=f"Released: {len(stage_records)} stages passed",
     )

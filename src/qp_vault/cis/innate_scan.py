@@ -76,14 +76,12 @@ async def run_innate_scan(
         return CISStageRecord(
             stage=CISStage.INNATE_SCAN,
             result=CISResult.FLAG,
-            details={
-                "matched_patterns": len(matches),
-                "patterns": matches[:5],  # Limit detail to first 5
-            },
+            matched_patterns=matches[:5],
+            reasoning=f"Matched {len(matches)} blocklist patterns",
         )
 
     return CISStageRecord(
         stage=CISStage.INNATE_SCAN,
         result=CISResult.PASS,  # nosec B105 — CIS stage result, not a password
-        details={"patterns_checked": len(config.blocklist_patterns)},
+        reasoning=f"Checked {len(config.blocklist_patterns)} patterns, none matched",
     )

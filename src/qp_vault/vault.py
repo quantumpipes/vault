@@ -1109,9 +1109,9 @@ class Vault:
         result: list[dict[str, Any]] = _run_async(self._async.list_collections(**kwargs))
         return result
 
-    def health(self) -> HealthScore:
-        """Compute vault health score."""
-        result: HealthScore = _run_async(self._async.health())
+    def health(self, resource_id: str | None = None) -> HealthScore:
+        """Compute vault or per-resource health score."""
+        result: HealthScore = _run_async(self._async.health(resource_id))
         return result
 
     def status(self) -> dict[str, Any]:
