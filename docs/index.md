@@ -12,10 +12,15 @@ Governed knowledge store for autonomous organizations. Every fact has provenance
 | [Trust Tiers](trust-tiers.md) | CANONICAL, WORKING, EPHEMERAL, ARCHIVED and search weighting |
 | [Knowledge Lifecycle](lifecycle.md) | State machine, supersession chains, temporal validity |
 | [Memory Layers](memory-layers.md) | OPERATIONAL, STRATEGIC, COMPLIANCE with per-layer defaults |
+| [Multi-Tenancy](multi-tenancy.md) | Tenant isolation, tenant-locked vaults, per-tenant quotas |
+| [Encryption](encryption.md) | AES-256-GCM, ML-KEM-768, ML-DSA-65, hybrid encryption |
+| [RBAC](rbac.md) | Reader/Writer/Admin roles, permission matrix, structured error codes |
+| [Membrane](membrane.md) | Content screening pipeline (innate scan, release gate) |
 | [Plugin Development](plugins.md) | @embedder, @parser, @policy decorators, air-gap loading |
 | [Security Model](security.md) | SHA3-256, Merkle trees, input validation, threat model |
-| [CLI Reference](cli.md) | vault init, add, search, inspect, verify, health, status |
-| [FastAPI Integration](fastapi.md) | REST API routes, endpoints, request/response models |
+| [Streaming & Telemetry](streaming-and-telemetry.md) | Real-time events, operation metrics |
+| [CLI Reference](cli.md) | All 15 commands |
+| [FastAPI Integration](fastapi.md) | 22+ REST endpoints |
 
 ## Quick Start
 
@@ -31,8 +36,8 @@ print(results[0].content, results[0].trust_tier)
 ## Installation
 
 ```bash
-pip install qp-vault                # SQLite, basic search, trust tiers
-pip install qp-vault[postgres]      # + PostgreSQL + pgvector
-pip install qp-vault[capsule]       # + Cryptographic audit trail
-pip install qp-vault[all]          # Everything
+pip install qp-vault                    # SQLite, basic search, trust tiers
+pip install qp-vault[encryption]        # + AES-256-GCM
+pip install qp-vault[pq]               # + ML-KEM-768, ML-DSA-65
+pip install qp-vault[all]              # Everything
 ```

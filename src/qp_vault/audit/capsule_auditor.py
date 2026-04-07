@@ -1,9 +1,12 @@
+# Copyright 2026 Quantum Pipes Technologies, LLC
+# SPDX-License-Identifier: Apache-2.0
+
 """Capsule Protocol auditor for qp-vault.
 
-Creates a cryptographically sealed Capsule for each VaultEvent.
-Requires: pip install qp-vault[capsule]
+Creates a cryptographically sealed Capsule for each VaultEvent
+using the typed Section API from qp-capsule.
 
-Falls back gracefully if qp-capsule is not installed.
+Requires: pip install qp-vault[capsule]
 """
 
 from __future__ import annotations
@@ -14,7 +17,15 @@ if TYPE_CHECKING:
     from qp_vault.models import VaultEvent
 
 try:
-    from qp_capsule import Capsule, CapsuleType, Seal  # noqa: F401
+    from qp_capsule import (
+        Capsule,
+        CapsuleType,
+        ContextSection,
+        ExecutionSection,
+        OutcomeSection,
+        Seal,
+        TriggerSection,
+    )
     HAS_CAPSULE = True
 except ImportError:
     HAS_CAPSULE = False
@@ -23,11 +34,8 @@ except ImportError:
 class CapsuleAuditor:
     """Audit provider that creates Capsule records for vault operations.
 
-    Each VaultEvent becomes a sealed Capsule with:
-    - Trigger: event type + resource ID
-    - Context: resource hash, trust tier, timestamp
-    - Execution: operation details
-    - Outcome: success/failure
+    Uses qp-capsule's typed Section objects (TriggerSection, ContextSection,
+    ExecutionSection, OutcomeSection) for proper serialization and sealing.
 
     Requires qp-capsule >= 1.5 to be installed.
     """
@@ -46,6 +54,7 @@ class CapsuleAuditor:
             )
         self._chain = chain
         self._signing_key = signing_key
+        self._seal = Seal() if signing_key is None else Seal(signing_key)
 
     async def record(self, event: VaultEvent) -> str:
         """Record a vault event as a sealed Capsule.
@@ -53,38 +62,41 @@ class CapsuleAuditor:
         Returns:
             Capsule ID string.
         """
-        event_type_val = event.event_type.value if hasattr(event.event_type, "value") else str(event.event_type)
-
-        capsule = Capsule(
-            capsule_type=CapsuleType.VAULT if hasattr(CapsuleType, "VAULT") else CapsuleType.GENERAL,
-            trigger={
-                "type": "vault_operation",
-                "event": event_type_val,
-                "resource_id": event.resource_id,
-            },
-            context={
-                "resource_name": event.resource_name,
-                "resource_hash": event.resource_hash,
-                "actor": event.actor,
-                "timestamp": event.timestamp.isoformat(),
-            },
-            execution={
-                "actions": [event_type_val],
-                "details": event.details,
-            },
-            outcome={
-                "status": "success",
-                "event_type": event_type_val,
-            },
+        event_type_val = (
+            event.event_type.value
+            if hasattr(event.event_type, "value")
+            else str(event.event_type)
         )
 
-        # Seal with signing key if available
-        if self._signing_key:
-            seal = Seal.create(capsule, self._signing_key)
-            capsule.seal = seal
+        capsule = Capsule(
+            type=CapsuleType.VAULT if hasattr(CapsuleType, "VAULT") else CapsuleType.GENERAL,
+            trigger=TriggerSection(
+                type="vault_operation",
+                source=f"qp-vault/{event_type_val}",
+                request=f"{event_type_val} {event.resource_name}",
+            ),
+            context=ContextSection(
+                agent_id="qp-vault",
+                environment={
+                    "resource_id": event.resource_id,
+                    "resource_hash": event.resource_hash,
+                    "actor": event.actor or "system",
+                },
+            ),
+            execution=ExecutionSection(
+                tool_calls=[],
+            ),
+            outcome=OutcomeSection(
+                status="success",
+                summary=f"Vault {event_type_val}: {event.resource_name}",
+            ),
+        )
+
+        # Seal the capsule
+        self._seal.seal(capsule)
 
         # Add to chain if available
         if self._chain:
-            self._chain.append(capsule)
+            await self._chain.seal_and_store(capsule, self._seal)
 
         return str(capsule.id) if hasattr(capsule, "id") else event.resource_id

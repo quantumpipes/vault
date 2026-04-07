@@ -224,17 +224,17 @@ class PostgresBackend:
                     """INSERT INTO qp_vault.resources (
                         id, name, content_hash, cid, merkle_root,
                         trust_tier, data_classification, resource_type,
-                        status, lifecycle, valid_from, valid_until,
-                        supersedes, superseded_by, collection_id, layer,
+                        status, lifecycle, adversarial_status, valid_from, valid_until,
+                        supersedes, superseded_by, tenant_id, collection_id, layer,
                         tags, metadata, mime_type, size_bytes, chunk_count,
                         created_at, updated_at, indexed_at, deleted_at
                     ) VALUES (
                         $1, $2, $3, $4, $5,
                         $6, $7, $8,
-                        $9, $10, $11, $12,
-                        $13, $14, $15, $16,
-                        $17, $18, $19, $20, $21,
-                        $22, $23, $24, $25
+                        $9, $10, $11, $12, $13,
+                        $14, $15, $16, $17, $18,
+                        $19, $20, $21, $22, $23,
+                        $24, $25, $26, $27
                     )""",
                     resource.id,
                     resource.name,
@@ -246,10 +246,12 @@ class PostgresBackend:
                     _enum_val(resource.resource_type),
                     _enum_val(resource.status),
                     _enum_val(resource.lifecycle),
+                    _enum_val(getattr(resource, "adversarial_status", "unverified")),
                     resource.valid_from,
                     resource.valid_until,
                     resource.supersedes,
                     resource.superseded_by,
+                    resource.tenant_id,
                     resource.collection_id,
                     _enum_val(resource.layer) if resource.layer else None,
                     json.dumps(resource.tags),
@@ -284,6 +286,10 @@ class PostgresBackend:
         params: list[Any] = []
         idx = 1
 
+        if filters.tenant_id:
+            conditions.append(f"tenant_id = ${idx}")
+            params.append(filters.tenant_id)
+            idx += 1
         if filters.trust_tier:
             conditions.append(f"trust_tier = ${idx}")
             params.append(filters.trust_tier)
