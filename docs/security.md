@@ -1,6 +1,6 @@
 # Security Model
 
-qp-vault's security architecture for v0.15.0.
+qp-vault's security architecture for v1.0.0.
 
 ## Cryptographic Inventory
 

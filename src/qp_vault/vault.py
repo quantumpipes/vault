@@ -1079,7 +1079,7 @@ class AsyncVault:
         self._check_permission("export_vault")
         resources: list[Resource] = await self._list_all_bounded()
         data = {
-            "version": "0.16.0",
+            "version": "1.0.0",
             "resource_count": len(resources),
             "resources": [r.model_dump(mode="json") for r in resources],
         }

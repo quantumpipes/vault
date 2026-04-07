@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "qp-vault"
-version = "0.16.0"
+version = "1.0.0"
 description = "Governed knowledge store for autonomous organizations. Trust tiers, cryptographic audit trails, content-addressed storage, air-gap native."
 readme = "README.md"
 license = "Apache-2.0"

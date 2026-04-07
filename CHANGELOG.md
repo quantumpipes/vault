@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-07
+
+### Added
+- `vault.upsert(source, name=...)`: add-or-replace atomically. Supersedes existing resource with same name + tenant
+- `vault.get_multiple(resource_ids)`: batch retrieval in a single query (added to Protocol, both backends)
+- Migration guide: `docs/migration.md`
+- Deployment guide: `docs/deployment.md` (PostgreSQL, SSL, encryption, scaling)
+- Troubleshooting guide: `docs/troubleshooting.md` (error codes, common issues)
+
+### Changed
+- **BREAKING**: `trust` parameter renamed to `trust_tier` on `add()`, `list()`, `update()`, `add_batch()`, `replace()`
+- **BREAKING**: `trust_min` parameter renamed to `min_trust_tier` on `search()`, `search_with_facets()`
+- **BREAKING**: `LayerDefaults.trust` field renamed to `LayerDefaults.trust_tier`
+- Classifier upgraded from "Alpha" to "Production/Stable"
+
 ## [0.16.0] - 2026-04-06
 
 ### Added
@@ -238,7 +253,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Max file size enforcement (configurable)
 - Content null byte stripping on ingest
 
-[unreleased]: https://github.com/quantumpipes/vault/compare/v0.16.0...HEAD
+[unreleased]: https://github.com/quantumpipes/vault/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/quantumpipes/vault/compare/v0.16.0...v1.0.0
 [0.16.0]: https://github.com/quantumpipes/vault/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/quantumpipes/vault/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/quantumpipes/vault/compare/v0.13.0...v0.14.0
