@@ -1,26 +1,26 @@
 # API Reference
 
-Complete Python SDK for qp-vault. Both `Vault` (sync) and `AsyncVault` (async) share the same interface.
+Complete Python SDK for qp-vault v0.13.0.
 
-## Vault / AsyncVault
-
-### Constructor
+## Constructor
 
 ```python
 Vault(
     path: str | Path,
     *,
     storage: StorageBackend | None = None,      # Default: SQLite
-    embedder: EmbeddingProvider | None = None,   # Default: None (no embeddings)
-    auditor: AuditProvider | None = None,        # Default: LogAuditor (JSON lines)
+    embedder: EmbeddingProvider | None = None,   # Default: None
+    auditor: AuditProvider | None = None,        # Default: LogAuditor (auto-detects CapsuleAuditor)
     parsers: list[ParserProvider] | None = None,
     policies: list[PolicyProvider] | None = None,
     config: VaultConfig | None = None,
     plugins_dir: str | Path | None = None,       # Air-gap plugin directory
+    tenant_id: str | None = None,                # Lock vault to single tenant
+    role: str | None = None,                     # RBAC: "reader", "writer", "admin", or None
 )
 ```
 
-<!-- VERIFIED: vault.py:126-137 — AsyncVault.__init__ signature -->
+<!-- VERIFIED: vault.py:132-145 -->
 
 ### Factory Methods
 
@@ -28,8 +28,6 @@ Vault(
 Vault.from_postgres(dsn: str, **kwargs) -> Vault
 Vault.from_config(config_path: str | Path) -> Vault
 ```
-
-<!-- VERIFIED: vault.py:755-768 — factory methods in sync Vault -->
 
 ---
 
@@ -41,24 +39,37 @@ Vault.from_config(config_path: str | Path) -> Vault
 vault.add(
     source: str | Path | bytes,
     *,
-    name: str | None = None,                          # Auto-detected from file path
+    name: str | None = None,
     trust: TrustTier | str = "working",
     classification: DataClassification | str = "internal",
     layer: MemoryLayer | str | None = None,
     collection: str | None = None,
-    tags: list[str] | None = None,                    # Max 50 tags, 100 chars each
-    metadata: dict[str, Any] | None = None,           # Max 100 keys, alphanumeric
+    tags: list[str] | None = None,              # Max 50, 100 chars each
+    metadata: dict[str, Any] | None = None,     # Max 100 keys, alphanumeric
     lifecycle: Lifecycle | str = "active",
     valid_from: date | None = None,
     valid_until: date | None = None,
+    tenant_id: str | None = None,
 ) -> Resource
 ```
 
-Adds a resource. `source` can be a file path (str or Path), text content (str), or bytes. The ingest pipeline: parse, chunk, hash (SHA3-256 CID), embed (if provider set), store, audit.
+Content is screened by the Membrane pipeline before indexing. Flagged content is quarantined.
 
-<!-- VERIFIED: vault.py:194-316 — add() full signature and pipeline -->
+<!-- VERIFIED: vault.py:218-349 -->
 
-**Raises:** `VaultError` if invalid enum values, name too long, tags exceed limits, metadata keys invalid, content exceeds max_file_size_mb.
+### add_batch()
+
+```python
+vault.add_batch(
+    sources: list[str | Path | bytes],
+    *,
+    trust: TrustTier | str = "working",
+    tenant_id: str | None = None,
+    **kwargs,
+) -> list[Resource]
+```
+
+<!-- VERIFIED: vault.py:466-491 -->
 
 ### get()
 
@@ -66,13 +77,22 @@ Adds a resource. `source` can be a file path (str or Path), text content (str), 
 vault.get(resource_id: str) -> Resource
 ```
 
-**Raises:** `VaultError` if not found.
+### get_content()
+
+```python
+vault.get_content(resource_id: str) -> str
+```
+
+Reassembles chunks in order to return the full text content.
+
+<!-- VERIFIED: vault.py:406-420 -->
 
 ### list()
 
 ```python
 vault.list(
     *,
+    tenant_id: str | None = None,
     trust: TrustTier | str | None = None,
     classification: DataClassification | str | None = None,
     layer: MemoryLayer | str | None = None,
@@ -85,7 +105,7 @@ vault.list(
 ) -> list[Resource]
 ```
 
-Deleted resources are excluded by default. Pass `status="deleted"` to list trash.
+<!-- VERIFIED: vault.py:373-400 -->
 
 ### update()
 
@@ -101,15 +121,26 @@ vault.update(
 ) -> Resource
 ```
 
-Only provided fields are updated. Trust changes emit a `TRUST_CHANGE` audit event.
-
 ### delete()
 
 ```python
 vault.delete(resource_id: str, *, hard: bool = False) -> None
 ```
 
-Soft delete (default): sets status to `deleted`, preserves data. Hard delete: removes from storage permanently.
+### replace()
+
+```python
+vault.replace(
+    resource_id: str,
+    new_content: str,
+    *,
+    reason: str | None = None,
+) -> tuple[Resource, Resource]
+```
+
+Creates a new resource with the new content and supersedes the old one. Returns (old, new).
+
+<!-- VERIFIED: vault.py:422-464 -->
 
 ---
 
@@ -121,18 +152,30 @@ Soft delete (default): sets status to `deleted`, preserves data. Hard delete: re
 vault.search(
     query: str,
     *,
+    tenant_id: str | None = None,
     top_k: int = 10,
+    offset: int = 0,                    # Pagination
     threshold: float = 0.0,
     trust_min: TrustTier | str | None = None,
     layer: MemoryLayer | str | None = None,
     collection: str | None = None,
-    as_of: date | None = None,            # Point-in-time search
+    as_of: date | None = None,          # Point-in-time
+    deduplicate: bool = True,           # One result per resource
+    explain: bool = False,              # Include scoring breakdown
 ) -> list[SearchResult]
 ```
 
-Returns results ranked by: `(vector_weight * vector_sim + text_weight * text_rank) * trust_weight * freshness_decay`
+<!-- VERIFIED: vault.py:558-648 -->
 
-<!-- VERIFIED: vault.py:339-385 — search() method -->
+### search_with_facets()
+
+```python
+vault.search_with_facets(query: str, **kwargs) -> dict[str, Any]
+```
+
+Returns `{"results": [...], "total": N, "facets": {"trust_tier": {...}, "resource_type": {...}}}`.
+
+<!-- VERIFIED: vault.py:650-687 -->
 
 **SearchResult fields:**
 
@@ -144,11 +187,16 @@ Returns results ranked by: `(vector_weight * vector_sim + text_weight * text_ran
 | `content` | str | Chunk text |
 | `vector_similarity` | float | Cosine similarity (0-1) |
 | `text_rank` | float | Full-text match score |
-| `trust_weight` | float | From trust tier (1.5/1.0/0.7/0.25) |
+| `trust_weight` | float | Trust tier x adversarial multiplier |
 | `freshness` | float | Decay factor |
 | `relevance` | float | Composite score |
+| `updated_at` | str | Resource timestamp (for freshness) |
+| `resource_type` | str | Document type |
+| `data_classification` | str | Sensitivity level |
 | `trust_tier` | TrustTier | Resource trust tier |
+| `adversarial_status` | AdversarialStatus | Membrane verification status |
 | `cid` | str | Chunk content ID (SHA3-256) |
+| `lifecycle` | Lifecycle | Resource lifecycle state |
 
 ---
 
@@ -157,15 +205,8 @@ Returns results ranked by: `(vector_weight * vector_sim + text_weight * text_ran
 ### transition()
 
 ```python
-vault.transition(
-    resource_id: str,
-    target: Lifecycle | str,
-    *,
-    reason: str | None = None,
-) -> Resource
+vault.transition(resource_id: str, target: Lifecycle | str, *, reason: str | None = None) -> Resource
 ```
-
-**Raises:** `LifecycleError` if the transition is not valid. See [Lifecycle](lifecycle.md) for the state machine.
 
 ### supersede()
 
@@ -173,15 +214,11 @@ vault.transition(
 vault.supersede(old_id: str, new_id: str) -> tuple[Resource, Resource]
 ```
 
-Marks old resource as SUPERSEDED, links to successor. Returns (old, new).
-
 ### expiring()
 
 ```python
 vault.expiring(*, days: int = 90) -> list[Resource]
 ```
-
-Returns ACTIVE resources with `valid_until` within the given window.
 
 ### chain()
 
@@ -189,9 +226,7 @@ Returns ACTIVE resources with `valid_until` within the given window.
 vault.chain(resource_id: str) -> list[Resource]
 ```
 
-Returns the full supersession chain in chronological order (oldest first). Max chain length: 1000 (cycle protection).
-
-<!-- VERIFIED: lifecycle_engine.py:205-248 — chain() with max_length guard -->
+Max chain length: 1000 (cycle protection).
 
 ---
 
@@ -200,16 +235,8 @@ Returns the full supersession chain in chronological order (oldest first). Max c
 ### verify()
 
 ```python
-# Single resource
-vault.verify(resource_id: str) -> VerificationResult
-
-# Entire vault
-vault.verify() -> VaultVerificationResult
+vault.verify(resource_id: str | None = None) -> VerificationResult | VaultVerificationResult
 ```
-
-Single resource: recomputes SHA3-256 CIDs for all chunks and compares with stored hashes.
-
-Full vault: computes Merkle root over all resource hashes.
 
 ### export_proof()
 
@@ -217,9 +244,45 @@ Full vault: computes Merkle root over all resource hashes.
 vault.export_proof(resource_id: str) -> MerkleProof
 ```
 
-Exports a Merkle proof that an auditor can verify independently. Contains the resource hash, Merkle root, and sibling hashes along the path.
+---
 
-<!-- VERIFIED: vault.py:553-584 — export_proof with compute_merkle_proof -->
+## Provenance & Adversarial
+
+### get_provenance()
+
+```python
+vault.get_provenance(resource_id: str) -> list[dict[str, Any]]
+```
+
+<!-- VERIFIED: vault.py:493-502 -->
+
+### set_adversarial_status()
+
+```python
+vault.set_adversarial_status(resource_id: str, status: str) -> Resource
+```
+
+Status values: `"unverified"`, `"verified"`, `"suspicious"`.
+
+<!-- VERIFIED: vault.py:504-515 -->
+
+---
+
+## Collections
+
+### create_collection()
+
+```python
+vault.create_collection(name: str, *, description: str = "", tenant_id: str | None = None) -> dict
+```
+
+### list_collections()
+
+```python
+vault.list_collections(*, tenant_id: str | None = None) -> list[dict]
+```
+
+<!-- VERIFIED: vault.py:714-744 -->
 
 ---
 
@@ -231,14 +294,6 @@ Exports a Merkle proof that an auditor can verify independently. Contains the re
 vault.layer(name: MemoryLayer | str) -> LayerView
 ```
 
-Returns a scoped view with per-layer defaults. See [Memory Layers](memory-layers.md).
-
-```python
-ops = vault.layer("operational")
-await ops.add("runbook.md")      # Auto: trust=WORKING, boost=1.5x
-await ops.search("deploy")       # Scoped to operational layer
-```
-
 ---
 
 ## Health
@@ -246,23 +301,30 @@ await ops.search("deploy")       # Scoped to operational layer
 ### health()
 
 ```python
-vault.health() -> HealthScore
+vault.health(resource_id: str | None = None) -> HealthScore
 ```
 
-**HealthScore fields:**
+Pass `resource_id` for per-resource health, or `None` for vault-wide.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `overall` | float | Composite 0-100 |
-| `coherence` | float | Absence of duplicates |
-| `freshness` | float | Average document freshness |
-| `uniqueness` | float | Content diversity |
-| `connectivity` | float | Resources in collections / with tags |
-| `trust_alignment` | float | Trust tier distribution quality |
-| `issue_count` | int | Total detected issues |
-| `resource_count` | int | Total resources assessed |
+<!-- VERIFIED: vault.py:826-844 -->
 
-<!-- VERIFIED: integrity/detector.py:113-170 — all HealthScore components -->
+---
+
+## Import / Export
+
+### export_vault()
+
+```python
+vault.export_vault(path: str | Path) -> dict[str, Any]
+```
+
+### import_vault()
+
+```python
+vault.import_vault(path: str | Path) -> list[Resource]
+```
+
+<!-- VERIFIED: vault.py:846-889 -->
 
 ---
 
@@ -271,23 +333,7 @@ vault.health() -> HealthScore
 ### status()
 
 ```python
-vault.status() -> dict
-```
-
-Returns:
-```python
-{
-    "total_resources": int,
-    "by_status": {"indexed": N, "pending": N, ...},
-    "by_trust_tier": {"canonical": N, "working": N, ...},
-    "by_layer": {"operational": N, "strategic": N, ...},
-    "layer_details": {
-        "operational": {"resource_count": N, "default_trust": "working", ...},
-        ...
-    },
-    "vault_path": str,
-    "backend": "sqlite",
-}
+vault.status() -> dict[str, Any]
 ```
 
 ---
@@ -300,8 +346,6 @@ vault.register_parser(parser: ParserProvider) -> None
 vault.register_policy(policy: PolicyProvider) -> None
 ```
 
-See [Plugin Development](plugins.md).
-
 ---
 
 ## Enums
@@ -311,25 +355,30 @@ See [Plugin Development](plugins.md).
 | `TrustTier` | `canonical`, `working`, `ephemeral`, `archived` |
 | `DataClassification` | `public`, `internal`, `confidential`, `restricted` |
 | `ResourceType` | `document`, `image`, `audio`, `video`, `note`, `code`, `spreadsheet`, `transcript`, `other` |
-| `ResourceStatus` | `pending`, `processing`, `indexed`, `error`, `deleted` |
+| `ResourceStatus` | `pending`, `quarantined`, `processing`, `indexed`, `error`, `deleted` |
 | `Lifecycle` | `draft`, `review`, `active`, `superseded`, `expired`, `archived` |
 | `MemoryLayer` | `operational`, `strategic`, `compliance` |
-| `EventType` | `create`, `update`, `delete`, `restore`, `trust_change`, `classification_change`, `lifecycle_transition`, `supersede`, `verify`, `search` |
+| `AdversarialStatus` | `unverified`, `verified`, `suspicious` |
+| `MembraneStage` | `ingest`, `innate_scan`, `adaptive_scan`, `correlate`, `release`, `surveil`, `present`, `remember` |
+| `MembraneResult` | `pass`, `flag`, `fail`, `skip` |
+| `EventType` | `create`, `update`, `delete`, `restore`, `trust_change`, `classification_change`, `lifecycle_transition`, `supersede`, `verify`, `search`, `membrane_scan`, `membrane_release`, `membrane_flag`, `adversarial_status_change` |
+| `Role` | `reader`, `writer`, `admin` |
 
-<!-- VERIFIED: enums.py:1-122 — all enum definitions -->
+<!-- VERIFIED: enums.py:1-210, rbac.py:21-30 -->
 
 ---
 
 ## Exceptions
 
-| Exception | When |
-|-----------|------|
-| `VaultError` | Base exception. Resource not found, invalid parameters. |
-| `StorageError` | Database operation failed. |
-| `VerificationError` | Content integrity check failed. |
-| `LifecycleError` | Invalid lifecycle transition. |
-| `PolicyError` | Policy evaluation denied operation. |
-| `ChunkingError` | Text chunking failed. |
-| `ParsingError` | File parsing failed. |
+| Code | Exception | When |
+|------|-----------|------|
+| VAULT_000 | `VaultError` | General error, resource not found |
+| VAULT_100 | `StorageError` | Database operation failed |
+| VAULT_200 | `VerificationError` | Integrity check failed |
+| VAULT_300 | `LifecycleError` | Invalid state transition |
+| VAULT_400 | `PolicyError` | Policy denied operation |
+| VAULT_500 | `ChunkingError` | Text chunking failed |
+| VAULT_600 | `ParsingError` | File parsing failed |
+| VAULT_700 | `PermissionError` | RBAC permission denied |
 
-<!-- VERIFIED: exceptions.py:1-25 — all 7 exception types -->
+<!-- VERIFIED: exceptions.py:1-48 -->

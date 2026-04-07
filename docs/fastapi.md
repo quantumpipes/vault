@@ -1,8 +1,6 @@
 # FastAPI Integration
 
-qp-vault provides ready-made FastAPI routes for building REST APIs on top of a vault.
-
-## Install
+qp-vault provides 22+ ready-made REST API endpoints.
 
 ```bash
 pip install qp-vault[fastapi]
@@ -21,8 +19,6 @@ router = create_vault_router(vault)
 app.include_router(router, prefix="/v1/vault")
 ```
 
-<!-- VERIFIED: integrations/fastapi_routes.py:78-102 — create_vault_router factory -->
-
 ## Endpoints
 
 ### Resources
@@ -33,7 +29,9 @@ app.include_router(router, prefix="/v1/vault")
 | `GET` | `/resources` | List resources (filtered, paginated) |
 | `GET` | `/resources/{id}` | Get resource details |
 | `PUT` | `/resources/{id}` | Update resource metadata |
-| `DELETE` | `/resources/{id}` | Delete resource (soft by default, `?hard=true` for permanent) |
+| `DELETE` | `/resources/{id}` | Delete resource (`?hard=true` for permanent) |
+| `GET` | `/resources/{id}/content` | Get full text content |
+| `GET` | `/resources/{id}/provenance` | Get provenance records |
 
 ### Lifecycle
 
@@ -51,129 +49,67 @@ app.include_router(router, prefix="/v1/vault")
 | `GET` | `/resources/{id}/proof` | Export Merkle proof |
 | `GET` | `/verify` | Verify entire vault |
 
-### Intelligence
+### Search
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/search` | Trust-weighted hybrid search |
+| `POST` | `/search/faceted` | Search with facet counts |
+
+### Collections
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/collections` | List collections |
+| `POST` | `/collections` | Create collection |
+
+### Batch & Export
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/batch` | Batch add (max 100 items) |
+| `GET` | `/export` | Export vault to JSON |
+
+### Intelligence
+
+| Method | Path | Description |
+|--------|------|-------------|
 | `GET` | `/health` | Vault health score (0-100) |
 | `GET` | `/status` | Resource counts and metadata |
 | `GET` | `/expiring` | Resources expiring within N days |
 
-## Request/Response Examples
+<!-- VERIFIED: integrations/fastapi_routes.py:118-310 — all endpoints -->
 
-### Add Resource
+## Input Validation
 
-```bash
-POST /v1/vault/resources
-```
+| Field | Constraint |
+|-------|-----------|
+| `query` | Max 10,000 characters |
+| `top_k` | 1-1,000 |
+| `threshold` | 0.0-1.0 |
+| Batch sources | Max 100 items |
 
-```json
-{
-    "content": "Incident response SOP: acknowledge within 15 minutes...",
-    "name": "sop-incident.md",
-    "trust": "canonical",
-    "layer": "operational",
-    "tags": ["sop", "incident"],
-    "metadata": {"author": "security-team"}
-}
-```
+<!-- VERIFIED: integrations/fastapi_routes.py:50-53 — SearchRequest validators -->
 
-Response:
-```json
-{
-    "data": {
-        "id": "a1b2c3d4-...",
-        "name": "sop-incident.md",
-        "trust_tier": "canonical",
-        "status": "indexed",
-        "chunk_count": 3,
-        "cid": "vault://sha3-256/..."
-    },
-    "meta": {}
-}
-```
+## Error Codes
 
-### Search
+| HTTP | Vault Code | Meaning |
+|------|------------|---------|
+| 404 | VAULT_000 | Resource not found |
+| 409 | VAULT_300 | Invalid lifecycle transition |
+| 400 | — | Bad request (batch too large, invalid params) |
+| 500 | VAULT_100 | Storage operation failed |
 
-```bash
-POST /v1/vault/search
-```
+Error responses never expose internal details.
 
-```json
-{
-    "query": "incident response procedure",
-    "top_k": 5,
-    "trust_min": "working",
-    "layer": "operational"
-}
-```
+<!-- VERIFIED: integrations/fastapi_routes.py:92-101 — _handle_error -->
 
-### Lifecycle Transition
+## CORS
 
-```bash
-POST /v1/vault/resources/{id}/transition
-```
-
-```json
-{
-    "target": "review",
-    "reason": "Ready for security team review"
-}
-```
-
-Returns `409 Conflict` for invalid transitions.
-
-### Export Proof
-
-```bash
-GET /v1/vault/resources/{id}/proof
-```
-
-Response:
-```json
-{
-    "data": {
-        "resource_id": "a1b2c3d4-...",
-        "resource_hash": "8c822da2...",
-        "merkle_root": "a92f5626...",
-        "path": [{"hash": "...", "position": "right"}],
-        "leaf_index": 0,
-        "tree_size": 42
-    }
-}
-```
-
-## Error Handling
-
-Errors return appropriate HTTP status codes:
-
-| Code | Meaning | Vault Exception |
-|------|---------|-----------------|
-| `404` | Resource not found | `VaultError` |
-| `409` | Invalid lifecycle transition | `LifecycleError` |
-| `500` | Storage operation failed | `StorageError` |
-
-Error responses never expose internal details (file paths, stack traces). Full errors are logged server-side.
-
-<!-- VERIFIED: integrations/fastapi_routes.py:92-101 — _handle_error with sanitized messages -->
-
-## Custom Middleware
-
-The router is a standard FastAPI `APIRouter`. Add authentication, CORS, rate limiting as needed:
+The router has no CORS configuration by default (secure: denies all cross-origin). Add your own:
 
 ```python
 from fastapi.middleware.cors import CORSMiddleware
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"])
-
-# Or protect with dependency injection
-from fastapi import Depends, HTTPException
-
-async def verify_api_key(x_api_key: str = Header(...)):
-    if x_api_key != "expected-key":
-        raise HTTPException(status_code=401)
-
-router = create_vault_router(vault)
-app.include_router(router, prefix="/v1/vault", dependencies=[Depends(verify_api_key)])
+app.add_middleware(CORSMiddleware, allow_origins=["https://your-app.com"])
 ```

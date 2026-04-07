@@ -8,15 +8,17 @@ Install qp-vault and have a governed knowledge store running in under 5 minutes.
 pip install qp-vault
 ```
 
-This gives you the SQLite backend (zero config), text processing, trust tiers, content-addressed storage, and Merkle verification. No external services needed.
+Zero config. SQLite backend, trust-weighted search, content-addressed storage, Merkle verification, Membrane screening, and RBAC built in.
 
 For additional features:
 
 ```bash
-pip install qp-vault[cli]          # vault command-line tool
-pip install qp-vault[postgres]     # PostgreSQL + pgvector hybrid search
-pip install qp-vault[capsule]      # Cryptographic audit trail via qp-capsule
-pip install qp-vault[all]         # Everything
+pip install qp-vault[encryption]     # AES-256-GCM encryption at rest
+pip install qp-vault[pq]             # ML-KEM-768 + ML-DSA-65 post-quantum crypto
+pip install qp-vault[cli]            # vault command-line tool (15 commands)
+pip install qp-vault[fastapi]        # 22+ REST API endpoints
+pip install qp-vault[local]          # Local embeddings (sentence-transformers, air-gap)
+pip install qp-vault[all]            # Everything
 ```
 
 ## Create a Vault
@@ -27,37 +29,26 @@ from qp_vault import Vault
 vault = Vault("./my-knowledge")
 ```
 
-This creates a directory at `./my-knowledge/` with a SQLite database (`vault.db`) and an audit log (`audit.jsonl`). No configuration required.
-
-<!-- VERIFIED: vault.py:138-155 — path creation, SQLite default, LogAuditor default -->
+Creates `./my-knowledge/` with SQLite database and audit log. No configuration required.
 
 ## Add Resources
 
 ```python
-# From a string
+# From text
 vault.add("Incident response: acknowledge within 15 minutes...",
           name="sop-incident.md", trust="canonical")
 
 # From a file
 vault.add("path/to/report.pdf", trust="working")
 
-# With metadata
-vault.add("SOC2 audit completed 2025-12-15",
-          name="soc2-cert.md",
-          trust="canonical",
-          layer="compliance",
-          tags=["audit", "soc2"],
-          metadata={"auditor": "Deloitte", "year": "2025"})
+# With tenant isolation
+vault.add("Tenant-specific content", tenant_id="site-123")
+
+# Batch add
+vault.add_batch(["doc1.md", "doc2.md", "doc3.md"], trust="working")
 ```
 
-<!-- VERIFIED: vault.py:194-313 — add() method handles str, Path, bytes -->
-
-Resources are automatically:
-1. Chunked into semantic segments (512 tokens default, 50 token overlap)
-2. Hashed with SHA3-256 (content-addressed CID per chunk)
-3. Indexed for full-text search (FTS5)
-4. Assigned a Merkle root (hash of all chunk CIDs)
-5. Logged to the audit trail
+Resources are automatically: chunked, hashed (SHA3-256), screened by Membrane, indexed, and audited.
 
 ## Search
 
@@ -65,73 +56,66 @@ Resources are automatically:
 results = vault.search("incident response procedure")
 
 for r in results:
-    print(f"[{r.trust_tier.value}] {r.resource_name}")
-    print(f"  Relevance: {r.relevance:.3f} (trust_weight={r.trust_weight})")
-    print(f"  {r.content[:100]}...")
+    print(f"[{r.trust_tier.value}] {r.resource_name} (relevance={r.relevance:.3f})")
 ```
 
-Search results are ranked by:
+Results are deduplicated (one per resource), ranked by: `(vector + text) * trust * freshness * layer_boost`.
 
+## Retrieve Content
+
+```python
+text = vault.get_content(resource.id)
+print(text)
 ```
-relevance = (0.7 * vector_similarity + 0.3 * text_rank) * trust_weight * freshness_decay
+
+## Replace Content
+
+```python
+old, new = vault.replace(resource.id, "Updated policy v2 content")
+# old.lifecycle = "superseded", new = active version
 ```
-
-CANONICAL documents (1.5x) naturally outrank WORKING (1.0x) and EPHEMERAL (0.7x) for the same semantic similarity.
-
-<!-- VERIFIED: search_engine.py:20-26 — TRUST_WEIGHTS dict, scoring formula -->
 
 ## Verify Integrity
 
 ```python
-# Verify a single resource
-result = vault.verify(resource.id)
-assert result.passed  # SHA3-256 hashes match
-
-# Verify the entire vault (Merkle tree)
-result = vault.verify()
-assert result.passed
-print(f"Merkle root: {result.merkle_root}")
-
-# Export proof for auditors
-proof = vault.export_proof(resource.id)
-# proof.resource_hash, proof.merkle_root, proof.path (sibling hashes)
+result = vault.verify()           # Full vault Merkle tree
+result = vault.verify(resource.id) # Single resource
+proof = vault.export_proof(resource.id)  # For auditors
 ```
 
-<!-- VERIFIED: vault.py:458-503 — verify() and _verify_resource() methods -->
-
-## Check Health
+## Health Score
 
 ```python
 score = vault.health()
 print(f"Overall: {score.overall}/100")
-print(f"  Freshness:    {score.freshness}")
-print(f"  Uniqueness:   {score.uniqueness}")
-print(f"  Coherence:    {score.coherence}")
-print(f"  Connectivity: {score.connectivity}")
+
+# Per-resource health
+score = vault.health(resource.id)
 ```
 
-<!-- VERIFIED: integrity/detector.py:113-170 — compute_health_score components -->
-
-## Lifecycle Management
+## RBAC
 
 ```python
-from qp_vault import Lifecycle
+# Reader: search and verify only
+vault = Vault("./knowledge", role="reader")
 
-# Create a draft
-r = vault.add("Security policy v2", lifecycle="draft")
+# Writer: add and modify
+vault = Vault("./knowledge", role="writer")
 
-# Move through lifecycle
-vault.transition(r.id, "review")
-vault.transition(r.id, "active")
-
-# Supersede old versions
-old, new = vault.supersede(v1.id, v2.id)
-
-# Check what's expiring
-expiring = vault.expiring(days=90)
+# Admin: full access
+vault = Vault("./knowledge", role="admin")
 ```
 
-See [Knowledge Lifecycle](lifecycle.md) for the full state machine.
+## Multi-Tenancy
+
+```python
+# Per-call tenant isolation
+vault.add("content", tenant_id="site-123")
+vault.search("query", tenant_id="site-123")
+
+# Or lock the vault to a single tenant
+vault = Vault("./knowledge", tenant_id="site-123")
+```
 
 ## CLI
 
@@ -140,17 +124,20 @@ pip install qp-vault[cli]
 
 vault init ./knowledge
 vault add report.pdf --trust canonical
-vault search "revenue projections"
+vault search "revenue" --top-k 5
+vault list --trust canonical
 vault verify
 vault health
 vault status
 ```
 
-See [CLI Reference](cli.md) for all commands.
+15 commands. See [CLI Reference](cli.md).
 
 ## Next Steps
 
 - [Trust Tiers](trust-tiers.md): How trust affects search ranking
-- [Architecture](architecture.md): Package design and Protocol interfaces
-- [Plugin Development](plugins.md): Add custom embedders, parsers, policies
-- [Security Model](security.md): SHA3-256, Merkle trees, threat model
+- [Encryption](encryption.md): AES-256-GCM, ML-KEM-768, ML-DSA-65
+- [RBAC](rbac.md): Reader/Writer/Admin roles
+- [Membrane](membrane.md): Content screening
+- [Multi-Tenancy](multi-tenancy.md): Tenant isolation
+- [API Reference](api-reference.md): Complete SDK

@@ -1,42 +1,25 @@
 # CLI Reference
 
-The `vault` command-line tool provides all core operations.
-
-## Install
+The `vault` CLI provides 15 commands for managing governed knowledge stores.
 
 ```bash
 pip install qp-vault[cli]
 ```
 
-Requires: `typer` and `rich` (installed automatically with the `[cli]` extra).
-
-<!-- VERIFIED: pyproject.toml:42-45 — cli extra includes typer + rich -->
-
 ## Commands
 
 ### vault init
-
-Create a new vault.
 
 ```bash
 vault init <path>
 ```
 
-Creates the directory, initializes SQLite database, and sets up the audit log.
-
-```bash
-$ vault init ./org-knowledge
-Vault initialized at /home/user/org-knowledge
-```
-
-<!-- VERIFIED: cli/main.py:70-80 — init command -->
+Initialize a new vault. Creates SQLite database and audit log.
 
 ### vault add
 
-Add a resource to the vault.
-
 ```bash
-vault add <file> [options]
+vault add <file> [--trust T] [--layer L] [--tags t1,t2] [--name N] [--path P]
 ```
 
 | Option | Short | Default | Description |
@@ -44,128 +27,158 @@ vault add <file> [options]
 | `--trust` | `-t` | `working` | Trust tier: canonical, working, ephemeral, archived |
 | `--layer` | `-l` | (none) | Memory layer: operational, strategic, compliance |
 | `--tags` | | (none) | Comma-separated tags |
-| `--name` | `-n` | (auto) | Display name (auto-detected from filename) |
-| `--path` | `-p` | `.` | Vault directory path |
-
-```bash
-$ vault add report.pdf --trust canonical --layer strategic --tags "q4,finance"
-Added: report.pdf
-  ID: a1b2c3d4-...
-  Trust: canonical
-  Chunks: 12
-  CID: vault://sha3-256/...
-```
-
-<!-- VERIFIED: cli/main.py:82-117 — add command with options -->
+| `--name` | `-n` | (auto) | Display name |
+| `--path` | `-p` | `.` | Vault directory |
 
 ### vault search
 
-Search the vault with trust-weighted hybrid search.
-
 ```bash
-vault search <query> [options]
+vault search <query> [--top-k N] [--path P]
 ```
 
-| Option | Short | Default | Description |
-|--------|-------|---------|-------------|
-| `--top-k` | `-k` | `10` | Maximum results |
-| `--path` | `-p` | `.` | Vault directory path |
+Trust-weighted hybrid search with Rich table output.
+
+### vault list
 
 ```bash
-$ vault search "incident response" --top-k 5
-Search: "incident response" (2 results)
- #  Trust       Resource                Relevance  Content
- 1  canonical   sop-incident.md         0.450      Incident response: acknowledge within...
- 2  working     draft-response.md       0.280      Draft incident response improvements...
+vault list [--trust T] [--layer L] [--tenant ID] [--limit N] [--path P]
 ```
 
-<!-- VERIFIED: cli/main.py:119-155 — search command with Rich table -->
+List resources with optional filters. Shows trust tier, name, status, and ID.
+
+<!-- VERIFIED: cli/main.py:278-305 -->
 
 ### vault inspect
 
-Show detailed information about a resource.
-
 ```bash
-vault inspect <resource-id> [--path <vault-path>]
+vault inspect <resource-id> [--path P]
 ```
 
-```bash
-$ vault inspect a1b2c3d4-...
-sop-incident-response.md
-
-  ID              a1b2c3d4-...
-  CID             vault://sha3-256/8c822da2...
-  Content Hash    8c822da28547d9e9...
-  Trust Tier      canonical
-  Status          indexed
-  Lifecycle       active
-  Chunks          3
-  Size            1,247 bytes
-  Created         2026-04-06 14:30:00
-```
-
-<!-- VERIFIED: cli/main.py:157-200 — inspect command -->
+Show detailed metadata: CID, content hash, trust tier, status, lifecycle, chunks, size, timestamps.
 
 ### vault status
 
-Show vault summary.
-
 ```bash
-vault status [--path <vault-path>]
+vault status [--path P]
 ```
 
-```bash
-$ vault status
-Vault Status  (./org-knowledge)
-
-  Total resources: 42
-
-  By trust tier:
-    canonical: 12
-    working: 25
-    ephemeral: 5
-
-  By status:
-    indexed: 40
-    pending: 2
-```
-
-<!-- VERIFIED: cli/main.py:202-229 — status command -->
+Vault summary: total resources, breakdown by trust tier, status, and layer.
 
 ### vault verify
 
-Verify integrity of a resource or the entire vault.
-
 ```bash
-# Verify entire vault (Merkle tree)
-vault verify [--path <vault-path>]
-
-# Verify single resource
-vault verify <resource-id> [--path <vault-path>]
+vault verify [resource-id] [--path P]
 ```
 
-```bash
-$ vault verify
-PASS  Vault integrity verified
-  Resources: 42
-  Merkle root: a92f56269aaa0d8c...
-  Duration: 12ms
+Without resource-id: verify entire vault (Merkle root). With resource-id: verify single resource (SHA3-256 hash check). Exit code 1 on failure.
 
-$ vault verify a1b2c3d4-...
-PASS  a1b2c3d4-...
-  Hash: 8c822da28547d9e9...
-  Chunks verified: 3
+### vault health
+
+```bash
+vault health [--path P]
 ```
 
-Exit code 1 if verification fails.
+Composite health score (0-100): freshness, uniqueness, coherence, connectivity, issues.
 
-<!-- VERIFIED: cli/main.py:231-268 — verify command with exit code -->
+<!-- VERIFIED: cli/main.py:263-275 -->
+
+### vault delete
+
+```bash
+vault delete <resource-id> [--hard] [--path P]
+```
+
+Soft delete (default) or permanent hard delete.
+
+<!-- VERIFIED: cli/main.py:308-317 -->
+
+### vault transition
+
+```bash
+vault transition <resource-id> <target> [--reason R] [--path P]
+```
+
+Change lifecycle state. Valid targets depend on current state (see [Lifecycle](lifecycle.md)).
+
+<!-- VERIFIED: cli/main.py:321-336 -->
+
+### vault expiring
+
+```bash
+vault expiring [--days N] [--path P]
+```
+
+Show resources expiring within N days (default: 90).
+
+<!-- VERIFIED: cli/main.py:339-352 -->
+
+### vault content
+
+```bash
+vault content <resource-id> [--path P]
+```
+
+Retrieve and display the full text content of a resource.
+
+<!-- VERIFIED: cli/main.py:356-367 -->
+
+### vault replace
+
+```bash
+vault replace <resource-id> <file-or-text> [--path P]
+```
+
+Replace content atomically. Creates new version, supersedes old. Shows old ID (SUPERSEDED) and new ID.
+
+<!-- VERIFIED: cli/main.py:370-383 -->
+
+### vault supersede
+
+```bash
+vault supersede <old-id> <new-id> [--path P]
+```
+
+Link two resources: old becomes SUPERSEDED, new gets `supersedes` pointer.
+
+<!-- VERIFIED: cli/main.py:386-395 -->
+
+### vault collections
+
+```bash
+vault collections [--path P]
+```
+
+List all named collections.
+
+<!-- VERIFIED: cli/main.py:398-409 -->
+
+### vault provenance
+
+```bash
+vault provenance <resource-id> [--path P]
+```
+
+Show provenance records: upload timestamp, uploader, method.
+
+<!-- VERIFIED: cli/main.py:412-424 -->
+
+### vault export
+
+```bash
+vault export <output-file> [--path P]
+```
+
+Export vault to JSON file. Shows resource count.
+
+<!-- VERIFIED: cli/main.py:427-436 -->
 
 ## Global Options
 
-All commands accept `--path` / `-p` to specify the vault directory. Defaults to the current directory.
+All commands accept `--path` / `-p` to specify the vault directory.
 
-```bash
-vault search "query" --path /opt/knowledge
-vault status --path ./my-vault
-```
+## Exit Codes
+
+- `0`: Success
+- `1`: Failure (verification failed, resource not found, invalid transition)
+
+Designed for CI: `vault verify && deploy`.

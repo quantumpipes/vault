@@ -8,15 +8,20 @@ qp-vault follows a layered architecture with Protocol-based extensibility. Every
 src/qp_vault/
     vault.py              Vault (sync) + AsyncVault (async) main classes
     models.py             Pydantic domain models
-    enums.py              TrustTier, Lifecycle, MemoryLayer, etc.
+    enums.py              TrustTier, Lifecycle, MembraneStage, Role, etc.
     protocols.py          StorageBackend, EmbeddingProvider, AuditProvider, etc.
     config.py             VaultConfig with TOML loading
-    exceptions.py         VaultError hierarchy
+    exceptions.py         VaultError hierarchy with structured codes (VAULT_000-700)
+    rbac.py               Role-Based Access Control (READER/WRITER/ADMIN)
+    provenance.py         Content provenance attestation service
+    adversarial.py        Adversarial content verification
+    streaming.py          Real-time VaultEventStream
+    telemetry.py          Operation metrics tracking
 
     core/
         chunker.py        Semantic text chunking (token-aware, overlap)
         hasher.py         SHA3-256 CID computation, Merkle trees
-        search_engine.py  Trust-weighted scoring + freshness decay
+        search_engine.py  Trust-weighted scoring + freshness decay + layer boost
         resource_manager.py  Full ingest pipeline
         lifecycle_engine.py  State machine, supersession, expiration
         layer_manager.py  Memory layers: OPERATIONAL, STRATEGIC, COMPLIANCE
@@ -25,26 +30,45 @@ src/qp_vault/
         sqlite.py         SQLite + FTS5 (default, zero-config)
         postgres.py       PostgreSQL + pgvector + pg_trgm (production)
 
+    membrane/
+        pipeline.py       MembranePipeline: multi-stage content screening
+        innate_scan.py    Pattern-based detection (regex blocklists)
+        release_gate.py   Risk-proportionate gating decision
+
+    encryption/
+        aes_gcm.py        AES-256-GCM symmetric (FIPS 197)
+        ml_kem.py         ML-KEM-768 key encapsulation (FIPS 203)
+        ml_dsa.py         ML-DSA-65 digital signatures (FIPS 204)
+        hybrid.py         ML-KEM-768 + AES-256-GCM combined
+        fips_kat.py       FIPS Known Answer Tests
+        zeroize.py        Secure key erasure (ctypes memset)
+
+    embeddings/
+        noop.py           NoopEmbedder (text-only search, explicit)
+        sentence.py       SentenceTransformerEmbedder (local, air-gap)
+        openai.py         OpenAIEmbedder (cloud)
+
     processing/
         text_parser.py    30+ text formats (zero deps)
         transcript_parser.py  WebVTT + SRT with speaker attribution
+        docling_parser.py 25+ document formats via Docling
 
     audit/
         log_auditor.py    JSON lines fallback (built-in)
-        capsule_auditor.py  qp-capsule integration (optional)
+        capsule_auditor.py  qp-capsule integration (typed Section objects)
 
     integrity/
-        detector.py       Staleness, duplicates, orphans, health scoring
+        detector.py       Staleness, duplicates, near-duplicates, contradictions, health
 
     plugins/
-        registry.py       Plugin discovery (entry_points + plugins_dir)
+        registry.py       Plugin discovery (entry_points + plugins_dir + manifest hash)
         decorators.py     @embedder, @parser, @policy
 
     integrations/
-        fastapi_routes.py  Ready-made REST API routes
+        fastapi_routes.py  22+ REST endpoints with input validation
 
     cli/
-        main.py           Typer CLI: vault init, add, search, verify, etc.
+        main.py           15 Typer CLI commands
 ```
 
 <!-- VERIFIED: actual directory listing matches this structure -->
@@ -53,7 +77,9 @@ src/qp_vault/
 
 ```
 +-------------------------------------------------------------------+
-|  PUBLIC API         Vault (sync) / AsyncVault (async)             |
+|  PUBLIC API + RBAC  Vault (sync) / AsyncVault (async) + Roles     |
++-------------------------------------------------------------------+
+|  MEMBRANE           Content screening before indexing              |
 +-------------------------------------------------------------------+
 |  CORE LAYER         ResourceManager, SearchEngine, LifecycleEngine|
 |                     VerificationEngine, LayerManager              |
@@ -61,7 +87,9 @@ src/qp_vault/
 |  PROTOCOL LAYER     StorageBackend, EmbeddingProvider,            |
 |                     AuditProvider, ParserProvider, PolicyProvider  |
 +-------------------------------------------------------------------+
-|  STORAGE LAYER      SQLite + FTS5  |  PostgreSQL + pgvector       |
+|  ENCRYPTION         AES-256-GCM | ML-KEM-768 | ML-DSA-65 | Hybrid|
++-------------------------------------------------------------------+
+|  STORAGE            SQLite + FTS5  |  PostgreSQL + pgvector       |
 +-------------------------------------------------------------------+
 ```
 
@@ -128,7 +156,13 @@ class PolicyProvider(Protocol):
 Source (str/Path/bytes)
     |
     v
+[RBAC Check]        Permission check (WRITER or ADMIN required)
+    |
+    v
 [Input Validation]  enum checks, name sanitization, null byte stripping, size limit
+    |
+    v
+[Membrane Screen]   Innate scan (regex blocklist) -> Release gate (pass/quarantine)
     |
     v
 [Parser Selection]  Match by extension, or read as text
@@ -178,6 +212,15 @@ Query String
 [Freshness Decay]    * exp(-age_days / half_life * ln(2))
     |
     v
+[Layer Boost]        * layer_boost (1.5x for OPERATIONAL)
+    |
+    v
+[Deduplication]      One result per resource (best chunk)
+    |
+    v
+[Pagination]         offset + top_k
+    |
+    v
 [Ranked Results]     Sorted by composite relevance
 ```
 
@@ -224,6 +267,16 @@ config = VaultConfig(
 )
 
 vault = Vault("./knowledge", config=config)
+```
+
+Additional config fields added in v0.6-v0.13:
+
+```python
+config = VaultConfig(
+    max_resources_per_tenant=1000,    # Per-tenant quota (v0.11)
+    query_timeout_ms=30000,           # 30s query timeout (v0.13)
+    health_cache_ttl_seconds=30,      # Cache health responses (v0.13)
+)
 ```
 
 <!-- VERIFIED: config.py:18-86 — VaultConfig fields and defaults -->
