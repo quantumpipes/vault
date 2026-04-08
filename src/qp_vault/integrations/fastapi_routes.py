@@ -73,6 +73,10 @@ if HAS_FASTAPI:
         tags: list[str] | None = None
         metadata: dict[str, Any] | None = None
 
+    class GrepRequest(BaseModel):
+        keywords: list[str] = Field(..., max_length=20)
+        top_k: int = Field(20, ge=1, le=1000)
+
     class TransitionRequest(BaseModel):
         target: str
         reason: str | None = None
@@ -150,6 +154,18 @@ def create_vault_router(vault: Any) -> APIRouter:
         )
         return {"data": [r.model_dump() for r in resources], "meta": {"count": len(resources)}}
 
+    @router.get("/resources/by-name")
+    async def find_by_name(
+        name: str = Query(..., max_length=255),
+        tenant_id: str | None = None,
+        collection_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Find a resource by name (case-insensitive)."""
+        resource = await vault.find_by_name(name, tenant_id=tenant_id, collection_id=collection_id)
+        if resource is None:
+            raise HTTPException(status_code=404, detail=f"Resource not found: {name}")
+        return {"data": resource.model_dump(), "meta": {}}
+
     @router.get("/resources/{resource_id}")
     async def get_resource(resource_id: str) -> dict[str, Any]:
         try:
@@ -196,6 +212,15 @@ def create_vault_router(vault: Any) -> APIRouter:
         except Exception as e:
             raise _handle_error(e) from e
         return {"data": {"old": old.model_dump(), "new": new.model_dump()}, "meta": {}}
+
+    @router.post("/resources/{resource_id}/reprocess")
+    async def reprocess_resource(resource_id: str) -> dict[str, Any]:
+        """Re-chunk and re-embed a resource."""
+        try:
+            resource = await vault.reprocess(resource_id)
+        except Exception as e:
+            raise _handle_error(e) from e
+        return {"data": resource.model_dump(), "meta": {"reprocessed": True}}
 
     @router.get("/resources/{resource_id}/verify")
     async def verify_resource(resource_id: str) -> dict[str, Any]:
@@ -290,6 +315,15 @@ def create_vault_router(vault: Any) -> APIRouter:
             "meta": {"total": result["total"], "facets": result["facets"]},
         }
 
+    @router.post("/grep")
+    async def grep_search(req: GrepRequest) -> dict[str, Any]:
+        """Multi-keyword OR search with hit-density scoring."""
+        try:
+            results = await vault.grep(req.keywords, top_k=req.top_k)
+        except Exception as e:
+            raise _handle_error(e) from e
+        return {"data": [r.model_dump() for r in results], "meta": {"total": len(results)}}
+
     @router.post("/batch")
     async def add_batch(req: dict[str, Any]) -> dict[str, Any]:
         sources = req.get("sources", [])
@@ -308,5 +342,47 @@ def create_vault_router(vault: Any) -> APIRouter:
     async def export_vault_endpoint(output: str = "vault_export.json") -> dict[str, Any]:
         result = await vault.export_vault(output)
         return {"data": result, "meta": {}}
+
+    @router.get("/resources/{old_id}/diff/{new_id}")
+    async def diff_resources(old_id: str, new_id: str) -> dict[str, Any]:
+        """Compute unified diff between two resources."""
+        try:
+            result = await vault.diff(old_id, new_id)
+        except Exception as e:
+            raise _handle_error(e) from e
+        return {"data": result, "meta": {}}
+
+    @router.post("/resources/multiple")
+    async def get_multiple(req: dict[str, Any]) -> dict[str, Any]:
+        """Get multiple resources by ID in a single request."""
+        resource_ids = req.get("resource_ids", [])
+        if not isinstance(resource_ids, list) or len(resource_ids) > 100:
+            raise HTTPException(status_code=400, detail="Provide 1-100 resource_ids")
+        resources = await vault.get_multiple(resource_ids)
+        return {"data": [r.model_dump() for r in resources], "meta": {"count": len(resources)}}
+
+    @router.patch("/resources/{resource_id}/adversarial")
+    async def set_adversarial_status(resource_id: str, req: dict[str, Any]) -> dict[str, Any]:
+        """Set adversarial verification status on a resource."""
+        status_val = req.get("status")
+        if not status_val:
+            raise HTTPException(status_code=400, detail="'status' field required")
+        try:
+            resource = await vault.set_adversarial_status(resource_id, status_val)
+        except Exception as e:
+            raise _handle_error(e) from e
+        return {"data": resource.model_dump(), "meta": {}}
+
+    @router.post("/import")
+    async def import_vault_endpoint(req: dict[str, Any]) -> dict[str, Any]:
+        """Import resources from a vault export file."""
+        path = req.get("path")
+        if not path:
+            raise HTTPException(status_code=400, detail="'path' field required")
+        try:
+            resources = await vault.import_vault(path)
+        except Exception as e:
+            raise _handle_error(e) from e
+        return {"data": [r.model_dump() for r in resources], "meta": {"count": len(resources)}}
 
     return router

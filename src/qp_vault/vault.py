@@ -17,6 +17,7 @@ from qp_vault.core.resource_manager import ResourceManager
 from qp_vault.core.search_engine import apply_trust_weighting
 from qp_vault.enums import (
     DataClassification,
+    EventType,
     Lifecycle,
     MemoryLayer,
     ResourceStatus,
@@ -24,10 +25,12 @@ from qp_vault.enums import (
 )
 from qp_vault.exceptions import VaultError
 from qp_vault.models import (
+    Chunk,
     HealthScore,
     MerkleProof,
     Resource,
     SearchResult,
+    VaultEvent,
     VaultVerificationResult,
     VerificationResult,
 )
@@ -43,9 +46,13 @@ from qp_vault.protocols import (
 from qp_vault.storage.sqlite import SQLiteBackend
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from datetime import date
 
     from qp_vault.core.layer_manager import LayerView
+
+# Type alias for subscriber callbacks (sync or async).
+VaultCallback = "Callable[[VaultEvent], Any]"
 
 # --- Input Sanitization ---
 
@@ -229,6 +236,9 @@ class AsyncVault:
         self._initialized = False
         self._search_count = 0
 
+        # Subscriber callbacks for mutation events
+        self._subscribers: list[tuple[Callable[..., Any], bool]] = []
+
         # Telemetry: operation tracking
         from qp_vault.telemetry import VaultTelemetry
         self._telemetry = VaultTelemetry()
@@ -278,6 +288,49 @@ class AsyncVault:
     def _cache_invalidate(self) -> None:
         """Invalidate all cached values (after writes)."""
         self._cache.clear()
+
+    def subscribe(self, callback: Callable[..., Any]) -> Callable[[], None]:
+        """Subscribe to vault mutation events.
+
+        The callback receives a VaultEvent on every mutation (add, update,
+        delete, transition, trust change). Callbacks can be sync or async;
+        async callbacks are scheduled as tasks and never block the caller.
+
+        Args:
+            callback: Function accepting a single VaultEvent argument.
+
+        Returns:
+            An unsubscribe function. Call it to stop receiving events.
+        """
+        import inspect
+        is_async = inspect.iscoroutinefunction(callback)
+        entry = (callback, is_async)
+        self._subscribers.append(entry)
+
+        def unsubscribe() -> None:
+            import contextlib
+            with contextlib.suppress(ValueError):
+                self._subscribers.remove(entry)
+
+        return unsubscribe
+
+    async def _notify_subscribers(self, event: Any) -> None:
+        """Broadcast a VaultEvent to all registered subscribers.
+
+        Errors in subscriber callbacks are logged and never propagated.
+        Async callbacks are awaited directly (not spawned as tasks) to
+        keep ordering deterministic in tests.
+        """
+        import logging
+        logger = logging.getLogger("qp_vault.subscribe")
+        for callback, is_async in self._subscribers:
+            try:
+                if is_async:
+                    await callback(event)
+                else:
+                    callback(event)
+            except Exception:
+                logger.exception("Subscriber callback failed")
 
     async def _with_timeout(self, coro: Any) -> Any:
         """Wrap a coroutine with the configured query timeout.
@@ -501,6 +554,13 @@ class AsyncVault:
 
         self._cache_invalidate()
         await self._fire_hook("post_add", resource=resource)
+        await self._notify_subscribers(VaultEvent(
+            event_type=EventType.CREATE,
+            resource_id=resource.id,
+            resource_name=resource.name,
+            resource_hash=resource.content_hash,
+            details={"trust_tier": resource.trust_tier.value},
+        ))
         return resource
 
     async def _fire_hook(self, event: str, **kwargs: Any) -> None:
@@ -569,6 +629,42 @@ class AsyncVault:
             offset=offset,
         )
 
+    async def find_by_name(
+        self,
+        name: str,
+        *,
+        tenant_id: str | None = None,
+        collection_id: str | None = None,
+    ) -> Resource | None:
+        """Find a resource by name (case-insensitive).
+
+        Returns the first matching non-deleted resource, or None.
+
+        Args:
+            name: Resource name to search for.
+            tenant_id: Optional tenant scope.
+            collection_id: Optional collection scope.
+
+        Returns:
+            Matching Resource or None.
+        """
+        await self._ensure_initialized()
+        tenant_id = self._resolve_tenant(tenant_id)
+
+        from qp_vault.protocols import ResourceFilter
+        resources = await self._storage.list_resources(
+            ResourceFilter(
+                tenant_id=tenant_id,
+                collection_id=collection_id,
+                limit=500,
+            )
+        )
+        name_lower = name.lower()
+        for r in resources:
+            if r.name.lower() == name_lower:
+                return r
+        return None
+
     async def update(
         self,
         resource_id: str,
@@ -592,15 +688,30 @@ class AsyncVault:
         )
         self._cache_invalidate()
         await self._fire_hook("post_update", resource=result)
+        await self._notify_subscribers(VaultEvent(
+            event_type=EventType.UPDATE,
+            resource_id=result.id,
+            resource_name=result.name,
+            resource_hash=result.content_hash,
+        ))
         return result
 
     async def delete(self, resource_id: str, *, hard: bool = False) -> None:
         """Delete a resource (soft by default)."""
         await self._ensure_initialized()
         self._check_permission("delete")
+        # Fetch name before deletion for the event
+        resource = await self._resource_manager.get(resource_id)
         await self._resource_manager.delete(resource_id, hard=hard)
         self._cache_invalidate()
         await self._fire_hook("post_delete", resource_id=resource_id)
+        await self._notify_subscribers(VaultEvent(
+            event_type=EventType.DELETE,
+            resource_id=resource_id,
+            resource_name=resource.name,
+            resource_hash=resource.content_hash,
+            details={"hard": hard},
+        ))
 
     async def get_content(self, resource_id: str) -> str:
         """Retrieve the full text content of a resource.
@@ -628,6 +739,74 @@ class AsyncVault:
             raise VaultError(f"No content found for resource {resource_id}")
         sorted_chunks = sorted(chunks, key=lambda c: c.chunk_index)
         return "\n\n".join(c.content for c in sorted_chunks)
+
+    async def reprocess(self, resource_id: str) -> Resource:
+        """Re-chunk and re-embed an existing resource.
+
+        Retrieves the resource content from stored chunks, then runs the
+        full ingest pipeline again (chunk, CID, embed). Useful when the
+        embedding model changes or chunking parameters are updated.
+
+        Args:
+            resource_id: The resource to reprocess.
+
+        Returns:
+            The updated Resource with new chunk_count and INDEXED status.
+        """
+        await self._ensure_initialized()
+        self._check_permission("update")
+
+        # Verify resource exists and get content
+        await self._resource_manager.get(resource_id)
+        chunks = await self._storage.get_chunks_for_resource(resource_id)
+        if not chunks:
+            raise VaultError(f"No content found for resource {resource_id}")
+        sorted_chunks = sorted(chunks, key=lambda c: c.chunk_index)
+        text = "\n\n".join(c.content for c in sorted_chunks)
+
+        # Re-chunk
+        from qp_vault.core.chunker import chunk_text
+        from qp_vault.core.hasher import compute_cid
+        chunk_results = chunk_text(text, self._resource_manager._chunker_config)
+
+        new_chunks: list[Chunk] = []
+        for cr in chunk_results:
+            import uuid
+            chunk_id = str(uuid.uuid4())
+            cid = compute_cid(cr.content)
+            new_chunks.append(
+                Chunk(
+                    id=chunk_id,
+                    resource_id=resource_id,
+                    content=cr.content,
+                    cid=cid,
+                    chunk_index=cr.chunk_index,
+                    page_number=cr.page_number,
+                    section_title=cr.section_title,
+                    token_count=cr.token_count,
+                )
+            )
+
+        # Re-embed if provider available
+        if self._embedder and new_chunks:
+            texts = [c.content for c in new_chunks]
+            embeddings = await self._embedder.embed(texts)
+            for chunk, emb in zip(new_chunks, embeddings, strict=False):
+                chunk.embedding = emb
+
+        # Store (replaces existing chunks, updates status to INDEXED)
+        await self._storage.store_chunks(resource_id, new_chunks)
+
+        self._cache_invalidate()
+        updated = await self._resource_manager.get(resource_id)
+        await self._notify_subscribers(VaultEvent(
+            event_type=EventType.UPDATE,
+            resource_id=resource_id,
+            resource_name=updated.name,
+            resource_hash=updated.content_hash,
+            details={"reprocessed": True, "chunk_count": len(new_chunks)},
+        ))
+        return updated
 
     async def upsert(
         self,
@@ -799,6 +978,13 @@ class AsyncVault:
         self._check_permission("transition")
         result = await self._lifecycle.transition(resource_id, target, reason=reason)
         await self._fire_hook("post_transition", resource=result, target=target)
+        await self._notify_subscribers(VaultEvent(
+            event_type=EventType.LIFECYCLE_TRANSITION,
+            resource_id=result.id,
+            resource_name=result.name,
+            resource_hash=result.content_hash,
+            details={"target": target, "reason": reason or ""},
+        ))
         return result
 
     async def supersede(
@@ -904,6 +1090,14 @@ class AsyncVault:
             embeddings = await self._embedder.embed([query])
             query_embedding = embeddings[0]
 
+        # Fallback to text-only search when no embeddings available
+        if query_embedding is None:
+            v_weight = 0.0
+            t_weight = 1.0
+        else:
+            v_weight = self.config.vector_weight
+            t_weight = self.config.text_weight
+
         from qp_vault.protocols import ResourceFilter
 
         search_query = SearchQuery(
@@ -911,8 +1105,8 @@ class AsyncVault:
             query_text=query,
             top_k=top_k * 3,  # Over-fetch for trust re-ranking
             threshold=0.0,  # Apply threshold after trust weighting
-            vector_weight=self.config.vector_weight,
-            text_weight=self.config.text_weight,
+            vector_weight=v_weight,
+            text_weight=t_weight,
             filters=ResourceFilter(
                 tenant_id=tenant_id,
                 trust_tier=min_trust_tier.value if min_trust_tier is not None and hasattr(min_trust_tier, "value") else min_trust_tier,
@@ -962,6 +1156,84 @@ class AsyncVault:
 
         await self._fire_hook("post_search", query=query, results=paginated)
         return paginated
+
+    async def grep(
+        self,
+        keywords: list[str],
+        *,
+        tenant_id: str | None = None,
+        top_k: int = 20,
+        max_keywords: int = 20,
+    ) -> list[SearchResult]:
+        """Multi-keyword OR search with hit-density scoring.
+
+        Searches for chunks containing any of the provided keywords using
+        text matching (FTS5 on SQLite, ILIKE on Postgres). Results are scored
+        by how many distinct keywords appear in each chunk (hit density).
+
+        This is useful for Agentic RAG multi-keyword retrieval strategies
+        where you want broad recall across multiple concepts.
+
+        Args:
+            keywords: List of keyword strings to search for.
+            tenant_id: Optional tenant scope.
+            top_k: Maximum results to return.
+            max_keywords: Maximum keywords allowed (default 20).
+
+        Returns:
+            List of SearchResult sorted by hit density (most keywords matched first).
+        """
+        await self._ensure_initialized()
+        self._check_permission("search")
+        tenant_id = self._resolve_tenant(tenant_id)
+
+        if not keywords:
+            return []
+        if len(keywords) > max_keywords:
+            keywords = keywords[:max_keywords]
+
+        # Normalize keywords
+        clean_keywords = [k.strip().lower() for k in keywords if k.strip()]
+        if not clean_keywords:
+            return []
+
+        # Search each keyword independently via FTS text search, then merge
+        from qp_vault.protocols import ResourceFilter
+        all_results: dict[str, SearchResult] = {}
+        hit_counts: dict[str, int] = {}
+
+        for keyword in clean_keywords:
+            search_query = SearchQuery(
+                query_text=keyword,
+                top_k=top_k * 3,
+                vector_weight=0.0,
+                text_weight=1.0,
+                filters=ResourceFilter(tenant_id=tenant_id) if tenant_id else None,
+            )
+            raw = await self._storage.search(search_query)
+            for r in raw:
+                if r.chunk_id not in all_results or r.relevance > all_results[r.chunk_id].relevance:
+                    all_results[r.chunk_id] = r
+                hit_counts[r.chunk_id] = hit_counts.get(r.chunk_id, 0) + 1
+
+        # Score by hit density: fraction of keywords matched
+        total_kw = len(clean_keywords)
+        scored: list[SearchResult] = []
+        for chunk_id, result in all_results.items():
+            density = hit_counts[chunk_id] / total_kw
+            scored.append(result.model_copy(update={"relevance": density}))
+
+        # Apply trust weighting
+        weighted = apply_trust_weighting(scored, self.config)
+
+        # Deduplicate by resource_id (keep best chunk per resource)
+        seen: dict[str, SearchResult] = {}
+        for r in weighted:
+            if r.resource_id not in seen or r.relevance > seen[r.resource_id].relevance:
+                seen[r.resource_id] = r
+
+        results = sorted(seen.values(), key=lambda r: r.relevance, reverse=True)
+        return results[:top_k]
 
     async def search_with_facets(
         self,

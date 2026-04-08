@@ -403,6 +403,14 @@ class TestPostgreSQLSSLConfig:
 # =============================================================================
 
 
+try:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: F401
+    HAS_CRYPTO = True
+except ImportError:
+    HAS_CRYPTO = False
+
+
+@pytest.mark.skipif(not HAS_CRYPTO, reason="cryptography not installed")
 class TestFIPSKAT:
     def test_sha3_kat_passes(self) -> None:
         from qp_vault.encryption.fips_kat import run_sha3_256_kat
