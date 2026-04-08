@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-04-08
+
+### Added
+- **Event Subscription**: `vault.subscribe(callback)` registers sync or async callbacks for mutation events (CREATE, UPDATE, DELETE, LIFECYCLE_TRANSITION). Returns unsubscribe function. 5-second timeout on async callbacks. 100-subscriber cap. Error isolation: failing callbacks never block vault operations.
+- **Reprocess**: `vault.reprocess(resource_id)` re-chunks and re-embeds existing resources. Useful when embedding models change or chunking parameters are updated. Emits UPDATE subscriber event with `reprocessed=True`.
+- **Text-Only Search Fallback**: `vault.search()` automatically degrades to text-only mode (`vector_weight=0.0`, `text_weight=1.0`) when no embedder is configured. Search works on day one without requiring an embedding model.
+- **Find By Name**: `vault.find_by_name(name)` case-insensitive resource lookup. Returns first matching non-deleted resource or None.
+- **8 New REST Endpoints**: `POST /resources/{id}/reprocess`, `POST /grep`, `GET /resources/by-name`, `GET /resources/{old_id}/diff/{new_id}`, `POST /resources/multiple`, `PATCH /resources/{id}/adversarial`, `POST /import`, `GET /resources/by-name` (30 total endpoints).
+- 117 new tests across 6 test files (subscribe: 12, reprocess: 6, grep compat: 9, text fallback: 5, find_by_name: 5, integration: 46, security: 6, FastAPI: 15, cross-feature: 7, RBAC: 3, edge cases: 3)
+
+### Security
+- Replaced `assert` statements with `if/raise VaultError` (survives optimized bytecode)
+- Subscriber callback timeout (5s via `asyncio.wait_for`) prevents event loop blocking
+- Subscriber cap (`_MAX_SUBSCRIBERS=100`) prevents memory exhaustion
+- Snapshot-copy of subscriber list before iteration prevents mutation during notify
+- Adversarial status endpoint validates against allowlist (`unverified`, `verified`, `suspicious`, `quarantined`)
+- Import endpoint rejects path traversal (`..` in path components)
+- `get_multiple` endpoint coerces all IDs to strings (prevents type confusion)
+- `find_by_name` enforces RBAC `search` permission
+- Security score: 100/100 (bandit clean, pip-audit clean)
+
+### Changed
+- Total tests: 871+ (up from 520 at v1.3.0)
+- REST endpoints: 30 (up from 22)
+- Documentation updated: api-reference.md, fastapi.md, streaming-and-telemetry.md
+
 ## [1.4.0] - 2026-04-08
 
 ### Added
