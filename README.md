@@ -142,7 +142,7 @@ pip install qp-vault
 | `pip install qp-vault[local]` | + Local embeddings (sentence-transformers, air-gap safe) | + sentence-transformers |
 | `pip install qp-vault[openai]` | + OpenAI embeddings (cloud) | + openai |
 | `pip install qp-vault[integrity]` | + Near-duplicate + contradiction detection | + numpy |
-| `pip install qp-vault[fastapi]` | + REST API (22+ endpoints) | + fastapi |
+| `pip install qp-vault[fastapi]` | + REST API (30+ endpoints) | + fastapi |
 | `pip install qp-vault[cli]` | + `vault` command-line tool (15 commands) | + typer, rich |
 | `pip install qp-vault[all]` | Everything | All of the above |
 
@@ -169,6 +169,9 @@ vault.add("Incident response: acknowledge within 15 minutes...",
 
 # Trust-weighted search (deduplicated, with freshness decay)
 results = vault.search("incident response")
+
+# Multi-keyword grep (single-pass FTS, three-signal scoring)
+results = vault.grep(["incident", "response", "P0", "escalation"])
 
 # Retrieve full content
 text = vault.get_content(results[0].resource_id)

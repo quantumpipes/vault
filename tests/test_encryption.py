@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 try:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: F401
+
     from qp_vault.encryption.aes_gcm import AESGCMEncryptor
     HAS_CRYPTO = True
 except ImportError:

@@ -41,6 +41,10 @@ class VaultConfig(BaseModel):
     default_top_k: int = 10
     default_threshold: float = 0.0
 
+    # Grep scoring (coverage is a multiplier, these weight the base score)
+    grep_rank_weight: float = 0.7       # Weight for native text rank (FTS5/trigram)
+    grep_proximity_weight: float = 0.3  # Weight for keyword proximity within chunk
+
     # Trust weights (trust_tier -> multiplier)
     trust_weights: dict[str, float] = Field(
         default_factory=lambda: {

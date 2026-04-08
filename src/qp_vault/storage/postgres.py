@@ -514,6 +514,130 @@ class PostgresBackend:
 
         return results
 
+    async def grep(
+        self,
+        keywords: list[str],
+        filters: ResourceFilter | None = None,
+        top_k: int = 60,
+    ) -> list[Any]:
+        """Multi-keyword ILIKE + trigram search in a single query.
+
+        Builds a single SQL query with per-keyword CASE expressions for
+        hit counting and GREATEST(similarity(...)) for text ranking.
+        The GIN trigram index on content accelerates ILIKE matching.
+
+        Args:
+            keywords: Pre-sanitized keyword list.
+            filters: Optional resource-level filters.
+            top_k: Maximum results.
+
+        Returns:
+            List of GrepMatch dataclass instances.
+        """
+        from qp_vault.storage.grep_utils import GrepMatch
+
+        if not keywords:
+            return []
+
+        pool = await self._get_pool()
+
+        # Build parameterized query pieces
+        # $1 = top_k, $2 = keyword_count, $3..N = keyword patterns
+        param_idx = 3
+        or_parts: list[str] = []
+        hit_parts: list[str] = []
+        sim_parts: list[str] = []
+        params: list[Any] = [top_k, len(keywords)]
+
+        for kw in keywords:
+            or_parts.append(f"c.content ILIKE ${param_idx}")
+            hit_parts.append(f"CASE WHEN c.content ILIKE ${param_idx} THEN 1 ELSE 0 END")
+            sim_parts.append(f"similarity(c.content, ${param_idx})")
+            params.append(f"%{kw}%")
+            param_idx += 1
+
+        or_clause = " OR ".join(or_parts)
+        hit_count_expr = " + ".join(hit_parts)
+        similarity_expr = f"GREATEST({', '.join(sim_parts)})"
+
+        # Extra filters (must include tenant_id for multi-tenant isolation)
+        extra_conditions: list[str] = []
+        if filters:
+            if filters.tenant_id:
+                extra_conditions.append(f"r.tenant_id = ${param_idx}")
+                params.append(filters.tenant_id)
+                param_idx += 1
+            if filters.trust_tier:
+                extra_conditions.append(f"r.trust_tier = ${param_idx}")
+                params.append(filters.trust_tier)
+                param_idx += 1
+            if filters.layer:
+                extra_conditions.append(f"r.layer = ${param_idx}")
+                params.append(filters.layer)
+                param_idx += 1
+            if filters.collection_id:
+                extra_conditions.append(f"r.collection_id = ${param_idx}")
+                params.append(filters.collection_id)
+                param_idx += 1
+
+        extra_where = (" AND " + " AND ".join(extra_conditions)) if extra_conditions else ""
+
+        sql = f"""
+            SELECT
+                c.id AS chunk_id,
+                c.resource_id,
+                c.content,
+                c.cid,
+                c.page_number,
+                c.section_title,
+                r.name AS resource_name,
+                r.trust_tier,
+                r.adversarial_status,
+                r.lifecycle,
+                r.updated_at,
+                r.resource_type,
+                r.data_classification,
+                ({hit_count_expr})::FLOAT / $2 AS hit_density,
+                {similarity_expr} AS text_rank
+            FROM qp_vault.chunks c
+            JOIN qp_vault.resources r ON c.resource_id = r.id
+            WHERE r.status = 'indexed'
+              AND ({or_clause})
+              {extra_where}
+            ORDER BY ({hit_count_expr}) DESC, {similarity_expr} DESC
+            LIMIT $1
+        """  # nosec B608 — all user input parameterized via $N; column/table names hardcoded
+
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+
+        results: list[GrepMatch] = []
+        for row in rows:
+            content = row["content"]
+            content_lower = content.lower()
+            matched = [kw for kw in keywords if kw in content_lower]
+
+            results.append(GrepMatch(
+                chunk_id=row["chunk_id"],
+                resource_id=row["resource_id"],
+                resource_name=row["resource_name"],
+                content=content,
+                matched_keywords=matched,
+                hit_density=float(row["hit_density"]),
+                text_rank=float(row["text_rank"]),
+                trust_tier=row["trust_tier"],
+                adversarial_status=row.get("adversarial_status", "unverified"),
+                lifecycle=row.get("lifecycle", "active"),
+                updated_at=row.get("updated_at"),
+                page_number=row["page_number"],
+                section_title=row["section_title"],
+                resource_type=row.get("resource_type"),
+                data_classification=row.get("data_classification"),
+                cid=row.get("cid"),
+            ))
+
+        return results
+
     async def get_all_hashes(self) -> list[tuple[str, str]]:
         """Return (resource_id, content_hash) for all non-deleted resources."""
         pool = await self._get_pool()

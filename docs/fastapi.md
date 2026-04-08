@@ -1,6 +1,6 @@
 # FastAPI Integration
 
-qp-vault provides 22+ ready-made REST API endpoints.
+qp-vault provides 30+ ready-made REST API endpoints.
 
 ```bash
 pip install qp-vault[fastapi]
@@ -49,12 +49,14 @@ app.include_router(router, prefix="/v1/vault")
 | `GET` | `/resources/{id}/proof` | Export Merkle proof |
 | `GET` | `/verify` | Verify entire vault |
 
-### Search
+### Search & Retrieval
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/search` | Trust-weighted hybrid search |
 | `POST` | `/search/faceted` | Search with facet counts |
+| `POST` | `/grep` | Multi-keyword OR search (hit-density scoring) |
+| `GET` | `/resources/by-name` | Find resource by name (case-insensitive) |
 
 ### Collections
 
@@ -63,12 +65,27 @@ app.include_router(router, prefix="/v1/vault")
 | `GET` | `/collections` | List collections |
 | `POST` | `/collections` | Create collection |
 
-### Batch & Export
+### Processing
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/resources/{id}/reprocess` | Re-chunk and re-embed a resource |
+
+### Batch, Import & Export
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/batch` | Batch add (max 100 items) |
+| `POST` | `/resources/multiple` | Get multiple resources by ID (max 100) |
 | `GET` | `/export` | Export vault to JSON |
+| `POST` | `/import` | Import resources from export file |
+
+### Adversarial & Diff
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `PATCH` | `/resources/{id}/adversarial` | Set adversarial verification status |
+| `GET` | `/resources/{old_id}/diff/{new_id}` | Unified diff between two resources |
 
 ### Intelligence
 
@@ -78,7 +95,7 @@ app.include_router(router, prefix="/v1/vault")
 | `GET` | `/status` | Resource counts and metadata |
 | `GET` | `/expiring` | Resources expiring within N days |
 
-<!-- VERIFIED: integrations/fastapi_routes.py:118-310 — all endpoints -->
+<!-- VERIFIED: integrations/fastapi_routes.py:118-390 — all endpoints -->
 
 ## Input Validation
 
@@ -94,6 +111,9 @@ All endpoints validate inputs at the API boundary before reaching vault logic.
 | `offset` | 0-1,000,000 | `GET /resources` |
 | Batch sources | Max 100 items | `POST /batch` |
 | `as_of` | Valid ISO date | `POST /search` |
+| `keywords` | Max 20 items | `POST /grep` |
+| `name` | Max 255 characters | `GET /resources/by-name` |
+| `resource_ids` | Max 100 items | `POST /resources/multiple` |
 
 <!-- VERIFIED: integrations/fastapi_routes.py:40 — content max_length -->
 <!-- VERIFIED: integrations/fastapi_routes.py:51-53 — SearchRequest validators -->

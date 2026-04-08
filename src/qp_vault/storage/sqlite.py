@@ -530,6 +530,133 @@ class SQLiteBackend:
         results.sort(key=lambda r: r.relevance, reverse=True)
         return results[: query.top_k]
 
+    async def grep(
+        self,
+        keywords: list[str],
+        filters: ResourceFilter | None = None,
+        top_k: int = 60,
+    ) -> list[Any]:
+        """Multi-keyword FTS5 OR search in a single query.
+
+        Executes one FTS5 MATCH with OR-joined keywords, then computes
+        per-keyword match flags and hit density in Python (on the small
+        set of matched rows only).
+
+        Args:
+            keywords: Pre-sanitized keyword list.
+            filters: Optional resource-level filters.
+            top_k: Maximum results.
+
+        Returns:
+            List of GrepMatch dataclass instances.
+        """
+        from qp_vault.storage.grep_utils import (
+            GrepMatch,
+            build_fts_or_query,
+            extract_matched_keywords,
+        )
+
+        if not keywords:
+            return []
+
+        conn = self._get_conn()
+
+        # Build FTS5 OR expression
+        fts_expr = build_fts_or_query(keywords)
+        if not fts_expr:
+            return []
+
+        # Resource-level filters
+        where_parts = ["r.status = 'indexed'"]
+        where_params: list[Any] = []
+
+        if filters:
+            if filters.tenant_id:
+                where_parts.append("r.tenant_id = ?")
+                where_params.append(filters.tenant_id)
+            if filters.trust_tier:
+                where_parts.append("r.trust_tier = ?")
+                where_params.append(filters.trust_tier)
+            if filters.layer:
+                where_parts.append("r.layer = ?")
+                where_params.append(filters.layer)
+            if filters.collection_id:
+                where_parts.append("r.collection_id = ?")
+                where_params.append(filters.collection_id)
+
+        where_clause = " AND ".join(where_parts)
+
+        # Single FTS5 query: match all keywords with OR, get rank
+        try:
+            fts_sql = (
+                "SELECT fts.rowid, fts.rank"
+                " FROM chunks_fts fts"
+                " WHERE chunks_fts MATCH ?"
+                " ORDER BY fts.rank"
+                f" LIMIT {top_k * 3}"  # Over-fetch for post-filtering
+            )
+            fts_rows = conn.execute(fts_sql, (fts_expr,)).fetchall()
+        except sqlite3.OperationalError:
+            return []
+
+        if not fts_rows:
+            return []
+
+        # Build rowid set and rank lookup
+        fts_ranks: dict[int, float] = {}
+        for fr in fts_rows:
+            # Normalize FTS5 rank: lower (more negative) = better match
+            fts_ranks[fr["rowid"]] = 1.0 / (1.0 + abs(fr["rank"]))
+
+        rowid_list = ",".join(str(r) for r in fts_ranks)
+
+        # Fetch chunk + resource data for matched rowids
+        # Column/table names hardcoded; only where_clause uses ? params
+        data_sql = (
+            f"SELECT c.rowid AS chunk_rowid, c.id AS chunk_id,"  # nosec B608
+            f" c.resource_id, c.content, c.cid,"
+            f" c.page_number, c.section_title,"
+            f" r.name AS resource_name, r.trust_tier,"
+            f" r.adversarial_status, r.lifecycle,"
+            f" r.updated_at, r.resource_type, r.data_classification"
+            f" FROM chunks c JOIN resources r ON c.resource_id = r.id"
+            f" WHERE c.rowid IN ({rowid_list}) AND {where_clause}"
+        )
+        rows = conn.execute(data_sql, where_params).fetchall()
+
+        total_kw = len(keywords)
+        results: list[GrepMatch] = []
+
+        for row in rows:
+            row_dict = dict(row)
+            content = row_dict["content"]
+            matched = extract_matched_keywords(content, keywords)
+            if not matched:
+                continue
+
+            results.append(GrepMatch(
+                chunk_id=row_dict["chunk_id"],
+                resource_id=row_dict["resource_id"],
+                resource_name=row_dict["resource_name"],
+                content=content,
+                matched_keywords=matched,
+                hit_density=len(matched) / total_kw,
+                text_rank=fts_ranks.get(row_dict["chunk_rowid"], 0.0),
+                trust_tier=row_dict["trust_tier"],
+                adversarial_status=row_dict.get("adversarial_status", "unverified"),
+                lifecycle=row_dict.get("lifecycle", "active"),
+                updated_at=row_dict.get("updated_at"),
+                page_number=row_dict["page_number"],
+                section_title=row_dict["section_title"],
+                resource_type=row_dict.get("resource_type"),
+                data_classification=row_dict.get("data_classification"),
+                cid=row_dict.get("cid"),
+            ))
+
+        # Sort by density first, then text_rank
+        results.sort(key=lambda r: (r.hit_density, r.text_rank), reverse=True)
+        return results[:top_k]
+
     async def get_all_hashes(self) -> list[tuple[str, str]]:
         """Return (resource_id, content_hash) for all non-deleted resources."""
         conn = self._get_conn()

@@ -169,6 +169,28 @@ class StorageBackend(Protocol):
         """Find an existing resource by content ID (for deduplication)."""
         ...
 
+    async def grep(
+        self,
+        keywords: list[str],
+        filters: ResourceFilter | None = None,
+        top_k: int = 60,
+    ) -> list[Any]:
+        """Multi-keyword text search in a single query.
+
+        Returns raw GrepMatch results (from qp_vault.storage.grep_utils)
+        with per-keyword hit flags and native text rank. Scoring
+        composition happens in the vault layer.
+
+        Args:
+            keywords: Pre-sanitized keyword list.
+            filters: Optional resource-level filters.
+            top_k: Maximum raw results to return (before vault-layer scoring).
+
+        Returns:
+            List of GrepMatch instances from storage.grep_utils.
+        """
+        ...
+
     async def get_embedding_dimension(self) -> int | None:
         """Return the embedding dimension of stored vectors, or None if empty."""
         ...

@@ -1,6 +1,6 @@
 # API Reference
 
-Complete Python SDK for qp-vault v1.0.0.
+Complete Python SDK for qp-vault v1.4.0.
 
 ## Constructor
 
@@ -101,6 +101,24 @@ Reassembles chunks in order to return the full text content. Quarantined resourc
 
 <!-- VERIFIED: vault.py:406-420 -->
 
+### reprocess()
+
+```python
+vault.reprocess(resource_id: str) -> Resource
+```
+
+Re-chunks and re-embeds an existing resource. Useful when the embedding model changes or chunking parameters are updated. The resource content is preserved; only chunks and embeddings are regenerated.
+
+```python
+# After switching embedding models
+updated = vault.reprocess(resource.id)
+assert updated.status == "indexed"
+```
+
+Emits an `UPDATE` subscriber event with `details={"reprocessed": True}`.
+
+<!-- VERIFIED: vault.py:706-770 -->
+
 ### list()
 
 ```python
@@ -120,6 +138,26 @@ vault.list(
 ```
 
 <!-- VERIFIED: vault.py:373-400 -->
+
+### find_by_name()
+
+```python
+vault.find_by_name(
+    name: str,
+    *,
+    tenant_id: str | None = None,
+    collection_id: str | None = None,
+) -> Resource | None
+```
+
+Case-insensitive name lookup. Returns the first matching non-deleted resource, or `None`.
+
+```python
+resource = vault.find_by_name("STRATEGY.md")
+# Also matches "strategy.md", "Strategy.MD"
+```
+
+<!-- VERIFIED: vault.py:632-668 -->
 
 ### update()
 
@@ -196,7 +234,9 @@ vault.search(
 ) -> list[SearchResult]
 ```
 
-<!-- VERIFIED: vault.py:558-648 -->
+When no embedder is configured, search automatically falls back to text-only mode (`vector_weight=0.0`, `text_weight=1.0`). This ensures search works on day one without requiring an embedding model.
+
+<!-- VERIFIED: vault.py:1051-1063 — text-only fallback -->
 
 ### search_with_facets()
 
@@ -207,6 +247,37 @@ vault.search_with_facets(query: str, **kwargs) -> dict[str, Any]
 Returns `{"results": [...], "total": N, "facets": {"trust_tier": {...}, "resource_type": {...}}}`.
 
 <!-- VERIFIED: vault.py:650-687 -->
+
+### grep()
+
+```python
+vault.grep(
+    keywords: list[str],
+    *,
+    tenant_id: str | None = None,
+    top_k: int = 20,
+    max_keywords: int = 20,
+) -> list[SearchResult]
+```
+
+Multi-keyword OR search with three-signal blended scoring. Executes a single FTS5 OR query (SQLite) or ILIKE+trigram query (PostgreSQL) regardless of keyword count.
+
+**Scoring formula:** `coverage * (0.7 * text_rank + 0.3 * proximity)` where:
+- **Coverage** (Lucene coord factor): `matched_keywords / total_keywords`, applied as a multiplier. 3/3 = full score, 1/3 = 33%.
+- **Text rank**: native FTS5 bm25 or pg_trgm similarity (0.0-1.0).
+- **Proximity**: how close matched keywords appear to each other within the chunk.
+
+```python
+results = vault.grep(["revenue", "Q3", "forecast"])
+# Results sorted by blended relevance (coverage * text_rank + proximity)
+# explain_metadata includes: matched_keywords, hit_density, text_rank, proximity, snippet
+print(results[0].explain_metadata["snippet"])
+# "...discussed **Q3** **revenue** **forecast** projections..."
+```
+
+No embedder required. Single database query. Results deduplicated by resource and trust-weighted.
+
+<!-- VERIFIED: vault.py:1172-1266 -->
 
 **SearchResult fields:**
 
@@ -366,6 +437,50 @@ vault.import_vault(path: str | Path) -> list[Resource]
 ```python
 vault.status() -> dict[str, Any]
 ```
+
+---
+
+## Event Subscription
+
+### subscribe()
+
+```python
+vault.subscribe(callback: Callable[[VaultEvent], Any]) -> Callable[[], None]
+```
+
+Register a callback for vault mutation events. Returns an unsubscribe function. Callbacks can be sync or async; async callbacks are awaited directly. Errors in callbacks are logged and never propagated to the caller.
+
+```python
+from qp_vault import AsyncVault, VaultEvent
+
+vault = AsyncVault("./knowledge")
+
+# Sync callback
+def on_change(event: VaultEvent) -> None:
+    print(f"{event.event_type}: {event.resource_name}")
+
+unsub = vault.subscribe(on_change)
+
+# Add a resource (callback fires with CREATE event)
+vault.add("Content", name="doc.md")
+
+# Stop receiving events
+unsub()
+```
+
+**Events emitted on:**
+
+| Operation | EventType |
+|-----------|-----------|
+| `add()` | `CREATE` |
+| `update()` | `UPDATE` |
+| `delete()` | `DELETE` |
+| `reprocess()` | `UPDATE` (with `details.reprocessed=True`) |
+| `transition()` | `LIFECYCLE_TRANSITION` |
+
+Multiple subscribers are independent. Unsubscribing one does not affect others. Calling `unsub()` twice is safe.
+
+<!-- VERIFIED: vault.py:289-336 — subscribe + _notify_subscribers -->
 
 ---
 

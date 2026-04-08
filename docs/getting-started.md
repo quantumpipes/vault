@@ -80,6 +80,22 @@ for r in results:
 
 Results are deduplicated (one per resource), ranked by: `(vector + text) * trust * freshness * layer_boost`.
 
+## Multi-Keyword Grep
+
+```python
+# Find documents where multiple concepts converge
+results = vault.grep(["incident", "response", "P0", "escalation"])
+
+for r in results:
+    meta = r.explain_metadata
+    print(f"{r.resource_name} — {len(meta['matched_keywords'])}/{4} keywords matched")
+    print(f"  snippet: {meta['snippet']}")
+```
+
+Single-pass FTS5 query. Scored by keyword coverage (coord factor), text relevance, and term proximity. No embedder required.
+
+<!-- VERIFIED: vault.py:1172-1285 — grep method -->
+
 ## Retrieve Content
 
 ```python

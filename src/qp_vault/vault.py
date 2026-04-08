@@ -56,6 +56,7 @@ VaultCallback = "Callable[[VaultEvent], Any]"
 
 # --- Input Sanitization ---
 
+_MAX_SUBSCRIBERS = 100
 _MAX_NAME_LENGTH = 255
 _MAX_TAG_LENGTH = 100
 _MAX_TAGS = 50
@@ -302,6 +303,8 @@ class AsyncVault:
         Returns:
             An unsubscribe function. Call it to stop receiving events.
         """
+        if len(self._subscribers) >= _MAX_SUBSCRIBERS:
+            raise VaultError(f"Maximum subscriber limit reached ({_MAX_SUBSCRIBERS})")
         import inspect
         is_async = inspect.iscoroutinefunction(callback)
         entry = (callback, is_async)
@@ -318,17 +321,22 @@ class AsyncVault:
         """Broadcast a VaultEvent to all registered subscribers.
 
         Errors in subscriber callbacks are logged and never propagated.
-        Async callbacks are awaited directly (not spawned as tasks) to
-        keep ordering deterministic in tests.
+        Async callbacks are awaited with a timeout to prevent blocking
+        the event loop. The subscriber list is snapshot-copied before
+        iteration so callbacks can safely subscribe/unsubscribe.
         """
         import logging
         logger = logging.getLogger("qp_vault.subscribe")
-        for callback, is_async in self._subscribers:
+        # Snapshot: safe against subscribe/unsubscribe during iteration
+        snapshot = list(self._subscribers)
+        for callback, is_async in snapshot:
             try:
                 if is_async:
-                    await callback(event)
+                    await asyncio.wait_for(callback(event), timeout=5.0)
                 else:
                     callback(event)
+            except TimeoutError:
+                logger.warning("Subscriber callback timed out after 5s")
             except Exception:
                 logger.exception("Subscriber callback failed")
 
@@ -458,7 +466,8 @@ class AsyncVault:
             except OSError:
                 _is_path = False
         if _is_path:
-            assert not isinstance(source, bytes), "bytes source cannot be a path"
+            if isinstance(source, bytes):
+                raise VaultError("bytes source cannot be a path")
             path = Path(source).resolve()
             # Security: reject path traversal attempts
             if ".." in path.parts:
@@ -649,6 +658,7 @@ class AsyncVault:
             Matching Resource or None.
         """
         await self._ensure_initialized()
+        self._check_permission("search")
         tenant_id = self._resolve_tenant(tenant_id)
 
         from qp_vault.protocols import ResourceFilter
@@ -765,13 +775,14 @@ class AsyncVault:
         text = "\n\n".join(c.content for c in sorted_chunks)
 
         # Re-chunk
+        import uuid
+
         from qp_vault.core.chunker import chunk_text
         from qp_vault.core.hasher import compute_cid
         chunk_results = chunk_text(text, self._resource_manager._chunker_config)
 
         new_chunks: list[Chunk] = []
         for cr in chunk_results:
-            import uuid
             chunk_id = str(uuid.uuid4())
             cid = compute_cid(cr.content)
             new_chunks.append(
@@ -920,7 +931,8 @@ class AsyncVault:
         await self._ensure_initialized()
         self._check_permission("add_batch")
         tenant_id = self._resolve_tenant(tenant_id)
-        assert sources is not None, "sources must not be None"
+        if sources is None:
+            raise VaultError("sources must not be None")
         results: list[Resource] = []
         src: str | Path | bytes
         for src in sources:
@@ -1165,14 +1177,16 @@ class AsyncVault:
         top_k: int = 20,
         max_keywords: int = 20,
     ) -> list[SearchResult]:
-        """Multi-keyword OR search with hit-density scoring.
+        """Multi-keyword OR search with three-signal blended scoring.
 
-        Searches for chunks containing any of the provided keywords using
-        text matching (FTS5 on SQLite, ILIKE on Postgres). Results are scored
-        by how many distinct keywords appear in each chunk (hit density).
+        Single-pass FTS5 (SQLite) or ILIKE+trigram (Postgres) query,
+        scored by keyword coverage (coord factor), native text rank,
+        and term proximity. Trust-weighted and deduplicated.
 
-        This is useful for Agentic RAG multi-keyword retrieval strategies
-        where you want broad recall across multiple concepts.
+        Scoring formula:
+            base = rank_weight * text_rank + proximity_weight * proximity
+            blended = coverage * base
+            final = blended * trust_weight * adversarial * freshness
 
         Args:
             keywords: List of keyword strings to search for.
@@ -1181,7 +1195,7 @@ class AsyncVault:
             max_keywords: Maximum keywords allowed (default 20).
 
         Returns:
-            List of SearchResult sorted by hit density (most keywords matched first).
+            List of SearchResult sorted by blended relevance.
         """
         await self._ensure_initialized()
         self._check_permission("search")
@@ -1189,41 +1203,73 @@ class AsyncVault:
 
         if not keywords:
             return []
-        if len(keywords) > max_keywords:
-            keywords = keywords[:max_keywords]
 
-        # Normalize keywords
-        clean_keywords = [k.strip().lower() for k in keywords if k.strip()]
+        from qp_vault.protocols import ResourceFilter
+        from qp_vault.storage.grep_utils import (
+            compute_proximity,
+            generate_snippet,
+            normalize_keywords,
+        )
+
+        clean_keywords = normalize_keywords(keywords, max_keywords)
         if not clean_keywords:
             return []
 
-        # Search each keyword independently via FTS text search, then merge
-        from qp_vault.protocols import ResourceFilter
-        all_results: dict[str, SearchResult] = {}
-        hit_counts: dict[str, int] = {}
+        # Single storage query (not N+1), with timeout protection
+        filters = ResourceFilter(tenant_id=tenant_id) if tenant_id else None
+        raw_matches = await self._tracked(
+            "grep",
+            self._with_timeout(
+                self._storage.grep(clean_keywords, filters=filters, top_k=top_k * 3)
+            ),
+        )
 
-        for keyword in clean_keywords:
-            search_query = SearchQuery(
-                query_text=keyword,
-                top_k=top_k * 3,
-                vector_weight=0.0,
-                text_weight=1.0,
-                filters=ResourceFilter(tenant_id=tenant_id) if tenant_id else None,
-            )
-            raw = await self._storage.search(search_query)
-            for r in raw:
-                if r.chunk_id not in all_results or r.relevance > all_results[r.chunk_id].relevance:
-                    all_results[r.chunk_id] = r
-                hit_counts[r.chunk_id] = hit_counts.get(r.chunk_id, 0) + 1
+        # Three-signal blended scoring
+        rank_w = self.config.grep_rank_weight
+        prox_w = self.config.grep_proximity_weight
 
-        # Score by hit density: fraction of keywords matched
-        total_kw = len(clean_keywords)
         scored: list[SearchResult] = []
-        for chunk_id, result in all_results.items():
-            density = hit_counts[chunk_id] / total_kw
-            scored.append(result.model_copy(update={"relevance": density}))
+        for match in raw_matches:
+            # Signal 1: coverage (Lucene coord factor, acts as multiplier)
+            coverage = match.hit_density
 
-        # Apply trust weighting
+            # Signal 2: native text rank (FTS5 bm25 or pg_trgm similarity)
+            text_rank = match.text_rank
+
+            # Signal 3: term proximity (cover density ranking)
+            proximity = compute_proximity(match.content, match.matched_keywords)
+
+            # Composite: coverage multiplies the weighted base score
+            base = rank_w * text_rank + prox_w * proximity
+            blended = coverage * base
+
+            snippet = generate_snippet(match.content, match.matched_keywords)
+
+            scored.append(SearchResult(
+                chunk_id=match.chunk_id,
+                resource_id=match.resource_id,
+                resource_name=match.resource_name,
+                content=match.content,
+                page_number=match.page_number,
+                section_title=match.section_title,
+                text_rank=text_rank,
+                trust_tier=TrustTier(match.trust_tier),
+                cid=match.cid,
+                lifecycle=match.lifecycle,
+                updated_at=match.updated_at,
+                resource_type=match.resource_type,
+                data_classification=match.data_classification,
+                relevance=blended,
+                explain_metadata={
+                    "matched_keywords": match.matched_keywords,
+                    "hit_density": match.hit_density,
+                    "text_rank": text_rank,
+                    "proximity": proximity,
+                    "snippet": snippet,
+                },
+            ))
+
+        # Apply trust weighting (same as search)
         weighted = apply_trust_weighting(scored, self.config)
 
         # Deduplicate by resource_id (keep best chunk per resource)
@@ -1233,7 +1279,14 @@ class AsyncVault:
                 seen[r.resource_id] = r
 
         results = sorted(seen.values(), key=lambda r: r.relevance, reverse=True)
-        return results[:top_k]
+        final = results[:top_k]
+
+        # SURVEIL: query-time adversarial re-evaluation (same as search)
+        from qp_vault.membrane.surveil import apply_surveil
+        final = apply_surveil(final)
+
+        await self._fire_hook("post_grep", keywords=clean_keywords, results=final)
+        return final
 
     async def search_with_facets(
         self,

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-04-08
+
+### Added
+- **World-class grep engine**: Complete rewrite of `AsyncVault.grep()` with three-signal blended scoring
+  - **Single-pass FTS5 OR query** (SQLite): one database round-trip regardless of keyword count, replacing the previous N+1 per-keyword search loop
+  - **Single-pass ILIKE + trigram query** (PostgreSQL): per-keyword CASE expressions with `GREATEST(similarity(...))` scoring
+  - **Three-signal scoring**: keyword coverage (Lucene coord factor as multiplier), native text rank (FTS5 bm25 / pg_trgm), term proximity (cover density ranking)
+  - **Keyword highlighting**: `explain_metadata.snippet` with configurable markers
+  - **Scoring breakdown**: `explain_metadata` includes `matched_keywords`, `hit_density`, `text_rank`, `proximity`, and `snippet`
+- `StorageBackend.grep()` protocol method: dedicated storage-level grep for both SQLite and PostgreSQL backends
+- `grep_utils.py`: shared utilities for FTS5 query building, keyword sanitization, snippet generation, keyword matching, and proximity scoring
+- `GrepMatch` dataclass: lightweight intermediate result type for storage-to-vault layer communication
+- `VaultConfig.grep_rank_weight` and `VaultConfig.grep_proximity_weight`: configurable scoring weights
+- 62 new grep tests across `test_grep.py` (51 tests) and `test_grep_utils.py` (31 tests)
+
+### Fixed
+- Encryption test skip guards: `test_v1_features.py`, `test_coverage_gaps.py`, `test_encryption.py` now correctly skip when `[encryption]` extra is not installed
+
+### Changed
+- Grep scoring formula: `coverage * (rank_weight * text_rank + proximity_weight * proximity)` replaces flat density-only scoring
+- Coverage acts as a multiplier (Lucene coord factor pattern): 3/3 keywords = full score, 1/3 = 33% score
+
 ## [1.0.0] - 2026-04-07
 
 ### Added

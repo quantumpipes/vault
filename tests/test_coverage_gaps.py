@@ -306,6 +306,14 @@ class TestVaultOps:
 # =============================================================================
 
 
+try:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM as _AESGCM  # noqa: F401
+    _HAS_CRYPTO = True
+except ImportError:
+    _HAS_CRYPTO = False
+
+
+@pytest.mark.skipif(not _HAS_CRYPTO, reason="cryptography not installed")
 class TestAESEdges:
     def test_decrypt_short(self) -> None:
         from qp_vault.encryption.aes_gcm import AESGCMEncryptor

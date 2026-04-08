@@ -6,7 +6,7 @@ Governed knowledge store for autonomous organizations. Every fact has provenance
 
 | Guide | Description |
 |-------|-------------|
-| [Getting Started](getting-started.md) | Install, first vault, add, search, verify in 5 minutes |
+| [Getting Started](getting-started.md) | Install, first vault, add, search, grep, verify in 5 minutes |
 | [Architecture](architecture.md) | Package structure, layers, data flow, Protocol interfaces |
 | [API Reference](api-reference.md) | Complete Python SDK: Vault, AsyncVault, all methods |
 | [Trust Tiers](trust-tiers.md) | CANONICAL, WORKING, EPHEMERAL, ARCHIVED and search weighting |
@@ -20,7 +20,7 @@ Governed knowledge store for autonomous organizations. Every fact has provenance
 | [Security Model](security.md) | SHA3-256, Merkle trees, input validation, threat model |
 | [Streaming & Telemetry](streaming-and-telemetry.md) | Real-time events, operation metrics |
 | [CLI Reference](cli.md) | All 15 commands |
-| [FastAPI Integration](fastapi.md) | 22+ REST endpoints |
+| [FastAPI Integration](fastapi.md) | 30+ REST endpoints |
 | [Migration Guide](migration.md) | Breaking changes from v0.x to v1.0 |
 | [Deployment Guide](deployment.md) | PostgreSQL, SSL, encryption, production checklist |
 | [Troubleshooting](troubleshooting.md) | Error codes (VAULT_000-700), common issues |

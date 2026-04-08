@@ -49,7 +49,7 @@ class TestReprocess:
         resource = await vault.add("Original content", name="fresh.md")
         old_chunks = await vault._storage.get_chunks_for_resource(resource.id)
 
-        result = await vault.reprocess(resource.id)
+        await vault.reprocess(resource.id)
         new_chunks = await vault._storage.get_chunks_for_resource(resource.id)
 
         # New chunks should have different IDs (regenerated)

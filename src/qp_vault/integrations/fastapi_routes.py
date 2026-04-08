@@ -358,7 +358,9 @@ def create_vault_router(vault: Any) -> APIRouter:
         resource_ids = req.get("resource_ids", [])
         if not isinstance(resource_ids, list) or len(resource_ids) > 100:
             raise HTTPException(status_code=400, detail="Provide 1-100 resource_ids")
-        resources = await vault.get_multiple(resource_ids)
+        # Ensure all IDs are strings (prevent type confusion)
+        clean_ids = [str(rid) for rid in resource_ids if rid]
+        resources = await vault.get_multiple(clean_ids)
         return {"data": [r.model_dump() for r in resources], "meta": {"count": len(resources)}}
 
     @router.patch("/resources/{resource_id}/adversarial")
@@ -367,6 +369,9 @@ def create_vault_router(vault: Any) -> APIRouter:
         status_val = req.get("status")
         if not status_val:
             raise HTTPException(status_code=400, detail="'status' field required")
+        valid_statuses = {"unverified", "verified", "suspicious", "quarantined"}
+        if status_val not in valid_statuses:
+            raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(sorted(valid_statuses))}")
         try:
             resource = await vault.set_adversarial_status(resource_id, status_val)
         except Exception as e:
@@ -379,6 +384,10 @@ def create_vault_router(vault: Any) -> APIRouter:
         path = req.get("path")
         if not path:
             raise HTTPException(status_code=400, detail="'path' field required")
+        # Security: reject path traversal
+        from pathlib import Path as _Path
+        if ".." in _Path(path).parts:
+            raise HTTPException(status_code=400, detail="Path traversal not allowed")
         try:
             resources = await vault.import_vault(path)
         except Exception as e:

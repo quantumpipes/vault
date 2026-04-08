@@ -2,9 +2,50 @@
 
 Real-time event streaming and operation telemetry for autonomous AI systems.
 
-## Event Streaming
+## Event Subscription (Recommended)
 
-Subscribe to vault mutations in real-time.
+The simplest way to react to vault mutations. Register a callback directly on the vault instance:
+
+```python
+from qp_vault import AsyncVault, VaultEvent
+
+vault = AsyncVault("./knowledge")
+
+def on_change(event: VaultEvent) -> None:
+    print(f"{event.event_type}: {event.resource_name}")
+    if event.event_type.value == "create":
+        trigger_indexing(event.resource_id)
+
+unsub = vault.subscribe(on_change)
+
+# Every mutation (add, update, delete, transition, reprocess) fires the callback
+await vault.add("New document", name="report.md")
+# Output: create: report.md
+
+# Stop receiving events
+unsub()
+```
+
+Async callbacks are also supported:
+
+```python
+async def on_change_async(event: VaultEvent) -> None:
+    await notify_downstream(event)
+
+vault.subscribe(on_change_async)
+```
+
+**Key behaviors:**
+- Multiple subscribers are independent
+- Errors in callbacks are logged, never propagated
+- Calling `unsub()` twice is safe (no error)
+- Events are delivered synchronously in mutation order
+
+<!-- VERIFIED: vault.py:289-336 — subscribe + _notify_subscribers -->
+
+## Event Streaming (Advanced)
+
+For async-iterator consumption patterns (e.g., WebSocket broadcasting), use `VaultEventStream`:
 
 ```python
 from qp_vault import AsyncVault
