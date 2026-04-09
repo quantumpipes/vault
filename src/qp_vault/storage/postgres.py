@@ -194,9 +194,20 @@ class PostgresBackend:
         *,
         embedding_dimensions: int = 768,
         command_timeout: float = 30.0,
-        ssl: bool = True,
+        ssl: str = "prefer",
         ssl_verify: bool = False,
     ) -> None:
+        """Initialize PostgresBackend.
+
+        Args:
+            dsn: PostgreSQL connection string (``postgresql://user:pass@host/db``).
+            embedding_dimensions: Vector dimensions for pgvector columns.
+            command_timeout: Statement timeout in seconds.
+            ssl: SSL mode. Supports ``"prefer"`` (try SSL, fall back to plaintext),
+                ``"require"`` (SSL required), ``"disable"`` (no SSL), or ``True``/``False``
+                for backward compat. ``sslmode=`` in the DSN always takes precedence.
+            ssl_verify: When True, verify the server certificate against the system CA store.
+        """
         if not HAS_ASYNCPG:
             raise ImportError(
                 "asyncpg is required for PostgresBackend. "
@@ -205,36 +216,71 @@ class PostgresBackend:
         self._dsn = dsn
         self._dimensions = embedding_dimensions
         self._command_timeout = command_timeout
-        self._ssl = ssl
+        # Normalize ssl param: True -> "prefer", False -> "disable"
+        if ssl is True:
+            self._ssl_mode = "prefer"
+        elif ssl is False:
+            self._ssl_mode = "disable"
+        else:
+            self._ssl_mode = ssl
         self._ssl_verify = ssl_verify
         self._pool: Any = None
 
     async def _get_pool(self) -> Any:
-        """Get or create connection pool."""
+        """Get or create connection pool.
+
+        SSL behavior follows the ``sslmode`` parameter from the DSN if present,
+        otherwise falls back to the ``ssl`` constructor argument (default: ``prefer``).
+
+        ``prefer`` mode: attempt SSL first; on failure, retry without SSL.
+        This matches the default behavior of libpq and psycopg.
+        """
         if self._pool is None:
-            import ssl as _ssl
-
-            ssl_context: Any = None
+            # DSN-level sslmode takes precedence over constructor arg
             if "sslmode=disable" in self._dsn:
-                ssl_context = False
-            elif self._ssl:
-                ssl_context = _ssl.create_default_context()
-                if not self._ssl_verify:
-                    ssl_context.check_hostname = False
-                    ssl_context.verify_mode = _ssl.CERT_NONE
+                effective_mode = "disable"
+            elif "sslmode=require" in self._dsn or "sslmode=verify" in self._dsn:
+                effective_mode = "require"
+            elif "sslmode=prefer" in self._dsn:
+                effective_mode = "prefer"
+            else:
+                effective_mode = self._ssl_mode
 
-            pool_kwargs: dict[str, Any] = {
-                "min_size": 2,
-                "max_size": 10,
-                "command_timeout": self._command_timeout,
-            }
-            if ssl_context is not None and ssl_context is not False:
-                pool_kwargs["ssl"] = ssl_context
-            elif ssl_context is False:
-                pass  # Explicitly disabled via DSN
-
-            self._pool = await asyncpg.create_pool(self._dsn, **pool_kwargs)
+            self._pool = await self._create_pool(effective_mode)
         return self._pool
+
+    async def _create_pool(self, ssl_mode: str) -> Any:
+        """Create the connection pool with the given SSL mode."""
+        import ssl as _ssl
+
+        pool_kwargs: dict[str, Any] = {
+            "min_size": 2,
+            "max_size": 10,
+            "command_timeout": self._command_timeout,
+        }
+
+        if ssl_mode == "disable":
+            # No SSL
+            pass
+        elif ssl_mode in ("require", "verify-full", "verify-ca"):
+            ssl_context = _ssl.create_default_context()
+            if not self._ssl_verify:
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = _ssl.CERT_NONE
+            pool_kwargs["ssl"] = ssl_context
+        elif ssl_mode == "prefer":
+            # Try SSL first, fall back to plaintext on rejection
+            ssl_context = _ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = _ssl.CERT_NONE
+            pool_kwargs["ssl"] = ssl_context
+            try:
+                return await asyncpg.create_pool(self._dsn, **pool_kwargs)
+            except Exception:
+                # SSL rejected; retry without
+                pool_kwargs.pop("ssl", None)
+
+        return await asyncpg.create_pool(self._dsn, **pool_kwargs)
 
     async def initialize(self) -> None:
         """Create schema, tables, and indexes."""

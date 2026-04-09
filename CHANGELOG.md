@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-04-09
+
+### Fixed
+- **PostgresBackend SSL: sslmode=prefer by default**. Previously defaulted to `ssl=True` which forced SSL negotiation. Servers without TLS certificates (Docker, local dev, private cloud networks) rejected the connection. Now defaults to `ssl="prefer"`: try SSL first, fall back to plaintext on rejection. Matches the standard `libpq` default behavior.
+
+### Changed
+- `PostgresBackend.__init__()` `ssl` parameter: `bool` (default `True`) to `str` (default `"prefer"`). Accepts `"prefer"`, `"require"`, `"disable"`, `"verify-full"`, `"verify-ca"`. `True`/`False` still accepted for backward compat.
+- DSN-level `sslmode=` always takes precedence over the constructor `ssl` argument.
+- 5 new tests for SSL mode normalization and backward compatibility.
+
 ## [1.5.1] - 2026-04-08
 
 ### Fixed

@@ -398,6 +398,50 @@ class TestPostgreSQLSSLConfig:
         assert config.postgres_ssl_verify is True
 
 
+class TestPostgresBackendSSL:
+    """Test PostgresBackend SSL mode handling (sslmode=prefer by default)."""
+
+    def test_default_ssl_mode_is_prefer(self) -> None:
+        """PostgresBackend defaults to ssl='prefer' (try SSL, fall back)."""
+        from qp_vault.storage.postgres import HAS_ASYNCPG, PostgresBackend
+        if not HAS_ASYNCPG:
+            pytest.skip("asyncpg not installed")
+        backend = PostgresBackend("postgresql://localhost/test")
+        assert backend._ssl_mode == "prefer"
+
+    def test_ssl_true_normalizes_to_prefer(self) -> None:
+        """ssl=True normalizes to 'prefer' for backward compat."""
+        from qp_vault.storage.postgres import HAS_ASYNCPG, PostgresBackend
+        if not HAS_ASYNCPG:
+            pytest.skip("asyncpg not installed")
+        backend = PostgresBackend("postgresql://localhost/test", ssl=True)
+        assert backend._ssl_mode == "prefer"
+
+    def test_ssl_false_normalizes_to_disable(self) -> None:
+        """ssl=False normalizes to 'disable'."""
+        from qp_vault.storage.postgres import HAS_ASYNCPG, PostgresBackend
+        if not HAS_ASYNCPG:
+            pytest.skip("asyncpg not installed")
+        backend = PostgresBackend("postgresql://localhost/test", ssl=False)
+        assert backend._ssl_mode == "disable"
+
+    def test_ssl_require_string(self) -> None:
+        """ssl='require' is accepted as-is."""
+        from qp_vault.storage.postgres import HAS_ASYNCPG, PostgresBackend
+        if not HAS_ASYNCPG:
+            pytest.skip("asyncpg not installed")
+        backend = PostgresBackend("postgresql://localhost/test", ssl="require")
+        assert backend._ssl_mode == "require"
+
+    def test_ssl_disable_string(self) -> None:
+        """ssl='disable' is accepted as-is."""
+        from qp_vault.storage.postgres import HAS_ASYNCPG, PostgresBackend
+        if not HAS_ASYNCPG:
+            pytest.skip("asyncpg not installed")
+        backend = PostgresBackend("postgresql://localhost/test", ssl="disable")
+        assert backend._ssl_mode == "disable"
+
+
 # =============================================================================
 # FIPS KAT
 # =============================================================================
