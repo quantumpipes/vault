@@ -1,6 +1,6 @@
 # API Reference
 
-Complete Python SDK for qp-vault v1.5.0.
+Complete Python SDK for qp-vault v1.5.1.
 
 ## Constructor
 

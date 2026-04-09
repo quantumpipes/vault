@@ -22,7 +22,7 @@ from qp_vault.enums import AdversarialStatus, EventType
 from qp_vault.models import VaultEvent
 
 if TYPE_CHECKING:
-    from qp_vault.protocols import AuditProvider
+    from qp_vault.protocols import AuditProvider, StorageBackend
 
 
 # Valid adversarial status transitions
@@ -45,10 +45,16 @@ class AdversarialVerifier:
 
     Args:
         auditor: Optional audit provider for recording status changes.
+        storage: Optional storage backend for persistent status reads.
     """
 
-    def __init__(self, auditor: AuditProvider | None = None) -> None:
+    def __init__(
+        self,
+        auditor: AuditProvider | None = None,
+        storage: StorageBackend | None = None,
+    ) -> None:
         self._auditor = auditor
+        self._storage = storage
         self._status_store: dict[str, AdversarialStatus] = {}
 
     async def set_status(
@@ -101,13 +107,36 @@ class AdversarialVerifier:
     async def get_status(self, resource_id: str) -> AdversarialStatus:
         """Get the current adversarial status for a resource.
 
+        Checks in-memory cache first, then falls back to the storage
+        backend so status survives process restarts.
+
         Args:
             resource_id: Vault resource ID.
 
         Returns:
             Current adversarial status (UNVERIFIED if unknown).
         """
-        return self._status_store.get(resource_id, AdversarialStatus.UNVERIFIED)
+        # Memory cache (hot path)
+        if resource_id in self._status_store:
+            return self._status_store[resource_id]
+
+        # Database fallback (cold path, survives restart)
+        if self._storage is not None:
+            try:
+                resource = await self._storage.get_resource(resource_id)
+                if resource is not None:
+                    status_val = getattr(resource, "adversarial_status", None)
+                    if status_val is not None:
+                        if isinstance(status_val, str):
+                            status = AdversarialStatus(status_val)
+                        else:
+                            status = status_val
+                        self._status_store[resource_id] = status
+                        return status
+            except Exception:
+                pass  # Storage errors fall through to default
+
+        return AdversarialStatus.UNVERIFIED
 
     async def bulk_reassess(
         self,

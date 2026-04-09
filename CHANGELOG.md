@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-04-08
+
+### Fixed
+- **FIX-4: Adversarial status persistence**: `AdversarialVerifier.get_status()` now falls back to the storage backend when the in-memory cache misses. Adversarial status (`verified`, `suspicious`, `unverified`) survives process restarts. Previously, all resources reverted to `UNVERIFIED` on restart.
+
+### Changed
+- `AdversarialVerifier` constructor accepts optional `storage` parameter for database-backed status reads
+- 4 new tests for adversarial persistence (set/get roundtrip, restart survival, default status, status transitions)
+
+### Note
+- FIX-1 (quarantine block), FIX-2 (classification enforcement), FIX-3 (freshness decay), FIX-5 (PostgreSQL SSL), FIX-6 (export/import content), FIX-7 (provenance auto-verify) were already resolved in prior releases. FIX-4 was the only remaining gap from the Wizard security audit.
+
 ## [1.5.0] - 2026-04-08
 
 ### Added
