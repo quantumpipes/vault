@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-04-10
+
+### Added
+- **Knowledge Graph**: New `qp_vault.graph` subpackage. Access via `vault.graph` on any AsyncVault or Vault instance.
+- **GraphEngine**: Typed async CRUD for nodes, edges, mentions, traversal, merge, and scan. Every mutation fires a VaultEvent for capsule audit.
+- **GraphStorageBackend Protocol**: 20-method storage contract. PostgreSQL (pg_trgm similarity, recursive CTE traversal) and SQLite (FTS5 search, Python BFS traversal) backends.
+- **KnowledgeExtractor**: LLM-based entity/relationship extraction with membrane sanitization (NFKC normalization, HTML escaping, XML wrapping). Validation caps: 200 entities, 500 relationships.
+- **EntityResolver**: Three-stage dedup cascade (exact match, FTS/trigram search, create-on-miss).
+- **EntityDetector**: In-memory name matching (10k entity index, 50k text cap). Optional fuzzy mode via EntityResolver.
+- **EntityMaterializer**: Generates `profile.md` (wikilinks, properties, relationships, mentions) and `manifest.json` per entity.
+- **WikilinkResolver**: Parse and resolve `[[Entity Name]]` and `[[Entity Name|Display Text]]` syntax. Code fence exclusion. Case-insensitive dedup.
+- **Graph-Augmented Search**: `vault.search(query, graph_boost=True)` detects entities in queries and boosts matching documents (15% relevance boost).
+- **Membrane Sanitization**: `sanitize_for_extraction()` for LLM extraction input.
+- **10 Graph EventTypes**: `ENTITY_CREATE`, `ENTITY_UPDATE`, `ENTITY_DELETE`, `EDGE_CREATE`, `EDGE_DELETE`, `ENTITY_MERGE`, `MENTION_TRACK`, `SCAN_START`, `SCAN_COMPLETE`, `SCAN_FAIL`.
+- **`graph` optional extra** in pyproject.toml (no additional deps required).
+- 213 new graph tests (storage, capsule, intelligence, models, edge cases, materialization, extraction errors, security).
+
+### Security
+- Input validation at every boundary: name (500 chars), entity_type (50 chars), relation_type (100 chars), properties (50KB, 2000 chars/value), tags (50 max, 100 chars each), weight (0.0-1.0), null byte stripping.
+- Self-edge rejection, self-merge rejection, direction enum validation, limit capping (10,000), context_for ID cap (50).
+- `graph_schema` parameter validated as SQL identifier (`^[a-zA-Z_][a-zA-Z0-9_]*$`).
+- `source_label` in sanitization validated as alpha-only.
+- LLM extraction output: property key cap (20/entity, 100 chars), property value cap (500 chars).
+
+### Changed
+- `PostgresBackend.__init__()` accepts `graph_schema` parameter (default `"qp_vault"`, set to `"quantumpipes"` for Core migration compatibility).
+- `vault.search()` accepts `graph_boost: bool = False` parameter.
+- `__init__.py` exports `GraphStorageBackend`, `GraphEngine`, `GraphNode`, `GraphEdge` (lazy-loaded).
+
 ## [1.5.2] - 2026-04-09
 
 ### Fixed
