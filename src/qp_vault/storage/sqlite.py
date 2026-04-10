@@ -117,6 +117,98 @@ CREATE INDEX IF NOT EXISTS idx_resources_classification ON resources(data_classi
 CREATE INDEX IF NOT EXISTS idx_resources_type ON resources(resource_type);
 """
 
+_GRAPH_SCHEMA = """
+CREATE TABLE IF NOT EXISTS graph_nodes (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL UNIQUE,
+    entity_type TEXT NOT NULL,
+    properties TEXT DEFAULT '{}',
+    tags TEXT DEFAULT '[]',
+    primary_space_id TEXT,
+    resource_id TEXT REFERENCES resources(id) ON DELETE SET NULL,
+    manifest_resource_id TEXT REFERENCES resources(id) ON DELETE SET NULL,
+    mention_count INTEGER DEFAULT 0,
+    last_mentioned_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS graph_edges (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    source_node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+    target_node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+    relation_type TEXT NOT NULL,
+    properties TEXT DEFAULT '{}',
+    weight REAL DEFAULT 0.5,
+    bidirectional INTEGER DEFAULT 0,
+    source_resource_id TEXT REFERENCES resources(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (source_node_id, target_node_id, relation_type)
+);
+
+CREATE TABLE IF NOT EXISTS graph_node_spaces (
+    node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+    space_id TEXT NOT NULL,
+    PRIMARY KEY (node_id, space_id)
+);
+
+CREATE TABLE IF NOT EXISTS graph_mentions (
+    id TEXT PRIMARY KEY,
+    node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+    resource_id TEXT NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+    space_id TEXT,
+    context_snippet TEXT DEFAULT '',
+    mentioned_at TEXT NOT NULL,
+    UNIQUE (node_id, resource_id)
+);
+
+CREATE TABLE IF NOT EXISTS graph_scan_jobs (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    summary_json TEXT,
+    error TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_graph_nodes_tenant ON graph_nodes(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_graph_nodes_space ON graph_nodes(primary_space_id);
+CREATE INDEX IF NOT EXISTS idx_graph_nodes_type ON graph_nodes(entity_type);
+CREATE INDEX IF NOT EXISTS idx_graph_nodes_slug ON graph_nodes(slug);
+CREATE INDEX IF NOT EXISTS idx_graph_edges_source ON graph_edges(source_node_id);
+CREATE INDEX IF NOT EXISTS idx_graph_edges_target ON graph_edges(target_node_id);
+CREATE INDEX IF NOT EXISTS idx_graph_mentions_node ON graph_mentions(node_id);
+CREATE INDEX IF NOT EXISTS idx_graph_mentions_resource ON graph_mentions(resource_id);
+CREATE INDEX IF NOT EXISTS idx_graph_scan_jobs_space ON graph_scan_jobs(space_id);
+"""
+
+_GRAPH_FTS_SCHEMA = """
+CREATE VIRTUAL TABLE IF NOT EXISTS graph_nodes_fts USING fts5(
+    name,
+    content='graph_nodes',
+    content_rowid='rowid'
+);
+
+CREATE TRIGGER IF NOT EXISTS graph_nodes_ai AFTER INSERT ON graph_nodes BEGIN
+    INSERT INTO graph_nodes_fts(rowid, name) VALUES (new.rowid, new.name);
+END;
+
+CREATE TRIGGER IF NOT EXISTS graph_nodes_ad AFTER DELETE ON graph_nodes BEGIN
+    INSERT INTO graph_nodes_fts(graph_nodes_fts, rowid, name) VALUES('delete', old.rowid, old.name);
+END;
+
+CREATE TRIGGER IF NOT EXISTS graph_nodes_au AFTER UPDATE ON graph_nodes BEGIN
+    INSERT INTO graph_nodes_fts(graph_nodes_fts, rowid, name) VALUES('delete', old.rowid, old.name);
+    INSERT INTO graph_nodes_fts(rowid, name) VALUES (new.rowid, new.name);
+END;
+"""
+
 _FTS_SCHEMA = """
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     content,
@@ -214,6 +306,9 @@ class SQLiteBackend:
         conn.executescript(_SCHEMA)
         with contextlib.suppress(sqlite3.OperationalError):
             conn.executescript(_FTS_SCHEMA)
+        conn.executescript(_GRAPH_SCHEMA)
+        with contextlib.suppress(sqlite3.OperationalError):
+            conn.executescript(_GRAPH_FTS_SCHEMA)
         conn.commit()
 
         # Restrict file permissions on new databases (owner-only rw)
@@ -782,6 +877,639 @@ class SQLiteBackend:
             emb = json.loads(row["embedding"])
             return len(emb) if isinstance(emb, list) else None
         return None
+
+    # --- GraphStorageBackend methods ---
+
+    async def store_node(self, node: dict[str, Any]) -> str:
+        """Persist a graph node."""
+        conn = self._get_conn()
+        now = datetime.now(tz=UTC).isoformat()
+        conn.execute(
+            """INSERT INTO graph_nodes (
+                id, tenant_id, name, slug, entity_type,
+                properties, tags, primary_space_id,
+                resource_id, manifest_resource_id,
+                mention_count, last_mentioned_at,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(node["id"]), str(node["tenant_id"]), node["name"],
+                node["slug"], node["entity_type"],
+                json.dumps(node.get("properties", {})),
+                json.dumps(node.get("tags", [])),
+                str(node["primary_space_id"]) if node.get("primary_space_id") else None,
+                str(node["resource_id"]) if node.get("resource_id") else None,
+                str(node["manifest_resource_id"]) if node.get("manifest_resource_id") else None,
+                node.get("mention_count", 0),
+                node["last_mentioned_at"].isoformat() if node.get("last_mentioned_at") else None,
+                node.get("created_at", now) if isinstance(node.get("created_at"), str) else (node["created_at"].isoformat() if node.get("created_at") else now),
+                node.get("updated_at", now) if isinstance(node.get("updated_at"), str) else (node["updated_at"].isoformat() if node.get("updated_at") else now),
+            ),
+        )
+        conn.commit()
+        return str(node["id"])
+
+    async def get_node(self, node_id: str) -> dict[str, Any] | None:
+        """Retrieve a graph node by ID."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM graph_nodes WHERE id = ?", (str(node_id),),
+        ).fetchone()
+        if row is None:
+            return None
+        return self._graph_node_from_row(dict(row))
+
+    def _graph_node_from_row(self, d: dict[str, Any]) -> dict[str, Any]:
+        """Convert SQLite row to dict with proper JSON parsing."""
+        if isinstance(d.get("properties"), str):
+            d["properties"] = json.loads(d["properties"])
+        if isinstance(d.get("tags"), str):
+            d["tags"] = json.loads(d["tags"])
+        return d
+
+    async def list_nodes(
+        self, filters: dict[str, Any],
+    ) -> tuple[list[dict[str, Any]], int]:
+        """List graph nodes with optional filtering."""
+        conn = self._get_conn()
+        conditions: list[str] = []
+        params: list[Any] = []
+
+        if filters.get("tenant_id"):
+            conditions.append("n.tenant_id = ?")
+            params.append(str(filters["tenant_id"]))
+        if filters.get("entity_type"):
+            conditions.append("n.entity_type = ?")
+            params.append(filters["entity_type"])
+        if filters.get("space_id"):
+            sid = str(filters["space_id"])
+            conditions.append(
+                "(n.primary_space_id = ? OR EXISTS "
+                "(SELECT 1 FROM graph_node_spaces ns WHERE ns.node_id = n.id AND ns.space_id = ?))"
+            )
+            params.extend([sid, sid])
+
+        where = " AND ".join(conditions) if conditions else "1=1"
+        limit = filters.get("limit", 50)
+        offset = filters.get("offset", 0)
+
+        count_row = conn.execute(
+            f"SELECT COUNT(*) FROM graph_nodes n WHERE {where}",  # nosec B608
+            params,
+        ).fetchone()
+        total = count_row[0] if count_row else 0
+
+        rows = conn.execute(
+            f"SELECT * FROM graph_nodes n WHERE {where} "  # nosec B608
+            f"ORDER BY n.updated_at DESC LIMIT ? OFFSET ?",
+            [*params, limit, offset],
+        ).fetchall()
+
+        return [self._graph_node_from_row(dict(r)) for r in rows], total
+
+    async def search_nodes(
+        self, query: str, space_id: str | None, limit: int,
+    ) -> list[dict[str, Any]]:
+        """Search graph nodes using FTS5 on name."""
+        conn = self._get_conn()
+        safe_query = _sanitize_fts_query(query)
+        if not safe_query:
+            return []
+
+        try:
+            fts_rows = conn.execute(
+                "SELECT rowid, rank FROM graph_nodes_fts "
+                "WHERE graph_nodes_fts MATCH ? ORDER BY rank LIMIT ?",
+                (safe_query, limit * 3),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return []
+
+        if not fts_rows:
+            return []
+
+        rowid_ranks = {r["rowid"]: 1.0 / (1.0 + abs(r["rank"])) for r in fts_rows}
+        rowid_list = ",".join(str(r) for r in rowid_ranks)
+
+        where_parts = [f"n.rowid IN ({rowid_list})"]
+        params: list[Any] = []
+        if space_id:
+            where_parts.append("n.primary_space_id = ?")
+            params.append(str(space_id))
+
+        where = " AND ".join(where_parts)
+        rows = conn.execute(
+            f"SELECT n.*, n.rowid AS node_rowid FROM graph_nodes n "  # nosec B608
+            f"WHERE {where} LIMIT ?",
+            [*params, limit],
+        ).fetchall()
+
+        results = []
+        for row in rows:
+            d = self._graph_node_from_row(dict(row))
+            d["_score"] = rowid_ranks.get(d.get("node_rowid", 0), 0)
+            results.append(d)
+
+        results.sort(key=lambda x: x.get("_score", 0), reverse=True)
+        return results
+
+    async def update_node(
+        self, node_id: str, updates: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Apply partial updates to a graph node."""
+        conn = self._get_conn()
+        sets: list[str] = []
+        params: list[Any] = []
+
+        for field in ("name", "slug", "entity_type", "primary_space_id",
+                       "resource_id", "manifest_resource_id",
+                       "mention_count", "last_mentioned_at"):
+            if field in updates:
+                sets.append(f"{field} = ?")
+                val = updates[field]
+                if field in ("primary_space_id", "resource_id", "manifest_resource_id") and val is not None:
+                    val = str(val)
+                elif field == "last_mentioned_at" and val is not None and not isinstance(val, str):
+                    val = val.isoformat()
+                params.append(val)
+        if "properties" in updates:
+            sets.append("properties = ?")
+            params.append(json.dumps(updates["properties"]))
+        if "tags" in updates:
+            sets.append("tags = ?")
+            params.append(json.dumps(updates["tags"]))
+
+        sets.append("updated_at = ?")
+        params.append(datetime.now(tz=UTC).isoformat())
+        params.append(str(node_id))
+
+        conn.execute(
+            f"UPDATE graph_nodes SET {', '.join(sets)} WHERE id = ?",  # nosec B608
+            params,
+        )
+        conn.commit()
+
+        result = await self.get_node(str(node_id))
+        if result is None:
+            raise StorageError(f"Graph node {node_id} not found after update")
+        return result
+
+    async def delete_node(self, node_id: str) -> None:
+        """Delete a graph node (cascades edges, mentions, spaces)."""
+        conn = self._get_conn()
+        conn.execute("DELETE FROM graph_nodes WHERE id = ?", (str(node_id),))
+        conn.commit()
+
+    async def store_edge(self, edge: dict[str, Any]) -> str:
+        """Persist a graph edge."""
+        conn = self._get_conn()
+        now = datetime.now(tz=UTC).isoformat()
+        conn.execute(
+            """INSERT OR REPLACE INTO graph_edges (
+                id, tenant_id, source_node_id, target_node_id,
+                relation_type, properties, weight, bidirectional,
+                source_resource_id, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(edge["id"]), str(edge["tenant_id"]),
+                str(edge["source_node_id"]), str(edge["target_node_id"]),
+                edge["relation_type"], json.dumps(edge.get("properties", {})),
+                edge.get("weight", 0.5), 1 if edge.get("bidirectional") else 0,
+                str(edge["source_resource_id"]) if edge.get("source_resource_id") else None,
+                edge.get("created_at", now) if isinstance(edge.get("created_at"), str) else (edge["created_at"].isoformat() if edge.get("created_at") else now),
+                edge.get("updated_at", now) if isinstance(edge.get("updated_at"), str) else (edge["updated_at"].isoformat() if edge.get("updated_at") else now),
+            ),
+        )
+        conn.commit()
+        return str(edge["id"])
+
+    async def get_edges(
+        self, node_id: str, direction: str,
+    ) -> list[dict[str, Any]]:
+        """Get edges connected to a node."""
+        conn = self._get_conn()
+        nid = str(node_id)
+        if direction == "outgoing":
+            rows = conn.execute(
+                "SELECT * FROM graph_edges WHERE source_node_id = ?", (nid,),
+            ).fetchall()
+        elif direction == "incoming":
+            rows = conn.execute(
+                "SELECT * FROM graph_edges WHERE target_node_id = ?", (nid,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM graph_edges WHERE source_node_id = ? OR target_node_id = ?",
+                (nid, nid),
+            ).fetchall()
+
+        results = []
+        for row in rows:
+            d = dict(row)
+            if isinstance(d.get("properties"), str):
+                d["properties"] = json.loads(d["properties"])
+            d["bidirectional"] = bool(d.get("bidirectional", 0))
+            results.append(d)
+        return results
+
+    async def update_edge(
+        self, edge_id: str, updates: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Apply partial updates to a graph edge."""
+        conn = self._get_conn()
+        sets: list[str] = []
+        params: list[Any] = []
+
+        if "relation_type" in updates:
+            sets.append("relation_type = ?")
+            params.append(updates["relation_type"])
+        if "weight" in updates:
+            sets.append("weight = ?")
+            params.append(updates["weight"])
+        if "bidirectional" in updates:
+            sets.append("bidirectional = ?")
+            params.append(1 if updates["bidirectional"] else 0)
+        if "properties" in updates:
+            sets.append("properties = ?")
+            params.append(json.dumps(updates["properties"]))
+
+        sets.append("updated_at = ?")
+        params.append(datetime.now(tz=UTC).isoformat())
+        params.append(str(edge_id))
+
+        conn.execute(
+            f"UPDATE graph_edges SET {', '.join(sets)} WHERE id = ?",  # nosec B608
+            params,
+        )
+        conn.commit()
+
+        row = conn.execute(
+            "SELECT * FROM graph_edges WHERE id = ?", (str(edge_id),),
+        ).fetchone()
+        if row is None:
+            raise StorageError(f"Graph edge {edge_id} not found after update")
+        d = dict(row)
+        if isinstance(d.get("properties"), str):
+            d["properties"] = json.loads(d["properties"])
+        d["bidirectional"] = bool(d.get("bidirectional", 0))
+        return d
+
+    async def delete_edge(self, edge_id: str) -> None:
+        """Delete a graph edge."""
+        conn = self._get_conn()
+        conn.execute("DELETE FROM graph_edges WHERE id = ?", (str(edge_id),))
+        conn.commit()
+
+    async def neighbors(
+        self, node_id: str, depth: int,
+        relation_types: list[str] | None, space_id: str | None,
+    ) -> list[dict[str, Any]]:
+        """N-hop neighbor traversal via Python BFS."""
+        conn = self._get_conn()
+        nid = str(node_id)
+        visited: set[str] = {nid}
+        results: list[dict[str, Any]] = []
+        frontier = [nid]
+
+        for current_depth in range(1, depth + 1):
+            next_frontier: list[str] = []
+            for fnode in frontier:
+                conditions = ["source_node_id = ?"]
+                params: list[Any] = [fnode]
+                if relation_types:
+                    placeholders = ",".join("?" for _ in relation_types)
+                    conditions.append(f"relation_type IN ({placeholders})")
+                    params.extend(relation_types)
+
+                where = " AND ".join(conditions)
+                edges = conn.execute(
+                    f"SELECT * FROM graph_edges WHERE {where}",  # nosec B608
+                    params,
+                ).fetchall()
+
+                for edge in edges:
+                    target = edge["target_node_id"]
+                    if target in visited:
+                        continue
+
+                    node_row = conn.execute(
+                        "SELECT * FROM graph_nodes WHERE id = ?", (target,),
+                    ).fetchone()
+                    if node_row is None:
+                        continue
+
+                    if space_id:
+                        in_space = (
+                            node_row["primary_space_id"] == str(space_id)
+                            or conn.execute(
+                                "SELECT 1 FROM graph_node_spaces WHERE node_id = ? AND space_id = ?",
+                                (target, str(space_id)),
+                            ).fetchone() is not None
+                        )
+                        if not in_space:
+                            continue
+
+                    visited.add(target)
+                    next_frontier.append(target)
+                    results.append({
+                        "node_id": target,
+                        "node_name": node_row["name"],
+                        "entity_type": node_row["entity_type"],
+                        "depth": current_depth,
+                        "path": [],
+                        "relation_type": edge["relation_type"],
+                        "edge_weight": edge["weight"],
+                    })
+            frontier = next_frontier
+
+        return results
+
+    async def upsert_mention(
+        self, node_id: str, resource_id: str,
+        space_id: str | None, context_snippet: str,
+    ) -> None:
+        """Track entity mention in a resource (upsert)."""
+        import uuid
+        conn = self._get_conn()
+        nid = str(node_id)
+        rid = str(resource_id)
+        now = datetime.now(tz=UTC).isoformat()
+        snippet = context_snippet[:500]
+
+        existing = conn.execute(
+            "SELECT id FROM graph_mentions WHERE node_id = ? AND resource_id = ?",
+            (nid, rid),
+        ).fetchone()
+        is_new = existing is None
+
+        conn.execute(
+            """INSERT OR REPLACE INTO graph_mentions
+                   (id, node_id, resource_id, space_id, context_snippet, mentioned_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                existing["id"] if existing else str(uuid.uuid4()),
+                nid, rid, str(space_id) if space_id else None, snippet, now,
+            ),
+        )
+
+        if is_new:
+            conn.execute(
+                "UPDATE graph_nodes SET mention_count = mention_count + 1, "
+                "last_mentioned_at = ? WHERE id = ?",
+                (now, nid),
+            )
+        else:
+            conn.execute(
+                "UPDATE graph_nodes SET last_mentioned_at = ? WHERE id = ?",
+                (now, nid),
+            )
+        conn.commit()
+
+    async def get_backlinks(
+        self, node_id: str, limit: int, offset: int,
+    ) -> list[dict[str, Any]]:
+        """Get all resources that mention an entity."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM graph_mentions WHERE node_id = ? "
+            "ORDER BY mentioned_at DESC LIMIT ? OFFSET ?",
+            (str(node_id), limit, offset),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    async def get_entities_for_resource(
+        self, resource_id: str,
+    ) -> list[dict[str, Any]]:
+        """Get all entities mentioned in a vault resource."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT n.* FROM graph_nodes n "
+            "JOIN graph_mentions m ON m.node_id = n.id "
+            "WHERE m.resource_id = ? ORDER BY n.name",
+            (str(resource_id),),
+        ).fetchall()
+        return [self._graph_node_from_row(dict(r)) for r in rows]
+
+    async def add_node_to_space(self, node_id: str, space_id: str) -> None:
+        """Add cross-space membership."""
+        conn = self._get_conn()
+        try:
+            conn.execute(
+                "INSERT INTO graph_node_spaces (node_id, space_id) VALUES (?, ?)",
+                (str(node_id), str(space_id)),
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            pass
+
+    async def remove_node_from_space(self, node_id: str, space_id: str) -> None:
+        """Remove cross-space membership."""
+        conn = self._get_conn()
+        conn.execute(
+            "DELETE FROM graph_node_spaces WHERE node_id = ? AND space_id = ?",
+            (str(node_id), str(space_id)),
+        )
+        conn.commit()
+
+    async def merge_nodes(
+        self, keep_id: str, merge_id: str,
+    ) -> dict[str, Any]:
+        """Merge two nodes: re-point edges, mentions, spaces; delete merge_id."""
+        conn = self._get_conn()
+        kid = str(keep_id)
+        mid = str(merge_id)
+
+        keep = conn.execute("SELECT * FROM graph_nodes WHERE id = ?", (kid,)).fetchone()
+        merge = conn.execute("SELECT * FROM graph_nodes WHERE id = ?", (mid,)).fetchone()
+        if keep is None or merge is None:
+            raise StorageError("Both nodes must exist for merge")
+
+        edges_to_repoint = conn.execute(
+            "SELECT * FROM graph_edges WHERE source_node_id = ?", (mid,),
+        ).fetchall()
+        for e in edges_to_repoint:
+            conflict = conn.execute(
+                "SELECT 1 FROM graph_edges WHERE source_node_id = ? AND target_node_id = ? AND relation_type = ?",
+                (kid, e["target_node_id"], e["relation_type"]),
+            ).fetchone()
+            if not conflict:
+                conn.execute(
+                    "UPDATE graph_edges SET source_node_id = ? WHERE id = ?",
+                    (kid, e["id"]),
+                )
+
+        edges_to_repoint = conn.execute(
+            "SELECT * FROM graph_edges WHERE target_node_id = ?", (mid,),
+        ).fetchall()
+        for e in edges_to_repoint:
+            conflict = conn.execute(
+                "SELECT 1 FROM graph_edges WHERE source_node_id = ? AND target_node_id = ? AND relation_type = ?",
+                (e["source_node_id"], kid, e["relation_type"]),
+            ).fetchone()
+            if not conflict:
+                conn.execute(
+                    "UPDATE graph_edges SET target_node_id = ? WHERE id = ?",
+                    (kid, e["id"]),
+                )
+
+        mentions_to_repoint = conn.execute(
+            "SELECT * FROM graph_mentions WHERE node_id = ?", (mid,),
+        ).fetchall()
+        for m in mentions_to_repoint:
+            conflict = conn.execute(
+                "SELECT 1 FROM graph_mentions WHERE node_id = ? AND resource_id = ?",
+                (kid, m["resource_id"]),
+            ).fetchone()
+            if not conflict:
+                conn.execute(
+                    "UPDATE graph_mentions SET node_id = ? WHERE id = ?",
+                    (kid, m["id"]),
+                )
+
+        spaces = conn.execute(
+            "SELECT space_id FROM graph_node_spaces WHERE node_id = ?", (mid,),
+        ).fetchall()
+        for s in spaces:
+            try:
+                conn.execute(
+                    "INSERT INTO graph_node_spaces (node_id, space_id) VALUES (?, ?)",
+                    (kid, s["space_id"]),
+                )
+            except sqlite3.IntegrityError:
+                pass
+
+        keep_props = json.loads(keep["properties"]) if isinstance(keep["properties"], str) else (keep["properties"] or {})
+        merge_props = json.loads(merge["properties"]) if isinstance(merge["properties"], str) else (merge["properties"] or {})
+        merged_props = {**merge_props, **keep_props}
+        keep_tags = json.loads(keep["tags"]) if isinstance(keep["tags"], str) else (keep["tags"] or [])
+        merge_tags = json.loads(merge["tags"]) if isinstance(merge["tags"], str) else (merge["tags"] or [])
+        merged_tags = list(set(keep_tags + merge_tags))
+        merged_count = (keep["mention_count"] or 0) + (merge["mention_count"] or 0)
+
+        conn.execute(
+            "UPDATE graph_nodes SET properties = ?, tags = ?, "
+            "mention_count = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(merged_props), json.dumps(merged_tags),
+             merged_count, datetime.now(tz=UTC).isoformat(), kid),
+        )
+        conn.execute("DELETE FROM graph_nodes WHERE id = ?", (mid,))
+        conn.commit()
+
+        result = await self.get_node(kid)
+        if result is None:
+            raise StorageError(f"Graph node {keep_id} not found after merge")
+        return result
+
+    async def store_scan_job(self, job: dict[str, Any]) -> str:
+        """Persist a scan job record."""
+        conn = self._get_conn()
+        now = datetime.now(tz=UTC).isoformat()
+        started = job.get("started_at", now)
+        if not isinstance(started, str):
+            started = started.isoformat()
+        finished = job.get("finished_at")
+        if finished and not isinstance(finished, str):
+            finished = finished.isoformat()
+
+        conn.execute(
+            """INSERT INTO graph_scan_jobs
+                   (id, tenant_id, space_id, status, started_at, finished_at, summary_json, error)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(job["id"]), str(job["tenant_id"]), str(job["space_id"]),
+                job.get("status", "running"), started, finished,
+                json.dumps(job["summary"]) if job.get("summary") else None,
+                job.get("error"),
+            ),
+        )
+        conn.commit()
+        return str(job["id"])
+
+    async def get_scan_job(self, job_id: str) -> dict[str, Any] | None:
+        """Retrieve a scan job by ID."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM graph_scan_jobs WHERE id = ?", (str(job_id),),
+        ).fetchone()
+        if row is None:
+            return None
+        d = dict(row)
+        if isinstance(d.get("summary_json"), str):
+            d["summary"] = json.loads(d["summary_json"])
+        else:
+            d["summary"] = None
+        return d
+
+    async def list_scan_jobs(
+        self, filters: dict[str, Any],
+    ) -> tuple[list[dict[str, Any]], int]:
+        """List scan jobs with optional filtering."""
+        conn = self._get_conn()
+        conditions: list[str] = []
+        params: list[Any] = []
+
+        if filters.get("space_id"):
+            conditions.append("space_id = ?")
+            params.append(str(filters["space_id"]))
+        if filters.get("status"):
+            conditions.append("status = ?")
+            params.append(filters["status"])
+
+        where = " AND ".join(conditions) if conditions else "1=1"
+        limit = filters.get("limit", 50)
+        offset = filters.get("offset", 0)
+
+        total_row = conn.execute(
+            f"SELECT COUNT(*) FROM graph_scan_jobs WHERE {where}",  # nosec B608
+            params,
+        ).fetchone()
+        total = total_row[0] if total_row else 0
+
+        rows = conn.execute(
+            f"SELECT * FROM graph_scan_jobs WHERE {where} "  # nosec B608
+            f"ORDER BY started_at DESC LIMIT ? OFFSET ?",
+            [*params, limit, offset],
+        ).fetchall()
+
+        results = []
+        for row in rows:
+            d = dict(row)
+            if isinstance(d.get("summary_json"), str):
+                d["summary"] = json.loads(d["summary_json"])
+            else:
+                d["summary"] = None
+            results.append(d)
+        return results, total
+
+    async def update_scan_job(
+        self, job_id: str, updates: dict[str, Any],
+    ) -> None:
+        """Update a scan job's fields."""
+        conn = self._get_conn()
+        sets: list[str] = []
+        params: list[Any] = []
+
+        for field in ("status", "error"):
+            if field in updates:
+                sets.append(f"{field} = ?")
+                params.append(updates[field])
+        if "finished_at" in updates:
+            sets.append("finished_at = ?")
+            val = updates["finished_at"]
+            params.append(val.isoformat() if val and not isinstance(val, str) else val)
+        if "summary" in updates:
+            sets.append("summary_json = ?")
+            params.append(json.dumps(updates["summary"]) if updates["summary"] else None)
+
+        if not sets:
+            return
+
+        params.append(str(job_id))
+        conn.execute(
+            f"UPDATE graph_scan_jobs SET {', '.join(sets)} WHERE id = ?",  # nosec B608
+            params,
+        )
+        conn.commit()
 
     async def close(self) -> None:
         """Close the database connection."""

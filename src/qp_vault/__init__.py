@@ -69,6 +69,7 @@ from qp_vault.models import (
 from qp_vault.protocols import (
     AuditProvider,
     EmbeddingProvider,
+    GraphStorageBackend,
     LLMScreener,
     ParserProvider,
     PolicyProvider,
@@ -109,12 +110,17 @@ __all__ = [
     "UploadMethod",
     # Protocols (for implementors)
     "StorageBackend",
+    "GraphStorageBackend",
     "EmbeddingProvider",
     "AuditProvider",
     "ParserProvider",
     "PolicyProvider",
     "LLMScreener",
     "ScreeningResult",
+    # Graph (lazy-loaded)
+    "GraphEngine",
+    "GraphNode",
+    "GraphEdge",
     # Exceptions
     "VaultError",
     "StorageError",
@@ -127,11 +133,20 @@ __all__ = [
 
 
 def __getattr__(name: str) -> type:
-    """Lazy import for Vault and AsyncVault to avoid circular imports."""
+    """Lazy import for Vault, AsyncVault, and graph types to avoid circular imports."""
     if name == "Vault":
         from qp_vault.vault import Vault
         return Vault
     if name == "AsyncVault":
         from qp_vault.vault import AsyncVault
         return AsyncVault
+    if name == "GraphEngine":
+        from qp_vault.graph.service import GraphEngine
+        return GraphEngine
+    if name == "GraphNode":
+        from qp_vault.graph.models import GraphNode
+        return GraphNode
+    if name == "GraphEdge":
+        from qp_vault.graph.models import GraphEdge
+        return GraphEdge
     raise AttributeError(f"module 'qp_vault' has no attribute {name!r}")

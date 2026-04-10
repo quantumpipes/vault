@@ -37,6 +37,7 @@ from qp_vault.models import (
 from qp_vault.protocols import (
     AuditProvider,
     EmbeddingProvider,
+    GraphStorageBackend,
     LLMScreener,
     ParserProvider,
     PolicyProvider,
@@ -247,6 +248,13 @@ class AsyncVault:
         # TTL cache for expensive operations (health, status)
         self._cache: dict[str, tuple[float, Any]] = {}
 
+        # Knowledge graph engine (available when storage implements GraphStorageBackend)
+        if isinstance(self._storage, GraphStorageBackend):
+            from qp_vault.graph.service import GraphEngine
+            self._graph_engine: Any | None = GraphEngine(storage=self._storage, vault=self)
+        else:
+            self._graph_engine = None
+
     async def _ensure_initialized(self) -> None:
         """Initialize storage backend on first use (lazy init)."""
         if not self._initialized:
@@ -289,6 +297,11 @@ class AsyncVault:
     def _cache_invalidate(self) -> None:
         """Invalidate all cached values (after writes)."""
         self._cache.clear()
+
+    @property
+    def graph(self) -> Any:
+        """Knowledge graph engine, or None when graph storage is not initialized."""
+        return self._graph_engine
 
     def subscribe(self, callback: Callable[..., Any]) -> Callable[[], None]:
         """Subscribe to vault mutation events.
@@ -1069,6 +1082,7 @@ class AsyncVault:
         as_of: date | None = None,
         deduplicate: bool = True,
         explain: bool = False,
+        graph_boost: bool = False,
         _layer_boost: float = 1.0,
     ) -> list[SearchResult]:
         """Trust-weighted hybrid search.
@@ -1161,6 +1175,27 @@ class AsyncVault:
                         "composite_relevance": r.relevance,
                     }
                 }
+
+        # Graph boost: detect entities in query, boost matching documents
+        if graph_boost and self._graph_engine is not None:
+            try:
+                from qp_vault.graph.detection import EntityDetector
+                detector = EntityDetector(self._graph_engine)
+                detected = await detector.detect(query, space_id=None)
+                if detected:
+                    entity_ids = [d.node_id for d in detected if d.node_id]
+                    if entity_ids:
+                        mentioned_resources: set[str] = set()
+                        for eid in entity_ids:
+                            backlinks = await self._graph_engine.get_backlinks(eid, limit=100)
+                            for bl in backlinks:
+                                mentioned_resources.add(str(bl.resource_id))
+                        for r in paginated:
+                            if r.resource_id in mentioned_resources:
+                                r.relevance = min(1.0, r.relevance * 1.15)
+                        paginated.sort(key=lambda x: x.relevance, reverse=True)
+            except Exception:
+                pass  # Graph boost is best-effort
 
         # SURVEIL: query-time re-evaluation
         from qp_vault.membrane.surveil import apply_surveil

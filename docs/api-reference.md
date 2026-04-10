@@ -231,12 +231,15 @@ vault.search(
     as_of: date | None = None,          # Point-in-time
     deduplicate: bool = True,           # One result per resource
     explain: bool = False,              # Include scoring breakdown
+    graph_boost: bool = False,          # Boost docs mentioning detected entities
 ) -> list[SearchResult]
 ```
 
 When no embedder is configured, search automatically falls back to text-only mode (`vector_weight=0.0`, `text_weight=1.0`). This ensures search works on day one without requiring an embedding model.
 
-<!-- VERIFIED: vault.py:1051-1063 — text-only fallback -->
+When `graph_boost=True` and `vault.graph` is available, search detects entities in the query text, fetches their backlinks, and applies a 15% relevance boost to documents that mention those entities. Off by default. Best-effort: any failure falls back to standard search.
+
+<!-- VERIFIED: vault.py:1058-1075, 1172-1188 -->
 
 ### search_with_facets()
 
@@ -427,6 +430,52 @@ vault.import_vault(path: str | Path) -> list[Resource]
 ```
 
 <!-- VERIFIED: vault.py:846-889 -->
+
+---
+
+## Knowledge Graph
+
+Access via `vault.graph`. Returns `GraphEngine` when the storage backend supports graphs, `None` otherwise.
+
+```python
+vault.graph -> GraphEngine | None
+```
+
+Full documentation: [Knowledge Graph Guide](knowledge-graph.md)
+
+Quick reference:
+
+```python
+# Nodes
+node = await vault.graph.create_node(name="Alice", entity_type="person")
+node = await vault.graph.get_node(node_id)
+nodes, total = await vault.graph.list_nodes(entity_type="person", limit=20)
+results = await vault.graph.search_nodes("Alice")
+updated = await vault.graph.update_node(node_id, name="Alice Smith")
+await vault.graph.delete_node(node_id)
+
+# Edges
+edge = await vault.graph.create_edge(source_id=a.id, target_id=b.id, relation_type="knows")
+edges = await vault.graph.get_edges(node_id, direction="outgoing")
+await vault.graph.delete_edge(edge_id)
+
+# Traversal + context
+neighbors = await vault.graph.neighbors(node_id, depth=2)
+context = await vault.graph.context_for([node_id])
+
+# Mentions
+await vault.graph.track_mention(node_id, resource_id, context_snippet="...")
+backlinks = await vault.graph.get_backlinks(node_id)
+
+# Cross-space + merge
+await vault.graph.add_to_space(node_id, space_id)
+merged = await vault.graph.merge_nodes(keep_id, merge_id)
+
+# Scan
+job = await vault.graph.scan(space_id)
+```
+
+<!-- VERIFIED: vault.py:253-257, graph/service.py:53-63 -->
 
 ---
 

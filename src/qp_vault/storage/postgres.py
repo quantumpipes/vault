@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -119,6 +120,137 @@ CREATE TABLE IF NOT EXISTS qp_vault.provenance (
 CREATE INDEX IF NOT EXISTS idx_provenance_resource ON qp_vault.provenance(resource_id);
 """
 
+_GRAPH_SCHEMA = """
+CREATE TABLE IF NOT EXISTS qp_vault.graph_nodes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    name VARCHAR(500) NOT NULL,
+    slug VARCHAR(500) NOT NULL UNIQUE,
+    entity_type VARCHAR(50) NOT NULL,
+    properties JSONB DEFAULT '{}',
+    tags TEXT[] DEFAULT '{}',
+    primary_space_id UUID,
+    resource_id UUID REFERENCES qp_vault.resources(id) ON DELETE SET NULL,
+    manifest_resource_id UUID REFERENCES qp_vault.resources(id) ON DELETE SET NULL,
+    mention_count INTEGER DEFAULT 0,
+    last_mentioned_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS qp_vault.graph_edges (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    source_node_id UUID NOT NULL REFERENCES qp_vault.graph_nodes(id) ON DELETE CASCADE,
+    target_node_id UUID NOT NULL REFERENCES qp_vault.graph_nodes(id) ON DELETE CASCADE,
+    relation_type VARCHAR(100) NOT NULL,
+    properties JSONB DEFAULT '{}',
+    weight FLOAT DEFAULT 0.5,
+    bidirectional BOOLEAN DEFAULT FALSE,
+    source_resource_id UUID REFERENCES qp_vault.resources(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (source_node_id, target_node_id, relation_type)
+);
+
+CREATE TABLE IF NOT EXISTS qp_vault.graph_node_spaces (
+    node_id UUID NOT NULL REFERENCES qp_vault.graph_nodes(id) ON DELETE CASCADE,
+    space_id UUID NOT NULL,
+    PRIMARY KEY (node_id, space_id)
+);
+
+CREATE TABLE IF NOT EXISTS qp_vault.graph_mentions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    node_id UUID NOT NULL REFERENCES qp_vault.graph_nodes(id) ON DELETE CASCADE,
+    resource_id UUID NOT NULL REFERENCES qp_vault.resources(id) ON DELETE CASCADE,
+    space_id UUID,
+    context_snippet VARCHAR(500) DEFAULT '',
+    mentioned_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (node_id, resource_id)
+);
+
+CREATE TABLE IF NOT EXISTS qp_vault.graph_scan_jobs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    space_id UUID NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'running',
+    started_at TIMESTAMPTZ DEFAULT NOW(),
+    finished_at TIMESTAMPTZ,
+    summary_json JSONB,
+    error TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_graph_nodes_tenant ON qp_vault.graph_nodes(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_graph_nodes_space ON qp_vault.graph_nodes(primary_space_id);
+CREATE INDEX IF NOT EXISTS idx_graph_nodes_type ON qp_vault.graph_nodes(entity_type);
+CREATE INDEX IF NOT EXISTS idx_graph_nodes_slug ON qp_vault.graph_nodes(slug);
+CREATE INDEX IF NOT EXISTS idx_graph_edges_source ON qp_vault.graph_edges(source_node_id);
+CREATE INDEX IF NOT EXISTS idx_graph_edges_target ON qp_vault.graph_edges(target_node_id);
+CREATE INDEX IF NOT EXISTS idx_graph_mentions_node ON qp_vault.graph_mentions(node_id);
+CREATE INDEX IF NOT EXISTS idx_graph_mentions_resource ON qp_vault.graph_mentions(resource_id);
+CREATE INDEX IF NOT EXISTS idx_graph_scan_jobs_space ON qp_vault.graph_scan_jobs(space_id);
+"""
+
+_GRAPH_TRGM_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_graph_nodes_name_trgm ON qp_vault.graph_nodes
+    USING gin (name gin_trgm_ops);
+"""
+
+_GRAPH_NEIGHBORS_FN = """
+CREATE OR REPLACE FUNCTION qp_vault.graph_neighbors(
+    start_node_id UUID,
+    max_depth INT DEFAULT 1,
+    filter_types TEXT[] DEFAULT NULL,
+    filter_space UUID DEFAULT NULL
+)
+RETURNS TABLE(
+    node_id UUID,
+    node_name VARCHAR,
+    entity_type VARCHAR,
+    depth INT,
+    path UUID[],
+    relation_type VARCHAR,
+    edge_weight FLOAT
+) AS $$
+WITH RECURSIVE traversal AS (
+    SELECT
+        e.target_node_id AS node_id,
+        n.name AS node_name,
+        n.entity_type,
+        1 AS depth,
+        ARRAY[start_node_id, e.target_node_id] AS path,
+        e.relation_type,
+        e.weight AS edge_weight
+    FROM qp_vault.graph_edges e
+    JOIN qp_vault.graph_nodes n ON n.id = e.target_node_id
+    WHERE e.source_node_id = start_node_id
+      AND (filter_types IS NULL OR e.relation_type = ANY(filter_types))
+      AND (filter_space IS NULL OR n.primary_space_id = filter_space
+           OR EXISTS (SELECT 1 FROM qp_vault.graph_node_spaces ns WHERE ns.node_id = n.id AND ns.space_id = filter_space))
+
+    UNION ALL
+
+    SELECT
+        e.target_node_id,
+        n.name,
+        n.entity_type,
+        t.depth + 1,
+        t.path || e.target_node_id,
+        e.relation_type,
+        e.weight
+    FROM traversal t
+    JOIN qp_vault.graph_edges e ON e.source_node_id = t.node_id
+    JOIN qp_vault.graph_nodes n ON n.id = e.target_node_id
+    WHERE t.depth < max_depth
+      AND NOT (e.target_node_id = ANY(t.path))
+      AND (filter_types IS NULL OR e.relation_type = ANY(filter_types))
+      AND (filter_space IS NULL OR n.primary_space_id = filter_space
+           OR EXISTS (SELECT 1 FROM qp_vault.graph_node_spaces ns WHERE ns.node_id = n.id AND ns.space_id = filter_space))
+)
+SELECT DISTINCT ON (traversal.node_id) * FROM traversal ORDER BY traversal.node_id, traversal.depth;
+$$ LANGUAGE SQL STABLE;
+"""
+
 _HNSW_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON qp_vault.chunks
     USING hnsw (embedding vector_cosine_ops)
@@ -196,6 +328,7 @@ class PostgresBackend:
         command_timeout: float = 30.0,
         ssl: str = "prefer",
         ssl_verify: bool = False,
+        graph_schema: str = "qp_vault",
     ) -> None:
         """Initialize PostgresBackend.
 
@@ -207,6 +340,9 @@ class PostgresBackend:
                 ``"require"`` (SSL required), ``"disable"`` (no SSL), or ``True``/``False``
                 for backward compat. ``sslmode=`` in the DSN always takes precedence.
             ssl_verify: When True, verify the server certificate against the system CA store.
+            graph_schema: Schema prefix for graph tables. Set to ``"quantumpipes"``
+                to read/write Core's existing ``quantumpipes_graph_*`` tables
+                during the migration period. Default: ``"qp_vault"``.
         """
         if not HAS_ASYNCPG:
             raise ImportError(
@@ -224,7 +360,31 @@ class PostgresBackend:
         else:
             self._ssl_mode = ssl
         self._ssl_verify = ssl_verify
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", graph_schema):
+            raise ValueError(
+                f"graph_schema must be a valid SQL identifier (alphanumeric + underscore), "
+                f"got: {graph_schema!r}"
+            )
+        self._graph_schema = graph_schema
         self._pool: Any = None
+
+    def _gt(self, table: str) -> str:
+        """Return schema-qualified graph table name.
+
+        When ``graph_schema="qp_vault"`` (default): ``qp_vault.graph_nodes``
+        When ``graph_schema="quantumpipes"``: ``quantumpipes.graph_nodes``
+        """
+        return f"{self._graph_schema}.{table}"
+
+    def _gsql(self, sql: str) -> str:
+        """Replace ``qp_vault.graph_`` with the configured graph schema in SQL.
+
+        Allows all graph methods to use ``qp_vault.graph_`` in their SQL
+        strings while supporting schema redirection at runtime.
+        """
+        if self._graph_schema == "qp_vault":
+            return sql
+        return sql.replace("qp_vault.graph_", f"{self._graph_schema}.graph_")
 
     async def _get_pool(self) -> Any:
         """Get or create connection pool.
@@ -292,6 +452,15 @@ class PostgresBackend:
                 await conn.execute(_HNSW_INDEX)
             with contextlib.suppress(Exception):
                 await conn.execute(_TRGM_INDEX)
+            gs = self._graph_schema
+            graph_ddl = _GRAPH_SCHEMA.replace("qp_vault.", f"{gs}.")
+            await conn.execute(graph_ddl)
+            with contextlib.suppress(Exception):
+                trgm = _GRAPH_TRGM_INDEX.replace("qp_vault.", f"{gs}.")
+                await conn.execute(trgm)
+            with contextlib.suppress(Exception):
+                fn = _GRAPH_NEIGHBORS_FN.replace("qp_vault.", f"{gs}.")
+                await conn.execute(fn)
 
     async def store_resource(self, resource: Resource) -> str:
         """Store a resource."""
@@ -818,6 +987,560 @@ class PostgresBackend:
                 "SELECT vector_dims(embedding) FROM qp_vault.chunks WHERE embedding IS NOT NULL LIMIT 1"
             )
             return int(row) if row else None
+
+    # --- GraphStorageBackend methods ---
+
+    async def store_node(self, node: dict[str, Any]) -> str:
+        """Persist a graph node."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """INSERT INTO qp_vault.graph_nodes (
+                    id, tenant_id, name, slug, entity_type,
+                    properties, tags, primary_space_id,
+                    resource_id, manifest_resource_id,
+                    mention_count, last_mentioned_at,
+                    created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)""",
+                node["id"], node["tenant_id"], node["name"], node["slug"],
+                node["entity_type"], json.dumps(node.get("properties", {})),
+                node.get("tags", []), node.get("primary_space_id"),
+                node.get("resource_id"), node.get("manifest_resource_id"),
+                node.get("mention_count", 0), node.get("last_mentioned_at"),
+                node.get("created_at", datetime.now(tz=UTC)),
+                node.get("updated_at", datetime.now(tz=UTC)),
+            )
+        return str(node["id"])
+
+    async def get_node(self, node_id: str) -> dict[str, Any] | None:
+        """Retrieve a graph node by ID."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM qp_vault.graph_nodes WHERE id = $1", node_id,
+            )
+            if row is None:
+                return None
+            d = dict(row)
+            if isinstance(d.get("properties"), str):
+                d["properties"] = json.loads(d["properties"])
+            return d
+
+    async def list_nodes(
+        self, filters: dict[str, Any],
+    ) -> tuple[list[dict[str, Any]], int]:
+        """List graph nodes with optional filtering."""
+        pool = await self._get_pool()
+        conditions: list[str] = []
+        params: list[Any] = []
+        idx = 1
+
+        if filters.get("tenant_id"):
+            conditions.append(f"n.tenant_id = ${idx}")
+            params.append(filters["tenant_id"])
+            idx += 1
+        if filters.get("entity_type"):
+            conditions.append(f"n.entity_type = ${idx}")
+            params.append(filters["entity_type"])
+            idx += 1
+        if filters.get("space_id"):
+            sid = filters["space_id"]
+            conditions.append(
+                f"(n.primary_space_id = ${idx} OR EXISTS "
+                f"(SELECT 1 FROM qp_vault.graph_node_spaces ns WHERE ns.node_id = n.id AND ns.space_id = ${idx}))"
+            )
+            params.append(sid)
+            idx += 1
+        if filters.get("tags"):
+            conditions.append(f"n.tags @> ${idx}")
+            params.append(filters["tags"])
+            idx += 1
+
+        where = " AND ".join(conditions) if conditions else "TRUE"
+        limit = filters.get("limit", 50)
+        offset = filters.get("offset", 0)
+
+        async with pool.acquire() as conn:
+            count_row = await conn.fetchval(
+                f"SELECT COUNT(*) FROM qp_vault.graph_nodes n WHERE {where}",  # nosec B608
+                *params,
+            )
+            total = int(count_row) if count_row else 0
+
+            rows = await conn.fetch(
+                f"SELECT * FROM qp_vault.graph_nodes n WHERE {where} "  # nosec B608
+                f"ORDER BY n.updated_at DESC LIMIT ${idx} OFFSET ${idx + 1}",
+                *params, limit, offset,
+            )
+            results = []
+            for row in rows:
+                d = dict(row)
+                if isinstance(d.get("properties"), str):
+                    d["properties"] = json.loads(d["properties"])
+                results.append(d)
+            return results, total
+
+    async def search_nodes(
+        self, query: str, space_id: str | None, limit: int,
+    ) -> list[dict[str, Any]]:
+        """Search graph nodes using trigram similarity on name."""
+        pool = await self._get_pool()
+        params: list[Any] = [query, limit]
+        space_filter = ""
+        if space_id:
+            space_filter = "AND n.primary_space_id = $3"
+            params.append(space_id)
+
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                f"SELECT n.*, similarity(n.name, $1) AS score "  # nosec B608
+                f"FROM qp_vault.graph_nodes n "
+                f"WHERE similarity(n.name, $1) > 0.3 {space_filter} "
+                f"ORDER BY score DESC LIMIT $2",
+                *params,
+            )
+            results = []
+            for row in rows:
+                d = dict(row)
+                if isinstance(d.get("properties"), str):
+                    d["properties"] = json.loads(d["properties"])
+                results.append(d)
+            return results
+
+    async def update_node(
+        self, node_id: str, updates: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Apply partial updates to a graph node."""
+        pool = await self._get_pool()
+        sets: list[str] = []
+        params: list[Any] = []
+        idx = 1
+
+        for field in ("name", "slug", "entity_type", "primary_space_id",
+                       "resource_id", "manifest_resource_id",
+                       "mention_count", "last_mentioned_at"):
+            if field in updates:
+                sets.append(f"{field} = ${idx}")
+                params.append(updates[field])
+                idx += 1
+        if "properties" in updates:
+            sets.append(f"properties = ${idx}")
+            params.append(json.dumps(updates["properties"]))
+            idx += 1
+        if "tags" in updates:
+            sets.append(f"tags = ${idx}")
+            params.append(updates["tags"])
+            idx += 1
+
+        sets.append(f"updated_at = ${idx}")
+        params.append(datetime.now(tz=UTC))
+        idx += 1
+        params.append(node_id)
+
+        async with pool.acquire() as conn:
+            await conn.execute(
+                f"UPDATE qp_vault.graph_nodes SET {', '.join(sets)} WHERE id = ${idx}",  # nosec B608
+                *params,
+            )
+
+        result = await self.get_node(node_id)
+        if result is None:
+            raise StorageError(f"Graph node {node_id} not found after update")
+        return result
+
+    async def delete_node(self, node_id: str) -> None:
+        """Delete a graph node (cascades edges, mentions, spaces)."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM qp_vault.graph_nodes WHERE id = $1", node_id,
+            )
+
+    async def store_edge(self, edge: dict[str, Any]) -> str:
+        """Persist a graph edge."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """INSERT INTO qp_vault.graph_edges (
+                    id, tenant_id, source_node_id, target_node_id,
+                    relation_type, properties, weight, bidirectional,
+                    source_resource_id, created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                ON CONFLICT (source_node_id, target_node_id, relation_type) DO UPDATE
+                SET properties = EXCLUDED.properties,
+                    weight = EXCLUDED.weight,
+                    updated_at = EXCLUDED.updated_at""",
+                edge["id"], edge["tenant_id"], edge["source_node_id"],
+                edge["target_node_id"], edge["relation_type"],
+                json.dumps(edge.get("properties", {})),
+                edge.get("weight", 0.5), edge.get("bidirectional", False),
+                edge.get("source_resource_id"),
+                edge.get("created_at", datetime.now(tz=UTC)),
+                edge.get("updated_at", datetime.now(tz=UTC)),
+            )
+        return str(edge["id"])
+
+    async def get_edges(
+        self, node_id: str, direction: str,
+    ) -> list[dict[str, Any]]:
+        """Get edges connected to a node."""
+        pool = await self._get_pool()
+        if direction == "outgoing":
+            sql = "SELECT * FROM qp_vault.graph_edges WHERE source_node_id = $1"
+        elif direction == "incoming":
+            sql = "SELECT * FROM qp_vault.graph_edges WHERE target_node_id = $1"
+        else:
+            sql = "SELECT * FROM qp_vault.graph_edges WHERE source_node_id = $1 OR target_node_id = $1"
+
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, node_id)
+            results = []
+            for row in rows:
+                d = dict(row)
+                if isinstance(d.get("properties"), str):
+                    d["properties"] = json.loads(d["properties"])
+                results.append(d)
+            return results
+
+    async def update_edge(
+        self, edge_id: str, updates: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Apply partial updates to a graph edge."""
+        pool = await self._get_pool()
+        sets: list[str] = []
+        params: list[Any] = []
+        idx = 1
+
+        for field in ("relation_type", "weight", "bidirectional"):
+            if field in updates:
+                sets.append(f"{field} = ${idx}")
+                params.append(updates[field])
+                idx += 1
+        if "properties" in updates:
+            sets.append(f"properties = ${idx}")
+            params.append(json.dumps(updates["properties"]))
+            idx += 1
+
+        sets.append(f"updated_at = ${idx}")
+        params.append(datetime.now(tz=UTC))
+        idx += 1
+        params.append(edge_id)
+
+        async with pool.acquire() as conn:
+            await conn.execute(
+                f"UPDATE qp_vault.graph_edges SET {', '.join(sets)} WHERE id = ${idx}",  # nosec B608
+                *params,
+            )
+            row = await conn.fetchrow(
+                "SELECT * FROM qp_vault.graph_edges WHERE id = $1", edge_id,
+            )
+            if row is None:
+                raise StorageError(f"Graph edge {edge_id} not found after update")
+            d = dict(row)
+            if isinstance(d.get("properties"), str):
+                d["properties"] = json.loads(d["properties"])
+            return d
+
+    async def delete_edge(self, edge_id: str) -> None:
+        """Delete a graph edge."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM qp_vault.graph_edges WHERE id = $1", edge_id,
+            )
+
+    async def neighbors(
+        self, node_id: str, depth: int,
+        relation_types: list[str] | None, space_id: str | None,
+    ) -> list[dict[str, Any]]:
+        """N-hop neighbor traversal via recursive CTE function."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT node_id, node_name, entity_type, depth,
+                          path, relation_type, edge_weight
+                   FROM qp_vault.graph_neighbors($1, $2, $3, $4)""",
+                node_id, depth, relation_types, space_id,
+            )
+            return [dict(row) for row in rows]
+
+    async def upsert_mention(
+        self, node_id: str, resource_id: str,
+        space_id: str | None, context_snippet: str,
+    ) -> None:
+        """Track entity mention in a resource (upsert)."""
+        pool = await self._get_pool()
+        now = datetime.now(tz=UTC)
+        snippet = context_snippet[:500]
+
+        async with pool.acquire() as conn:
+            existing = await conn.fetchval(
+                "SELECT COUNT(*) FROM qp_vault.graph_mentions "
+                "WHERE node_id = $1 AND resource_id = $2",
+                node_id, resource_id,
+            )
+            is_new = (existing or 0) == 0
+
+            await conn.execute(
+                """INSERT INTO qp_vault.graph_mentions
+                       (node_id, resource_id, space_id, context_snippet, mentioned_at)
+                   VALUES ($1, $2, $3, $4, $5)
+                   ON CONFLICT (node_id, resource_id) DO UPDATE
+                   SET context_snippet = EXCLUDED.context_snippet,
+                       mentioned_at = EXCLUDED.mentioned_at""",
+                node_id, resource_id, space_id, snippet, now,
+            )
+
+            if is_new:
+                await conn.execute(
+                    "UPDATE qp_vault.graph_nodes SET mention_count = mention_count + 1, "
+                    "last_mentioned_at = $1 WHERE id = $2",
+                    now, node_id,
+                )
+            else:
+                await conn.execute(
+                    "UPDATE qp_vault.graph_nodes SET last_mentioned_at = $1 WHERE id = $2",
+                    now, node_id,
+                )
+
+    async def get_backlinks(
+        self, node_id: str, limit: int, offset: int,
+    ) -> list[dict[str, Any]]:
+        """Get all resources that mention an entity."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM qp_vault.graph_mentions WHERE node_id = $1 "
+                "ORDER BY mentioned_at DESC LIMIT $2 OFFSET $3",
+                node_id, limit, offset,
+            )
+            return [dict(row) for row in rows]
+
+    async def get_entities_for_resource(
+        self, resource_id: str,
+    ) -> list[dict[str, Any]]:
+        """Get all entities mentioned in a vault resource."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT n.* FROM qp_vault.graph_nodes n "
+                "JOIN qp_vault.graph_mentions m ON m.node_id = n.id "
+                "WHERE m.resource_id = $1 ORDER BY n.name",
+                resource_id,
+            )
+            results = []
+            for row in rows:
+                d = dict(row)
+                if isinstance(d.get("properties"), str):
+                    d["properties"] = json.loads(d["properties"])
+                results.append(d)
+            return results
+
+    async def add_node_to_space(self, node_id: str, space_id: str) -> None:
+        """Add cross-space membership."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO qp_vault.graph_node_spaces (node_id, space_id) "
+                "VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                node_id, space_id,
+            )
+
+    async def remove_node_from_space(self, node_id: str, space_id: str) -> None:
+        """Remove cross-space membership."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM qp_vault.graph_node_spaces WHERE node_id = $1 AND space_id = $2",
+                node_id, space_id,
+            )
+
+    async def merge_nodes(
+        self, keep_id: str, merge_id: str,
+    ) -> dict[str, Any]:
+        """Merge two nodes: re-point edges, mentions, spaces; delete merge_id."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                keep = await conn.fetchrow(
+                    "SELECT * FROM qp_vault.graph_nodes WHERE id = $1", keep_id,
+                )
+                merge = await conn.fetchrow(
+                    "SELECT * FROM qp_vault.graph_nodes WHERE id = $1", merge_id,
+                )
+                if keep is None or merge is None:
+                    raise StorageError("Both nodes must exist for merge")
+
+                await conn.execute(
+                    """UPDATE qp_vault.graph_edges SET source_node_id = $1
+                       WHERE source_node_id = $2
+                       AND NOT EXISTS (
+                           SELECT 1 FROM qp_vault.graph_edges e2
+                           WHERE e2.source_node_id = $1
+                           AND e2.target_node_id = qp_vault.graph_edges.target_node_id
+                           AND e2.relation_type = qp_vault.graph_edges.relation_type
+                       )""",
+                    keep_id, merge_id,
+                )
+                await conn.execute(
+                    """UPDATE qp_vault.graph_edges SET target_node_id = $1
+                       WHERE target_node_id = $2
+                       AND NOT EXISTS (
+                           SELECT 1 FROM qp_vault.graph_edges e2
+                           WHERE e2.source_node_id = qp_vault.graph_edges.source_node_id
+                           AND e2.target_node_id = $1
+                           AND e2.relation_type = qp_vault.graph_edges.relation_type
+                       )""",
+                    keep_id, merge_id,
+                )
+                await conn.execute(
+                    """UPDATE qp_vault.graph_mentions SET node_id = $1
+                       WHERE node_id = $2
+                       AND NOT EXISTS (
+                           SELECT 1 FROM qp_vault.graph_mentions m2
+                           WHERE m2.node_id = $1
+                           AND m2.resource_id = qp_vault.graph_mentions.resource_id
+                       )""",
+                    keep_id, merge_id,
+                )
+                await conn.execute(
+                    """INSERT INTO qp_vault.graph_node_spaces (node_id, space_id)
+                       SELECT $1, space_id FROM qp_vault.graph_node_spaces
+                       WHERE node_id = $2
+                       ON CONFLICT DO NOTHING""",
+                    keep_id, merge_id,
+                )
+
+                keep_props = json.loads(keep["properties"]) if isinstance(keep["properties"], str) else (keep["properties"] or {})
+                merge_props = json.loads(merge["properties"]) if isinstance(merge["properties"], str) else (merge["properties"] or {})
+                merged_props = {**merge_props, **keep_props}
+                keep_tags = list(keep.get("tags") or [])
+                merge_tags = list(merge.get("tags") or [])
+                merged_tags = list(set(keep_tags + merge_tags))
+                merged_count = (keep["mention_count"] or 0) + (merge["mention_count"] or 0)
+
+                await conn.execute(
+                    "UPDATE qp_vault.graph_nodes SET properties = $1, tags = $2, "
+                    "mention_count = $3, updated_at = $4 WHERE id = $5",
+                    json.dumps(merged_props), merged_tags, merged_count,
+                    datetime.now(tz=UTC), keep_id,
+                )
+                await conn.execute(
+                    "DELETE FROM qp_vault.graph_nodes WHERE id = $1", merge_id,
+                )
+
+        result = await self.get_node(keep_id)
+        if result is None:
+            raise StorageError(f"Graph node {keep_id} not found after merge")
+        return result
+
+    async def store_scan_job(self, job: dict[str, Any]) -> str:
+        """Persist a scan job record."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """INSERT INTO qp_vault.graph_scan_jobs
+                       (id, tenant_id, space_id, status, started_at, finished_at, summary_json, error)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
+                job["id"], job["tenant_id"], job["space_id"],
+                job.get("status", "running"),
+                job.get("started_at", datetime.now(tz=UTC)),
+                job.get("finished_at"),
+                json.dumps(job["summary"]) if job.get("summary") else None,
+                job.get("error"),
+            )
+        return str(job["id"])
+
+    async def get_scan_job(self, job_id: str) -> dict[str, Any] | None:
+        """Retrieve a scan job by ID."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM qp_vault.graph_scan_jobs WHERE id = $1", job_id,
+            )
+            if row is None:
+                return None
+            d = dict(row)
+            if isinstance(d.get("summary_json"), str):
+                d["summary"] = json.loads(d["summary_json"])
+            elif d.get("summary_json") is not None:
+                d["summary"] = d["summary_json"]
+            else:
+                d["summary"] = None
+            return d
+
+    async def list_scan_jobs(
+        self, filters: dict[str, Any],
+    ) -> tuple[list[dict[str, Any]], int]:
+        """List scan jobs with optional filtering."""
+        pool = await self._get_pool()
+        conditions: list[str] = []
+        params: list[Any] = []
+        idx = 1
+
+        if filters.get("space_id"):
+            conditions.append(f"space_id = ${idx}")
+            params.append(filters["space_id"])
+            idx += 1
+        if filters.get("status"):
+            conditions.append(f"status = ${idx}")
+            params.append(filters["status"])
+            idx += 1
+
+        where = " AND ".join(conditions) if conditions else "TRUE"
+        limit = filters.get("limit", 50)
+        offset = filters.get("offset", 0)
+
+        async with pool.acquire() as conn:
+            total = await conn.fetchval(
+                f"SELECT COUNT(*) FROM qp_vault.graph_scan_jobs WHERE {where}",  # nosec B608
+                *params,
+            )
+            rows = await conn.fetch(
+                f"SELECT * FROM qp_vault.graph_scan_jobs WHERE {where} "  # nosec B608
+                f"ORDER BY started_at DESC LIMIT ${idx} OFFSET ${idx + 1}",
+                *params, limit, offset,
+            )
+            results = []
+            for row in rows:
+                d = dict(row)
+                if isinstance(d.get("summary_json"), str):
+                    d["summary"] = json.loads(d["summary_json"])
+                elif d.get("summary_json") is not None:
+                    d["summary"] = d["summary_json"]
+                else:
+                    d["summary"] = None
+                results.append(d)
+            return results, int(total) if total else 0
+
+    async def update_scan_job(
+        self, job_id: str, updates: dict[str, Any],
+    ) -> None:
+        """Update a scan job's fields."""
+        pool = await self._get_pool()
+        sets: list[str] = []
+        params: list[Any] = []
+        idx = 1
+
+        for field in ("status", "finished_at", "error"):
+            if field in updates:
+                sets.append(f"{field} = ${idx}")
+                params.append(updates[field])
+                idx += 1
+        if "summary" in updates:
+            sets.append(f"summary_json = ${idx}")
+            params.append(json.dumps(updates["summary"]) if updates["summary"] else None)
+            idx += 1
+
+        if not sets:
+            return
+
+        params.append(job_id)
+        async with pool.acquire() as conn:
+            await conn.execute(
+                f"UPDATE qp_vault.graph_scan_jobs SET {', '.join(sets)} WHERE id = ${idx}",  # nosec B608
+                *params,
+            )
 
     async def close(self) -> None:
         """Close the connection pool."""

@@ -152,6 +152,30 @@ vault.search("query", tenant_id="site-123")
 vault = Vault("./knowledge", tenant_id="site-123")
 ```
 
+## Knowledge Graph
+
+Track entities, relationships, and mentions across your vault:
+
+```python
+# Create entities
+alice = vault.graph.create_node(name="Alice", entity_type="person")
+acme = vault.graph.create_node(name="Acme Corp", entity_type="company")
+
+# Connect them
+vault.graph.create_edge(source_id=alice.id, target_id=acme.id, relation_type="works_at")
+
+# Track mentions in documents
+resource = vault.add("Alice leads engineering at Acme Corp.", name="team.md")
+vault.graph.track_mention(alice.id, resource.id, context_snippet="Alice leads engineering")
+
+# Search and traverse
+results = vault.graph.search_nodes("Alice")
+neighbors = vault.graph.neighbors(alice.id, depth=2)
+backlinks = vault.graph.get_backlinks(alice.id)
+```
+
+Works on both PostgreSQL and SQLite. See [Knowledge Graph](knowledge-graph.md) for extraction, detection, and wikilinks.
+
 ## CLI
 
 ```bash
@@ -170,6 +194,7 @@ vault status
 
 ## Next Steps
 
+- [Knowledge Graph](knowledge-graph.md): Entities, relationships, extraction, detection
 - [Trust Tiers](trust-tiers.md): How trust affects search ranking
 - [Encryption](encryption.md): AES-256-GCM, ML-KEM-768, ML-DSA-65
 - [RBAC](rbac.md): Reader/Writer/Admin roles
