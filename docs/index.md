@@ -9,6 +9,7 @@ Governed knowledge store for autonomous organizations. Every fact has provenance
 | [Getting Started](getting-started.md) | Install, first vault, add, search, grep, verify in 5 minutes |
 | [Architecture](architecture.md) | Package structure, layers, data flow, Protocol interfaces |
 | [API Reference](api-reference.md) | Complete Python SDK: Vault, AsyncVault, all methods |
+| [Knowledge Graph](knowledge-graph.md) | Entities, relationships, mentions, traversal, extraction, detection |
 | [Trust Tiers](trust-tiers.md) | CANONICAL, WORKING, EPHEMERAL, ARCHIVED and search weighting |
 | [Knowledge Lifecycle](lifecycle.md) | State machine, supersession chains, temporal validity |
 | [Memory Layers](memory-layers.md) | OPERATIONAL, STRATEGIC, COMPLIANCE with per-layer defaults |
@@ -39,7 +40,8 @@ print(results[0].content, results[0].trust_tier)
 ## Installation
 
 ```bash
-pip install qp-vault                    # SQLite, basic search, trust tiers
+pip install qp-vault                    # SQLite, basic search, trust tiers, knowledge graph
+pip install qp-vault[postgres]          # + PostgreSQL + pgvector + pg_trgm
 pip install qp-vault[encryption]        # + AES-256-GCM
 pip install qp-vault[pq]               # + ML-KEM-768, ML-DSA-65
 pip install qp-vault[all]              # Everything

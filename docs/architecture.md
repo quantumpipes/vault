@@ -30,10 +30,20 @@ src/qp_vault/
         sqlite.py         SQLite + FTS5 (default, zero-config)
         postgres.py       PostgreSQL + pgvector + pg_trgm (production)
 
+    graph/
+        models.py         GraphNode, GraphEdge, GraphMention, NeighborResult, etc.
+        service.py        GraphEngine: CRUD, traversal, merge, scan, audit events
+        extraction.py     KnowledgeExtractor: LLM-based entity/relationship extraction
+        resolution.py     EntityResolver: dedup cascade (exact + search + create)
+        detection.py      EntityDetector: in-memory name matching (no LLM)
+        materialization.py EntityMaterializer: profile.md + manifest.json generation
+        wikilinks.py      WikilinkResolver: parse + resolve [[Entity Name]] syntax
+
     membrane/
         pipeline.py       MembranePipeline: multi-stage content screening
         innate_scan.py    Pattern-based detection (regex blocklists)
         release_gate.py   Risk-proportionate gating decision
+        sanitize.py       Extraction-time input sanitization for LLM prompts
 
     encryption/
         aes_gcm.py        AES-256-GCM symmetric (FIPS 197)

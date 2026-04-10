@@ -206,3 +206,15 @@ class EventType(StrEnum):
     MEMBRANE_RELEASE = "cis_release"
     MEMBRANE_FLAG = "cis_flag"
     ADVERSARIAL_STATUS_CHANGE = "adversarial_status_change"
+
+    # Knowledge graph events
+    ENTITY_CREATE = "entity_create"
+    ENTITY_UPDATE = "entity_update"
+    ENTITY_DELETE = "entity_delete"
+    EDGE_CREATE = "edge_create"
+    EDGE_DELETE = "edge_delete"
+    ENTITY_MERGE = "entity_merge"
+    MENTION_TRACK = "mention_track"
+    SCAN_START = "scan_start"
+    SCAN_COMPLETE = "scan_complete"
+    SCAN_FAIL = "scan_fail"
