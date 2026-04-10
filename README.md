@@ -8,7 +8,7 @@ Every document has a trust tier that weights search results. Every chunk has a S
 
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Tests](https://img.shields.io/badge/Tests-543_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-1048_passing-brightgreen.svg)](tests/)
 [![Crypto](https://img.shields.io/badge/Crypto-SHA3--256%20%C2%B7%20AES--256--GCM%20%C2%B7%20ML--KEM--768%20%C2%B7%20ML--DSA--65-purple.svg)](#security)
 
 </div>
@@ -28,6 +28,7 @@ A Vault is a governed store of knowledge resources. Each resource is screened by
 │  INGEST      │  Parse → Chunk → SHA3-256 CID → Embed → Store    │
 │  GOVERN      │  Trust tiers · Lifecycle · Data classification   │
 │  RETRIEVE    │  Hybrid search · Trust-weighted · Time-travel    │
+│  GRAPH       │  Entities · Edges · Traversal · Extraction       │
 │  VERIFY      │  Merkle tree · CID per chunk · Proof export      │
 │  AUDIT       │  Every write → VaultEvent → Capsule (opt.)       │
 │  ENCRYPT     │  AES-256-GCM · ML-KEM-768 · ML-DSA-65            │
@@ -133,7 +134,7 @@ pip install qp-vault
 
 | Command | What You Get | Dependencies |
 |---|---|---|
-| `pip install qp-vault` | SQLite, trust search, CAS, Merkle, lifecycle, Membrane, RBAC | **1** (pydantic) |
+| `pip install qp-vault` | SQLite, trust search, CAS, Merkle, lifecycle, Membrane, RBAC, Knowledge Graph | **1** (pydantic) |
 | `pip install qp-vault[postgres]` | + PostgreSQL + pgvector hybrid search | + sqlalchemy, asyncpg, pgvector |
 | `pip install qp-vault[encryption]` | + AES-256-GCM encryption at rest | + cryptography, pynacl |
 | `pip install qp-vault[pq]` | + ML-KEM-768 + ML-DSA-65 post-quantum crypto | + liboqs-python |
@@ -186,6 +187,41 @@ print(result.merkle_root)
 # Export proof for auditors
 proof = vault.export_proof(resource_id)
 ```
+
+### Knowledge Graph
+
+Track entities, relationships, and mentions across your vault. Works on both PostgreSQL and SQLite.
+
+```python
+# Create entities
+alice = vault.graph.create_node(name="Alice Chen", entity_type="person",
+                                properties={"role": "CTO"})
+acme = vault.graph.create_node(name="Acme Corp", entity_type="company")
+
+# Connect them
+vault.graph.create_edge(source_id=alice.id, target_id=acme.id,
+                        relation_type="works_at", weight=0.9)
+
+# Search and traverse
+results = vault.graph.search_nodes("Alice")
+neighbors = vault.graph.neighbors(alice.id, depth=2)
+
+# Track mentions in documents
+resource = vault.add("Alice Chen leads engineering at Acme.", name="team.md")
+vault.graph.track_mention(alice.id, resource.id,
+                          context_snippet="Alice Chen leads engineering")
+
+# Backlinks: find all documents mentioning an entity
+backlinks = vault.graph.get_backlinks(alice.id)
+
+# Build LLM context from graph relationships
+context = vault.graph.context_for([alice.id, acme.id])
+
+# Graph-augmented search: boost docs mentioning detected entities
+results = vault.search("Alice project updates", graph_boost=True)
+```
+
+Intelligence services for extraction, detection, resolution, materialization, and wikilinks. See [Knowledge Graph docs](docs/knowledge-graph.md).
 
 ### Multi-Tenancy
 
@@ -327,7 +363,8 @@ app.include_router(router, prefix="/v1/vault")
 | Hybrid encryption | ML-KEM-768 + AES-256-GCM | FIPS 203+197 | Quantum-resistant data encryption |
 | Content screening | Membrane pipeline | -- | Prompt injection, jailbreak, XSS detection |
 | Access control | RBAC | -- | Reader / Writer / Admin roles |
-| Input validation | Pydantic + custom | -- | Enum checks, name/tag/metadata limits |
+| Input validation | Pydantic + custom | -- | Enum checks, name/tag/metadata/properties limits |
+| Graph sanitization | Membrane pipeline | -- | NFKC normalization, HTML escaping, XML isolation for LLM extraction |
 | Plugin verification | SHA3-256 manifest | -- | Hash-verified plugin loading |
 | Key management | ctypes memset | -- | Secure key zeroization |
 | Self-testing | FIPS KAT | -- | SHA3-256 + AES-256-GCM known answer tests |
@@ -356,6 +393,7 @@ Each independently useful. Together, the governed AI platform for autonomous org
 | [Getting Started](docs/getting-started.md) | Developers |
 | [Architecture](docs/architecture.md) | Developers, Architects |
 | [API Reference](docs/api-reference.md) | Developers |
+| [Knowledge Graph](docs/knowledge-graph.md) | Developers, Data Engineers |
 | [Trust Tiers](docs/trust-tiers.md) | Developers, Product |
 | [Knowledge Lifecycle](docs/lifecycle.md) | Developers, Compliance |
 | [Memory Layers](docs/memory-layers.md) | Developers, Architects |
