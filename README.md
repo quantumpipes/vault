@@ -16,7 +16,9 @@ Every document has a trust tier that weights search results. Every chunk has a S
 
 > **AI coding agents:** start with [AGENTS.md](./AGENTS.md). It contains build and test commands, the subpackage map, code style, crypto allowlist, and the guardrails (async-only, Membrane-gated ingest, CID invariant).
 
-**Try it on your codebase.** Paste this into Claude Code, Cursor, Codex, or any AI coding agent:
+## Explore the fit with your AI coding agent
+
+Paste this prompt into Claude Code, Cursor, Codex, or any other agent:
 
 ```text
 Read the qp-vault README and AGENTS.md at https://github.com/quantumpipes/vault.
