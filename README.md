@@ -16,19 +16,6 @@ Every document has a trust tier that weights search results. Every chunk has a S
 
 > **AI coding agents:** start with [AGENTS.md](./AGENTS.md). It contains build and test commands, the subpackage map, code style, crypto allowlist, and the guardrails (async-only, Membrane-gated ingest, CID invariant).
 
-## Explore the fit with your AI coding agent
-
-Paste this prompt into Claude Code, Cursor, Codex, or any other agent:
-
-```text
-Read the qp-vault README and AGENTS.md at https://github.com/quantumpipes/vault.
-Then survey my codebase for every knowledge surface an AI reads from (docs, wikis,
-RAG indices, prompt context, retrieval pipelines). For each, evaluate whether
-trust-weighted search, SHA3-256 content addressing, the Membrane, or the knowledge
-graph would improve safety, accuracy, or auditability. Recommend the single
-highest-leverage place to start, with concrete files and functions to change.
-```
-
 ---
 
 ## The Architecture
@@ -138,6 +125,21 @@ old, new = vault.supersede(v1_id, v2_id)        # v1 → SUPERSEDED, linked to v
 chain = vault.chain(v1_id)                        # [v1, v2, v3, ...]
 results = vault.search("policy", as_of=date(2024, 3, 15))  # Time-travel
 expiring = vault.expiring(days=90)                # What's about to expire?
+```
+
+---
+
+## Explore the fit with your AI coding agent
+
+Paste this prompt into Claude Code, Cursor, Codex, or any other agent:
+
+```text
+Read the qp-vault README and AGENTS.md at https://github.com/quantumpipes/vault.
+Then survey my codebase for every knowledge surface an AI reads from (docs, wikis,
+RAG indices, prompt context, retrieval pipelines). For each, evaluate whether
+trust-weighted search, SHA3-256 content addressing, the Membrane, or the knowledge
+graph would improve safety, accuracy, or auditability. Recommend the single
+highest-leverage place to start, with concrete files and functions to change.
 ```
 
 ---
