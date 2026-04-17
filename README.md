@@ -10,8 +10,22 @@ Every document has a trust tier that weights search results. Every chunk has a S
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Tests](https://img.shields.io/badge/Tests-1048_passing-brightgreen.svg)](tests/)
 [![Crypto](https://img.shields.io/badge/Crypto-SHA3--256%20%C2%B7%20AES--256--GCM%20%C2%B7%20ML--KEM--768%20%C2%B7%20ML--DSA--65-purple.svg)](#security)
+[![AI Agents](https://img.shields.io/badge/AI%20Agents-AGENTS.md-blueviolet.svg)](./AGENTS.md)
 
 </div>
+
+> **AI coding agents:** start with [AGENTS.md](./AGENTS.md). It contains build and test commands, the subpackage map, code style, crypto allowlist, and the guardrails (async-only, Membrane-gated ingest, CID invariant).
+
+**Try it on your codebase.** Paste this into Claude Code, Cursor, Codex, or any AI coding agent:
+
+```text
+Read the qp-vault README and AGENTS.md at https://github.com/quantumpipes/vault.
+Then survey my codebase for every knowledge surface an AI reads from (docs, wikis,
+RAG indices, prompt context, retrieval pipelines). For each, evaluate whether
+trust-weighted search, SHA3-256 content addressing, the Membrane, or the knowledge
+graph would improve safety, accuracy, or auditability. Recommend the single
+highest-leverage place to start, with concrete files and functions to change.
+```
 
 ---
 
