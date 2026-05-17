@@ -26,6 +26,17 @@ Governed knowledge store for autonomous organizations. Every fact has provenance
 | [Deployment Guide](deployment.md) | PostgreSQL, SSL, encryption, production checklist |
 | [Troubleshooting](troubleshooting.md) | Error codes (VAULT_000-700), common issues |
 
+## Knowledge-base consumption patterns
+
+Recommended patterns for organizing source documents that live inside a qp-vault namespace. Complements the portfolio-wide patterns at [`documentation/patterns/`](../../../documentation/patterns/README.md).
+
+| Guide | Description |
+|-------|-------------|
+| [Source Document Frontmatter](source-document-frontmatter.md) | 14-field Phase 2 schema plus 14-field Phase 3 (capsule chain, post-quantum signatures, IP licensing) |
+| [Diátaxis Organization](diataxis-organization.md) | Recommended folder structure for source documents under a vault namespace |
+| [llms.txt and AI Consumption](llms-txt-and-ai-consumption.md) | The llms.txt and llms-full.txt formats as standard AI-consumption surfaces |
+| [Capsule Chain Anchors](capsule-chain-anchors.md) | Phase 3 forward-looking: anchoring source documents to the capsule chain |
+
 ## Quick Start
 
 ```python
