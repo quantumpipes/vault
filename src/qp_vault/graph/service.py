@@ -778,7 +778,7 @@ class GraphEngine:
         """
         if self._detector is None:
             return []
-        return await self._detector.detect(
+        return await self._detector.detect(  # type: ignore[no-any-return]
             text, fuzzy=fuzzy,
             space_id=str(space_id) if space_id else None,
         )
@@ -848,7 +848,7 @@ class GraphEngine:
         if tenant_id is not None:
             return tenant_id
         if hasattr(self._vault, "_locked_tenant_id") and self._vault._locked_tenant_id:
-            return self._vault._locked_tenant_id
+            return self._vault._locked_tenant_id  # type: ignore[no-any-return]
         return str(uuid4())
 
     @staticmethod

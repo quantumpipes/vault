@@ -10,8 +10,10 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any
-from uuid import UUID
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +297,7 @@ class KnowledgeExtractor:
         end = cleaned.rfind("}") + 1
         if start >= 0 and end > start:
             try:
-                return json.loads(cleaned[start:end])
+                return json.loads(cleaned[start:end])  # type: ignore[no-any-return]
             except (json.JSONDecodeError, ValueError):
                 return _empty
 

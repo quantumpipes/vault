@@ -13,9 +13,11 @@ Usage:
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 try:
     from fastapi import APIRouter, Depends, HTTPException, Query
@@ -131,10 +133,10 @@ def create_vault_router(
         ValueError: If ``require_auth`` is True and no ``role_resolver`` is given.
     """
     _require_fastapi()
+    import logging
+
     from qp_vault.exceptions import LifecycleError, StorageError, VaultError
     from qp_vault.rbac import check_permission
-
-    import logging
     _logger = logging.getLogger("qp_vault.api")
 
     if require_auth and role_resolver is None:

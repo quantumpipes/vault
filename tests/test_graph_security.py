@@ -7,20 +7,19 @@ inputs, and audit resilience.
 
 from __future__ import annotations
 
-import json
 import uuid
 
 import pytest
 
 from qp_vault import AsyncVault
 from qp_vault.graph.service import (
-    _validate_name,
-    _validate_type,
-    _validate_relation_type,
-    _validate_properties,
-    _validate_tags,
-    _validate_weight,
     _cap_limit,
+    _validate_name,
+    _validate_properties,
+    _validate_relation_type,
+    _validate_tags,
+    _validate_type,
+    _validate_weight,
 )
 
 
@@ -372,7 +371,7 @@ class TestGraphSchemaValidation:
         if not HAS_ASYNCPG:
             pytest.skip("asyncpg not installed")
         from qp_vault.storage.postgres import PostgresBackend
-        backend = PostgresBackend.__new__(PostgresBackend)
+        PostgresBackend.__new__(PostgresBackend)
         import re
         assert re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", "qp_vault")
         assert re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", "quantumpipes")

@@ -12,9 +12,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
-from uuid import UUID
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from qp_vault.graph.resolution import EntityResolver
 
 _WIKILINK_PATTERN = re.compile(r"\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]")

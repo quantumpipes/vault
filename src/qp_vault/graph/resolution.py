@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from qp_vault.graph.models import GraphNode
     from qp_vault.graph.service import GraphEngine
 

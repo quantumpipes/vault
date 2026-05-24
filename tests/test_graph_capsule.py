@@ -7,13 +7,15 @@ values, and that the audit provider records them.
 from __future__ import annotations
 
 import uuid
-from unittest.mock import AsyncMock
+from typing import TYPE_CHECKING
 
 import pytest
 
 from qp_vault import AsyncVault
 from qp_vault.enums import EventType
-from qp_vault.models import VaultEvent
+
+if TYPE_CHECKING:
+    from qp_vault.models import VaultEvent
 
 
 class MockAuditor:

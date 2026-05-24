@@ -11,8 +11,7 @@ import uuid
 import pytest
 
 from qp_vault import AsyncVault
-from qp_vault.enums import EventType
-from qp_vault.graph.models import GraphEdge, GraphMention, GraphNode, GraphScanJob, NeighborResult
+from qp_vault.graph.models import GraphEdge, GraphNode, GraphScanJob
 
 
 @pytest.fixture

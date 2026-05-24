@@ -13,10 +13,9 @@ import pytest
 
 from qp_vault import AsyncVault
 from qp_vault.graph.detection import EntityDetector
-from qp_vault.graph.extraction import KnowledgeExtractor, KnowledgeGraph, Entity, Relationship
-from qp_vault.graph.materialization import EntityMaterializer
+from qp_vault.graph.extraction import Entity, KnowledgeExtractor, KnowledgeGraph, Relationship
 from qp_vault.graph.resolution import EntityResolver
-from qp_vault.graph.wikilinks import parse_wikilinks, resolve_wikilinks, WikilinkRef
+from qp_vault.graph.wikilinks import WikilinkRef, parse_wikilinks, resolve_wikilinks
 from qp_vault.membrane.sanitize import sanitize_for_extraction
 
 

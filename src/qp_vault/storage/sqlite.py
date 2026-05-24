@@ -6,6 +6,7 @@ This is the default backend when no PostgreSQL DSN is provided.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import sqlite3
@@ -1370,13 +1371,11 @@ class SQLiteBackend:
             "SELECT space_id FROM graph_node_spaces WHERE node_id = ?", (mid,),
         ).fetchall()
         for s in spaces:
-            try:
+            with contextlib.suppress(sqlite3.IntegrityError):
                 conn.execute(
                     "INSERT INTO graph_node_spaces (node_id, space_id) VALUES (?, ?)",
                     (kid, s["space_id"]),
                 )
-            except sqlite3.IntegrityError:
-                pass
 
         keep_props = json.loads(keep["properties"]) if isinstance(keep["properties"], str) else (keep["properties"] or {})
         merge_props = json.loads(merge["properties"]) if isinstance(merge["properties"], str) else (merge["properties"] or {})

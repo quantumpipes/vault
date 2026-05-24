@@ -18,7 +18,7 @@ from qp_vault import AsyncVault
 from qp_vault.rbac import Role, check_permission
 
 try:
-    from fastapi import Depends, FastAPI
+    from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
     from qp_vault.integrations.fastapi_routes import create_vault_router

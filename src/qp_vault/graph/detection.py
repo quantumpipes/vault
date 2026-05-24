@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from qp_vault.graph.models import DetectedEntity
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from qp_vault.graph.models import GraphNode
     from qp_vault.graph.resolution import EntityResolver
     from qp_vault.graph.service import GraphEngine
@@ -117,7 +118,7 @@ class EntityDetector:
                 if candidate.lower() in self._name_index:
                     continue
 
-                node = await self._resolver.resolve_by_name(
+                node = await self._resolver.resolve_by_name(  # type: ignore[assignment]
                     candidate, space_id=space_id,
                 )
                 if node and node.id not in seen_ids:

@@ -159,3 +159,8 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "TCH"]
 ignore = ["E501"]  # Long SQL strings and complex comprehensions
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI dependency-injection pattern: Depends/Query/Path in argument
+# defaults is idiomatic and safe (called once at route registration).
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Header"]

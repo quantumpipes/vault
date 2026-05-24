@@ -9,13 +9,16 @@ and graph property unavailability.
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING
 
 import pytest
 
 from qp_vault import AsyncVault
 from qp_vault.enums import EventType
-from qp_vault.graph.service import GraphEngine, slugify
-from qp_vault.models import VaultEvent
+from qp_vault.graph.service import slugify
+
+if TYPE_CHECKING:
+    from qp_vault.models import VaultEvent
 
 
 @pytest.fixture
@@ -214,7 +217,7 @@ class TestMergeEdgeCases:
 
     async def test_merge_nonexistent_raises(self, vault, tenant_id):
         n1 = await vault.graph.create_node(name="Real", entity_type="t", tenant_id=tenant_id)
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017 - asserts merge of a nonexistent node fails
             await vault.graph.merge_nodes(n1.id, uuid.uuid4())
 
 

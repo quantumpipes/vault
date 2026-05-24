@@ -326,7 +326,7 @@ class PostgresBackend:
         *,
         embedding_dimensions: int = 768,
         command_timeout: float = 30.0,
-        ssl: str = "prefer",
+        ssl: bool | str = "prefer",
         ssl_verify: bool = False,
         graph_schema: str = "qp_vault",
     ) -> None:
@@ -1360,7 +1360,7 @@ class PostgresBackend:
     ) -> dict[str, Any]:
         """Merge two nodes: re-point edges, mentions, spaces; delete merge_id."""
         pool = await self._get_pool()
-        async with pool.acquire() as conn:
+        async with pool.acquire() as conn:  # noqa: SIM117 - transaction() needs conn from this context
             async with conn.transaction():
                 keep = await conn.fetchrow(
                     "SELECT * FROM qp_vault.graph_nodes WHERE id = $1", keep_id,
