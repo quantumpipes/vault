@@ -240,8 +240,12 @@ class TestFastAPIGaps:
         from qp_vault.integrations.fastapi_routes import create_vault_router
 
         vault = AsyncVault(tmp_path / "api")
-        router = create_vault_router(vault)
+        router = create_vault_router(vault, require_auth=False)
         assert router is not None
+        # Secure default: refuses to build unauthenticated.
+        import pytest as _pytest
+        with _pytest.raises(ValueError):
+            create_vault_router(vault)
 
     def test_search_request_model(self) -> None:
         from qp_vault.integrations.fastapi_routes import HAS_FASTAPI

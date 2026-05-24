@@ -13,11 +13,12 @@ Usage:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException, Query
+    from fastapi import APIRouter, Depends, HTTPException, Query
     from pydantic import BaseModel, Field
     HAS_FASTAPI = True
 except ImportError:
@@ -89,22 +90,94 @@ if HAS_FASTAPI:
         meta: dict[str, Any] = Field(default_factory=dict)
 
 
-def create_vault_router(vault: Any) -> APIRouter:
+def create_vault_router(
+    vault: Any,
+    *,
+    role_resolver: Callable[..., Any] | None = None,
+    require_auth: bool = True,
+    io_base_dir: str | None = None,
+) -> APIRouter:
     """Create a FastAPI router with all vault endpoints.
+
+    The vault is the highest-value asset on the platform (governed, possibly
+    classified knowledge), so the REST boundary is authenticated and fails
+    closed by default.
 
     Args:
         vault: An AsyncVault instance.
+        role_resolver: A FastAPI dependency callable that resolves the caller's
+            :class:`~qp_vault.rbac.Role` (or a role string) from the request,
+            raising 401/403 itself when the caller is unauthenticated or
+            unauthorized. Every endpoint gains a per-operation authorization
+            check driven by this role. Required unless ``require_auth=False``.
+        require_auth: When True (default), refuse to build the router without a
+            ``role_resolver`` so write/admin routes can never be mounted
+            unauthenticated. Set to False ONLY when the embedding application
+            enforces authentication in front of this router (e.g. a loopback
+            sidecar) and accepts that the router performs no boundary RBAC; this
+            is an explicit, auditable opt-out.
+        io_base_dir: Directory that the ``/import`` and ``/export`` endpoints are
+            confined to. Caller-supplied paths are resolved against it and any
+            path that escapes it (traversal, absolute, symlink) is rejected.
+            When None (default), ``/import`` and ``/export`` are disabled
+            (HTTP 403) because there is no safe base directory: this prevents
+            the arbitrary-file read/write that an unconfined server-side path
+            would allow over HTTP.
 
     Returns:
         FastAPI APIRouter ready to include in your app.
+
+    Raises:
+        ValueError: If ``require_auth`` is True and no ``role_resolver`` is given.
     """
     _require_fastapi()
     from qp_vault.exceptions import LifecycleError, StorageError, VaultError
-
-    router = APIRouter(tags=["vault"])
+    from qp_vault.rbac import check_permission
 
     import logging
     _logger = logging.getLogger("qp_vault.api")
+
+    if require_auth and role_resolver is None:
+        # Startup assertion: never register write/admin routes unauthenticated.
+        raise ValueError(
+            "create_vault_router requires a role_resolver dependency when "
+            "require_auth is True. Pass a FastAPI dependency that authenticates "
+            "the caller and returns their vault Role, or set require_auth=False "
+            "ONLY if the embedding app enforces authentication in front of the "
+            "router (explicit, auditable opt-out)."
+        )
+
+    if not require_auth:
+        _logger.warning(
+            "qp_vault router mounted with require_auth=False: boundary RBAC is "
+            "disabled and the embedding application MUST enforce authentication "
+            "in front of these routes."
+        )
+
+    def _guard(operation: str) -> Callable[..., Any]:
+        """Build a per-operation authorization dependency.
+
+        When a ``role_resolver`` is configured, resolve the caller's role and
+        enforce the RBAC matrix in fail-closed (strict) mode before the handler
+        runs. Without a resolver (opt-out), this is a no-op and the embedding
+        app is responsible for access control.
+        """
+        if role_resolver is None:
+            async def _noop() -> None:
+                return None
+
+            return _noop
+
+        async def _dep(role: Any = Depends(role_resolver)) -> None:
+            try:
+                check_permission(role, operation, strict=True)
+            except (VaultError, ValueError) as e:
+                # VaultError: denied/unknown op/None role. ValueError: bad role string.
+                raise HTTPException(status_code=403, detail=str(e)) from e
+
+        return _dep
+
+    router = APIRouter(tags=["vault"])
 
     def _handle_error(e: Exception) -> HTTPException:
         """Map vault exceptions to safe HTTP responses.
@@ -120,7 +193,7 @@ def create_vault_router(vault: Any) -> APIRouter:
             return HTTPException(status_code=500, detail="Storage operation failed")
         return HTTPException(status_code=500, detail="Internal server error")
 
-    @router.post("/resources")
+    @router.post("/resources", dependencies=[Depends(_guard("add"))])
     async def add_resource(req: AddResourceRequest) -> dict[str, Any]:
         resource = await vault.add(
             req.content,
@@ -135,7 +208,7 @@ def create_vault_router(vault: Any) -> APIRouter:
         )
         return {"data": resource.model_dump(), "meta": {}}
 
-    @router.get("/resources")
+    @router.get("/resources", dependencies=[Depends(_guard("list"))])
     async def list_resources(
         trust_tier: str | None = None,
         layer: str | None = None,
@@ -154,7 +227,7 @@ def create_vault_router(vault: Any) -> APIRouter:
         )
         return {"data": [r.model_dump() for r in resources], "meta": {"count": len(resources)}}
 
-    @router.get("/resources/by-name")
+    @router.get("/resources/by-name", dependencies=[Depends(_guard("get"))])
     async def find_by_name(
         name: str = Query(..., max_length=255),
         tenant_id: str | None = None,
@@ -166,7 +239,7 @@ def create_vault_router(vault: Any) -> APIRouter:
             raise HTTPException(status_code=404, detail=f"Resource not found: {name}")
         return {"data": resource.model_dump(), "meta": {}}
 
-    @router.get("/resources/{resource_id}")
+    @router.get("/resources/{resource_id}", dependencies=[Depends(_guard("get"))])
     async def get_resource(resource_id: str) -> dict[str, Any]:
         try:
             resource = await vault.get(resource_id)
@@ -174,7 +247,7 @@ def create_vault_router(vault: Any) -> APIRouter:
             raise _handle_error(e) from e
         return {"data": resource.model_dump(), "meta": {}}
 
-    @router.put("/resources/{resource_id}")
+    @router.put("/resources/{resource_id}", dependencies=[Depends(_guard("update"))])
     async def update_resource(resource_id: str, req: UpdateResourceRequest) -> dict[str, Any]:
         try:
             resource = await vault.update(
@@ -189,7 +262,7 @@ def create_vault_router(vault: Any) -> APIRouter:
             raise _handle_error(e) from e
         return {"data": resource.model_dump(), "meta": {}}
 
-    @router.delete("/resources/{resource_id}")
+    @router.delete("/resources/{resource_id}", dependencies=[Depends(_guard("delete"))])
     async def delete_resource(resource_id: str, hard: bool = False) -> dict[str, Any]:
         try:
             await vault.delete(resource_id, hard=hard)
@@ -197,7 +270,7 @@ def create_vault_router(vault: Any) -> APIRouter:
             raise _handle_error(e) from e
         return {"data": {"deleted": True}, "meta": {}}
 
-    @router.post("/resources/{resource_id}/transition")
+    @router.post("/resources/{resource_id}/transition", dependencies=[Depends(_guard("transition"))])
     async def transition_resource(resource_id: str, req: TransitionRequest) -> dict[str, Any]:
         try:
             resource = await vault.transition(resource_id, req.target, reason=req.reason)
@@ -205,7 +278,7 @@ def create_vault_router(vault: Any) -> APIRouter:
             raise _handle_error(e) from e
         return {"data": resource.model_dump(), "meta": {}}
 
-    @router.post("/resources/{resource_id}/supersede")
+    @router.post("/resources/{resource_id}/supersede", dependencies=[Depends(_guard("supersede"))])
     async def supersede_resource(resource_id: str, req: SupersedeRequest) -> dict[str, Any]:
         try:
             old, new = await vault.supersede(resource_id, req.new_id)
@@ -213,7 +286,7 @@ def create_vault_router(vault: Any) -> APIRouter:
             raise _handle_error(e) from e
         return {"data": {"old": old.model_dump(), "new": new.model_dump()}, "meta": {}}
 
-    @router.post("/resources/{resource_id}/reprocess")
+    @router.post("/resources/{resource_id}/reprocess", dependencies=[Depends(_guard("update"))])
     async def reprocess_resource(resource_id: str) -> dict[str, Any]:
         """Re-chunk and re-embed a resource."""
         try:
@@ -222,12 +295,12 @@ def create_vault_router(vault: Any) -> APIRouter:
             raise _handle_error(e) from e
         return {"data": resource.model_dump(), "meta": {"reprocessed": True}}
 
-    @router.get("/resources/{resource_id}/verify")
+    @router.get("/resources/{resource_id}/verify", dependencies=[Depends(_guard("verify"))])
     async def verify_resource(resource_id: str) -> dict[str, Any]:
         result = await vault.verify(resource_id)
         return {"data": result.model_dump(), "meta": {}}
 
-    @router.get("/resources/{resource_id}/proof")
+    @router.get("/resources/{resource_id}/proof", dependencies=[Depends(_guard("export_proof"))])
     async def export_proof(resource_id: str) -> dict[str, Any]:
         try:
             proof = await vault.export_proof(resource_id)
@@ -235,12 +308,12 @@ def create_vault_router(vault: Any) -> APIRouter:
             raise _handle_error(e) from e
         return {"data": proof.model_dump(), "meta": {}}
 
-    @router.get("/resources/{resource_id}/chain")
+    @router.get("/resources/{resource_id}/chain", dependencies=[Depends(_guard("chain"))])
     async def get_chain(resource_id: str) -> dict[str, Any]:
         chain = await vault.chain(resource_id)
         return {"data": [r.model_dump() for r in chain], "meta": {"length": len(chain)}}
 
-    @router.post("/search")
+    @router.post("/search", dependencies=[Depends(_guard("search"))])
     async def search(req: SearchRequest) -> dict[str, Any]:
         as_of = date.fromisoformat(req.as_of) if req.as_of else None
         results = await vault.search(
@@ -257,27 +330,27 @@ def create_vault_router(vault: Any) -> APIRouter:
             "meta": {"query": req.query, "total": len(results)},
         }
 
-    @router.get("/verify")
+    @router.get("/verify", dependencies=[Depends(_guard("verify"))])
     async def verify_all() -> dict[str, Any]:
         result = await vault.verify()
         return {"data": result.model_dump(), "meta": {}}
 
-    @router.get("/health")
+    @router.get("/health", dependencies=[Depends(_guard("health"))])
     async def health() -> dict[str, Any]:
         score = await vault.health()
         return {"data": score.model_dump(), "meta": {}}
 
-    @router.get("/status")
+    @router.get("/status", dependencies=[Depends(_guard("status"))])
     async def status() -> dict[str, Any]:
         s = await vault.status()
         return {"data": s, "meta": {}}
 
-    @router.get("/expiring")
+    @router.get("/expiring", dependencies=[Depends(_guard("expiring"))])
     async def expiring(days: int = 90) -> dict[str, Any]:
         resources = await vault.expiring(days=days)
         return {"data": [r.model_dump() for r in resources], "meta": {"days": days}}
 
-    @router.get("/resources/{resource_id}/content")
+    @router.get("/resources/{resource_id}/content", dependencies=[Depends(_guard("get_content"))])
     async def get_content(resource_id: str) -> dict[str, Any]:
         try:
             text = await vault.get_content(resource_id)
@@ -285,22 +358,22 @@ def create_vault_router(vault: Any) -> APIRouter:
             raise _handle_error(e) from e
         return {"data": {"content": text}, "meta": {}}
 
-    @router.get("/resources/{resource_id}/provenance")
+    @router.get("/resources/{resource_id}/provenance", dependencies=[Depends(_guard("get_provenance"))])
     async def get_provenance(resource_id: str) -> dict[str, Any]:
         records = await vault.get_provenance(resource_id)
         return {"data": records, "meta": {"count": len(records)}}
 
-    @router.get("/collections")
+    @router.get("/collections", dependencies=[Depends(_guard("list_collections"))])
     async def list_collections() -> dict[str, Any]:
         colls = await vault.list_collections()
         return {"data": colls, "meta": {"count": len(colls)}}
 
-    @router.post("/collections")
+    @router.post("/collections", dependencies=[Depends(_guard("create_collection"))])
     async def create_collection(req: dict[str, Any]) -> dict[str, Any]:
         result = await vault.create_collection(req.get("name", ""), description=req.get("description", ""))
         return {"data": result, "meta": {}}
 
-    @router.post("/search/faceted")
+    @router.post("/search/faceted", dependencies=[Depends(_guard("search_with_facets"))])
     async def search_faceted(req: SearchRequest) -> dict[str, Any]:
         as_of_date = date.fromisoformat(req.as_of) if req.as_of else None
         result = await vault.search_with_facets(
@@ -315,7 +388,7 @@ def create_vault_router(vault: Any) -> APIRouter:
             "meta": {"total": result["total"], "facets": result["facets"]},
         }
 
-    @router.post("/grep")
+    @router.post("/grep", dependencies=[Depends(_guard("search"))])
     async def grep_search(req: GrepRequest) -> dict[str, Any]:
         """Multi-keyword OR search with hit-density scoring."""
         try:
@@ -324,7 +397,7 @@ def create_vault_router(vault: Any) -> APIRouter:
             raise _handle_error(e) from e
         return {"data": [r.model_dump() for r in results], "meta": {"total": len(results)}}
 
-    @router.post("/batch")
+    @router.post("/batch", dependencies=[Depends(_guard("add_batch"))])
     async def add_batch(req: dict[str, Any]) -> dict[str, Any]:
         sources = req.get("sources", [])
         if len(sources) > 100:
@@ -338,12 +411,20 @@ def create_vault_router(vault: Any) -> APIRouter:
         )
         return {"data": [r.model_dump() for r in resources], "meta": {"count": len(resources)}}
 
-    @router.get("/export")
+    @router.get("/export", dependencies=[Depends(_guard("export_vault"))])
     async def export_vault_endpoint(output: str = "vault_export.json") -> dict[str, Any]:
-        result = await vault.export_vault(output)
+        if io_base_dir is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Export is disabled: no io_base_dir configured for this router",
+            )
+        try:
+            result = await vault.export_vault(output, base_dir=io_base_dir)
+        except Exception as e:
+            raise _handle_error(e) from e
         return {"data": result, "meta": {}}
 
-    @router.get("/resources/{old_id}/diff/{new_id}")
+    @router.get("/resources/{old_id}/diff/{new_id}", dependencies=[Depends(_guard("get"))])
     async def diff_resources(old_id: str, new_id: str) -> dict[str, Any]:
         """Compute unified diff between two resources."""
         try:
@@ -352,7 +433,7 @@ def create_vault_router(vault: Any) -> APIRouter:
             raise _handle_error(e) from e
         return {"data": result, "meta": {}}
 
-    @router.post("/resources/multiple")
+    @router.post("/resources/multiple", dependencies=[Depends(_guard("get"))])
     async def get_multiple(req: dict[str, Any]) -> dict[str, Any]:
         """Get multiple resources by ID in a single request."""
         resource_ids = req.get("resource_ids", [])
@@ -363,7 +444,7 @@ def create_vault_router(vault: Any) -> APIRouter:
         resources = await vault.get_multiple(clean_ids)
         return {"data": [r.model_dump() for r in resources], "meta": {"count": len(resources)}}
 
-    @router.patch("/resources/{resource_id}/adversarial")
+    @router.patch("/resources/{resource_id}/adversarial", dependencies=[Depends(_guard("set_adversarial_status"))])
     async def set_adversarial_status(resource_id: str, req: dict[str, Any]) -> dict[str, Any]:
         """Set adversarial verification status on a resource."""
         status_val = req.get("status")
@@ -378,18 +459,28 @@ def create_vault_router(vault: Any) -> APIRouter:
             raise _handle_error(e) from e
         return {"data": resource.model_dump(), "meta": {}}
 
-    @router.post("/import")
+    @router.post("/import", dependencies=[Depends(_guard("import_vault"))])
     async def import_vault_endpoint(req: dict[str, Any]) -> dict[str, Any]:
-        """Import resources from a vault export file."""
+        """Import resources from a vault export file confined to io_base_dir."""
+        if io_base_dir is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Import is disabled: no io_base_dir configured for this router",
+            )
         path = req.get("path")
-        if not path:
+        if not path or not isinstance(path, str):
             raise HTTPException(status_code=400, detail="'path' field required")
-        # Security: reject path traversal
+        # Confine the caller path to io_base_dir at the boundary so a path that
+        # escapes (traversal/absolute/symlink) is a clear 400, not a generic 5xx.
         from pathlib import Path as _Path
-        if ".." in _Path(path).parts:
+        base = _Path(io_base_dir).resolve()
+        candidate = _Path(path)
+        resolved = (base / candidate if not candidate.is_absolute() else candidate).resolve()
+        if not resolved.is_relative_to(base):
             raise HTTPException(status_code=400, detail="Path traversal not allowed")
         try:
-            resources = await vault.import_vault(path)
+            # base_dir is also passed for defense-in-depth (library re-confines).
+            resources = await vault.import_vault(str(resolved), base_dir=io_base_dir)
         except Exception as e:
             raise _handle_error(e) from e
         return {"data": [r.model_dump() for r in resources], "meta": {"count": len(resources)}}

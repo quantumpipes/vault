@@ -277,6 +277,35 @@ class AsyncVault:
         from qp_vault.rbac import check_permission
         check_permission(self._role, operation)
 
+    @staticmethod
+    def _confine_path(path: str | Path, base_dir: str | Path) -> Path:
+        """Resolve ``path`` and require it stay within ``base_dir``.
+
+        Used to harden import/export against path traversal and symlink escape
+        when the path originates from an untrusted caller (e.g. a REST request).
+        Absolute paths, ``..`` traversal, and symlinks that resolve outside the
+        base are all rejected.
+
+        Args:
+            path: Caller-supplied file path (relative paths join ``base_dir``).
+            base_dir: The only directory tree the operation may touch.
+
+        Returns:
+            The fully-resolved, contained path.
+
+        Raises:
+            VaultError: If the resolved path escapes ``base_dir``.
+        """
+        from qp_vault.exceptions import VaultError
+
+        base = Path(base_dir).resolve()
+        candidate = Path(path)
+        # Resolve relative paths against the base; resolve symlinks fully.
+        resolved = (base / candidate if not candidate.is_absolute() else candidate).resolve()
+        if not resolved.is_relative_to(base):
+            raise VaultError("Path escapes the permitted directory")
+        return resolved
+
     def _cache_get(self, key: str) -> Any | None:
         """Get a cached value if TTL has not expired."""
         import time
@@ -1534,11 +1563,15 @@ class AsyncVault:
         self._cache_set(cache_key, result)
         return result
 
-    async def export_vault(self, path: str | Path) -> dict[str, Any]:
+    async def export_vault(self, path: str | Path, *, base_dir: str | Path | None = None) -> dict[str, Any]:
         """Export the vault to a JSON file for portability.
 
         Args:
             path: Output file path.
+            base_dir: When provided, confine the output ``path`` to this
+                directory tree (reject traversal/absolute/symlink escape). Pass
+                this whenever the path comes from an untrusted caller, such as
+                the REST API, to prevent arbitrary-file write.
 
         Returns:
             Summary with resource count and export path.
@@ -1546,6 +1579,8 @@ class AsyncVault:
         import json as _json
         await self._ensure_initialized()
         self._check_permission("export_vault")
+        if base_dir is not None:
+            path = self._confine_path(path, base_dir)
         resources: list[Resource] = await self._list_all_bounded()
         export_resources = []
         for r in resources:
@@ -1565,11 +1600,14 @@ class AsyncVault:
         out.write_text(_json.dumps(data, default=str, indent=2))
         return {"path": str(out), "resource_count": len(resources)}
 
-    async def import_vault(self, path: str | Path) -> list[Resource]:
+    async def import_vault(self, path: str | Path, *, base_dir: str | Path | None = None) -> list[Resource]:
         """Import resources from an exported vault JSON file.
 
         Args:
             path: Path to the exported JSON file.
+            base_dir: When provided, confine ``path`` to this directory tree
+                (reject traversal/absolute/symlink escape). Pass this whenever
+                the path comes from an untrusted caller, such as the REST API.
 
         Returns:
             List of imported resources.
@@ -1577,7 +1615,8 @@ class AsyncVault:
         import json as _json
         await self._ensure_initialized()
         self._check_permission("import_vault")
-        data = _json.loads(Path(path).read_text())
+        safe_path = self._confine_path(path, base_dir) if base_dir is not None else Path(path)
+        data = _json.loads(safe_path.read_text())
         imported = []
         for r_data in data.get("resources", []):
             # Reconstruct content from chunks (lossless) or fall back to name

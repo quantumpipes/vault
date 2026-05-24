@@ -71,24 +71,42 @@ ROLE_HIERARCHY: dict[Role, int] = {
 }
 
 
-def check_permission(role: Role | str | None, operation: str) -> None:
+def check_permission(
+    role: Role | str | None, operation: str, *, strict: bool = False
+) -> None:
     """Check if a role has permission for an operation.
 
     Args:
-        role: The caller's role. None means no RBAC (all operations allowed).
+        role: The caller's role. When ``strict`` is False, ``None`` means no RBAC
+            is configured and all operations are allowed (library/in-process use).
+            When ``strict`` is True (the API boundary), ``None`` is denied.
         operation: The operation name (e.g., "add", "search").
+        strict: Fail-closed mode for untrusted callers (the REST boundary). When
+            True, an unknown ``role`` (None) is denied and an operation that is
+            not present in ``PERMISSIONS`` is denied (default-deny) rather than
+            allowed. Defaults to False to preserve the in-process contract where
+            ``check_permission(None, ...)`` is a no-op.
 
     Raises:
-        VaultError: If the role lacks permission.
+        VaultError: If the role is missing/unknown (strict) or lacks permission,
+            or if the operation is unknown (strict).
     """
     if role is None:
-        return  # No RBAC configured
+        if strict:
+            # Fail closed at the trust boundary: no identity => no access.
+            raise VaultError(f"Permission denied: {operation} requires an authenticated role")
+        return  # No RBAC configured (in-process default)
 
+    # An unrecognized role string raises ValueError (denied either way).
     role_enum = Role(role) if isinstance(role, str) else role
+
     required = PERMISSIONS.get(operation)
 
     if required is None:
-        return  # Unknown operation, allow by default
+        if strict:
+            # Default-deny: an operation not in the matrix is not authorizable.
+            raise VaultError(f"Permission denied: unknown operation {operation}")
+        return  # Unknown operation, allow by default (in-process default)
 
     caller_level = ROLE_HIERARCHY.get(role_enum, 0)
     required_level = ROLE_HIERARCHY.get(required, 0)

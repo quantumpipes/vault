@@ -21,7 +21,10 @@ pytestmark = pytest.mark.skipif(not HAS_FASTAPI, reason="fastapi not installed")
 def client(tmp_path):
     vault = AsyncVault(tmp_path / "api-vault")
     app = FastAPI()
-    router = create_vault_router(vault)
+    # require_auth=False: embedding app owns auth in these endpoint-behavior tests.
+    router = create_vault_router(
+        vault, require_auth=False, io_base_dir=str(tmp_path / "api-vault")
+    )
     app.include_router(router, prefix="/v1/vault")
     return TestClient(app)
 
