@@ -130,8 +130,8 @@ CREATE TABLE IF NOT EXISTS qp_vault.graph_nodes (
     properties JSONB DEFAULT '{}',
     tags TEXT[] DEFAULT '{}',
     primary_space_id UUID,
-    resource_id UUID REFERENCES qp_vault.resources(id) ON DELETE SET NULL,
-    manifest_resource_id UUID REFERENCES qp_vault.resources(id) ON DELETE SET NULL,
+    resource_id TEXT REFERENCES qp_vault.resources(id) ON DELETE SET NULL,
+    manifest_resource_id TEXT REFERENCES qp_vault.resources(id) ON DELETE SET NULL,
     mention_count INTEGER DEFAULT 0,
     last_mentioned_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS qp_vault.graph_edges (
     properties JSONB DEFAULT '{}',
     weight FLOAT DEFAULT 0.5,
     bidirectional BOOLEAN DEFAULT FALSE,
-    source_resource_id UUID REFERENCES qp_vault.resources(id) ON DELETE SET NULL,
+    source_resource_id TEXT REFERENCES qp_vault.resources(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (source_node_id, target_node_id, relation_type)
@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS qp_vault.graph_node_spaces (
 CREATE TABLE IF NOT EXISTS qp_vault.graph_mentions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     node_id UUID NOT NULL REFERENCES qp_vault.graph_nodes(id) ON DELETE CASCADE,
-    resource_id UUID NOT NULL REFERENCES qp_vault.resources(id) ON DELETE CASCADE,
+    resource_id TEXT NOT NULL REFERENCES qp_vault.resources(id) ON DELETE CASCADE,
     space_id UUID,
     context_snippet VARCHAR(500) DEFAULT '',
     mentioned_at TIMESTAMPTZ DEFAULT NOW(),

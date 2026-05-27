@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.6.0] - 2026-04-10
+### Fixed
+- **Postgres graph schema FK type mismatch.** The graph tables declared their
+  references to `qp_vault.resources(id)` as `UUID`, but `resources.id` is `TEXT`
+  (as `chunks.resource_id` and `provenance.resource_id` correctly are), so
+  `PostgresBackend.initialize()` aborted with `DatatypeMismatchError`
+  ("foreign key constraint cannot be implemented") on a fresh database whenever
+  the graph DDL ran. Changed `graph_nodes.resource_id`,
+  `graph_nodes.manifest_resource_id`, `graph_edges.source_resource_id`, and
+  `graph_mentions.resource_id` from `UUID` to `TEXT`. The graph node/edge/mention
+  primary keys and node references remain `UUID`. Verified against a live
+  pgvector database: `initialize()` now creates the full graph schema cleanly and
+  the existing Postgres + graph-storage integration tests (52) pass.
 
 ### Added
 - **Knowledge Graph**: New `qp_vault.graph` subpackage. Access via `vault.graph` on any AsyncVault or Vault instance.
