@@ -466,7 +466,12 @@ if(window.VAULT_SUBTITLE){document.getElementById("appSub").textContent=window.V
     src=src.replace(/\r\n?/g,"\n").replace(/^---\n[\s\S]*?\n---\n/,"");
     const docDir=docPath?docPath.split("/").slice(0,-1).join("/"):"";
     const lines=src.split("\n");let html="",i=0;
-    const inline=(t)=>esc(t).replace(/`([^`]+)`/g,(m,c)=>`<code>${c}</code>`).replace(/!\[([^\]]*)\]\(([^)]+)\)/g,(m,alt,u0)=>{let u=u0.trim();if(!/^(https?:|\/|file:|data:)/.test(u))u=BASE+encodeURI((docDir?docDir+"/":"")+u);return '<img alt="'+alt+'" src="'+u+'" loading="lazy">';}).replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>").replace(/(^|[^*])\*([^*\n]+)\*/g,"$1<em>$2</em>").replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+    const q=(s)=>String(s).replace(/"/g,"&quot;");
+    const safeHref=(u)=>/^\s*(javascript|vbscript|data):/i.test(u||"")?"#":(u||"").trim();
+    const inline=(t)=>esc(t).replace(/`([^`]+)`/g,(m,c)=>`<code>${c}</code>`).replace(/!\[([^\]]*)\]\(([^)]+)\)/g,(m,alt,u0)=>{let u=u0.trim();
+        if(/^(javascript|vbscript):/i.test(u)||/^data:(?!image\/)/i.test(u))return esc(alt);
+        if(!/^(https?:|\/|file:|data:)/.test(u))u=BASE+encodeURI((docDir?docDir+"/":"")+u);
+        return '<img alt="'+q(alt)+'" src="'+q(u)+'" loading="lazy">';}).replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>").replace(/(^|[^*])\*([^*\n]+)\*/g,"$1<em>$2</em>").replace(/\[([^\]]+)\]\(([^)]+)\)/g,(m,txt,u)=>`<a href="${q(safeHref(u))}" target="_blank" rel="noopener">${txt}</a>`);
     function listBlock(start){const buf=[];let j=start;while(j<lines.length){const mm=lines[j].match(/^(\s*)([-*]|\d+\.)\s+(.*)$/);if(!mm)break;buf.push({ind:mm[1].replace(/\t/g,"  ").length,ord:/\d/.test(mm[2]),txt:mm[3]});j++;}
       function rec(p,ind){let h="";const ordered=buf[p].ord;while(p<buf.length&&buf[p].ind>=ind){if(buf[p].ind>ind){p++;continue;}const cur=buf[p];p++;let child="";if(p<buf.length&&buf[p].ind>ind){const r=rec(p,buf[p].ind);child=r.h;p=r.p;}h+=`<li>${inline(cur.txt)}${child}</li>`;}return{h:`<${ordered?"ol":"ul"}>${h}</${ordered?"ol":"ul"}>`,p};}
       return{html:rec(0,buf[0].ind).h,next:j};}

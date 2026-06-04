@@ -33,9 +33,10 @@ Examples
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Extensions whose contents are inlined for the reader + full-text search.
@@ -72,15 +73,13 @@ def looks_binary(path: Path, sniff: int = 2048) -> bool:
 
 def is_textual(path: Path) -> bool:
     ext = path.suffix.lower().lstrip(".")
-    if ext in TEXT_EXT:
-        return True
-    if not ext and path.name.lower() in {"readme", "license", "notice", "authors", "changelog"}:
-        return True
-    return False
+    return ext in TEXT_EXT or (
+        not ext and path.name.lower() in {"readme", "license", "notice", "authors", "changelog"}
+    )
 
 
 def iso_day(ts: float) -> str:
-    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d")
 
 
 def collect(root: Path, ignore_dirs: set[str], include_hidden: bool) -> list[Path]:
@@ -126,10 +125,8 @@ def build(args: argparse.Namespace) -> str:
         posix = rel.as_posix()
         files.append(posix)
         full = root / rel
-        try:
+        with contextlib.suppress(OSError):
             meta[posix] = {"m": iso_day(full.stat().st_mtime)}
-        except OSError:
-            pass
         if args.no_content:
             continue
         if not is_textual(full) or looks_binary(full):

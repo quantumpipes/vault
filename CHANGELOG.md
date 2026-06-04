@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the existing Postgres + graph-storage integration tests (52) pass.
 
 ### Added
+- **Web Explorer** (`examples/web-explorer/`): a single-file, no-build, air-gap-safe browser UI for a vault. Folder tree, inline markdown reader, full-text search, semantic icons, type filter, outline, and keyboard nav, with zero network requests. A stdlib-only `generate_manifest.py` scans a directory, or `--from-export` maps a `vault.export_vault()` JSON into a governance view: trust-tier and lifecycle badges, SHA3-256 content ids, supersession links, and trust-weighted search. Includes offline content-id re-verification (a dependency-free `sha3.js`, FIPS 202, verified against Python `hashlib`) that re-hashes each chunk and the resource digest and reports verified or tampered. Contract + SHA3/verification tests run in CI (`web-explorer` job).
 - **Knowledge Graph**: New `qp_vault.graph` subpackage. Access via `vault.graph` on any AsyncVault or Vault instance.
 - **GraphEngine**: Typed async CRUD for nodes, edges, mentions, traversal, merge, and scan. Every mutation fires a VaultEvent for capsule audit.
 - **GraphStorageBackend Protocol**: 20-method storage contract. PostgreSQL (pg_trgm similarity, recursive CTE traversal) and SQLite (FTS5 search, Python BFS traversal) backends.
