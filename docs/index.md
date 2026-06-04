@@ -22,6 +22,7 @@ Governed knowledge store for autonomous organizations. Every fact has provenance
 | [Streaming & Telemetry](streaming-and-telemetry.md) | Real-time events, operation metrics |
 | [CLI Reference](cli.md) | All 15 commands |
 | [FastAPI Integration](fastapi.md) | 30+ REST endpoints |
+| [Web Explorer](web-explorer.md) | Single-file, air-gap-safe browser UI for exploring a vault on disk |
 | [Migration Guide](migration.md) | Breaking changes from v0.x to v1.0 |
 | [Deployment Guide](deployment.md) | PostgreSQL, SSL, encryption, production checklist |
 | [Troubleshooting](troubleshooting.md) | Error codes (VAULT_000-700), common issues |

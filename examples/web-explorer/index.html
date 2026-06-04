@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Vault Explorer</title>
+<!--
+  QP Vault :: web explorer (vanilla, no build, air-gap safe)
+  A single self-contained HTML file. No external requests, no fonts CDN, no framework.
+  It reads a generated manifest (window.VAULT_FILES / VAULT_CONTENT / VAULT_META) from
+  manifest.js and renders a folder tree, an inline markdown reader, full-text search,
+  semantic folder + document file icons, a type filter, an outline, and keyboard nav.
+
+  Reskin: change the :root tokens below. Repopulate: regenerate manifest.js
+  (see generate_manifest.py). The same window.VAULT_* contract can be produced from a
+  qp-vault export, so this surface can front a real governed vault later.
+-->
+<style>
+  :root{
+    /* neutral default theme. override these tokens to reskin. */
+    --ink:#222630; --ink-700:#171A21; --ink-400:#586173; --ink-300:#8A93A4;
+    --clay:#4F62D8; --clay-600:#3D4FC4; --clay-light:#9AA6EE; --gold:#A68A4D;
+    --cream:#FFFFFF; --paper:#EEF1F7; --fog:#F6F8FC;
+    --success:#1F7A3E; --warn:#B07A1E; --danger:#B0432E;
+    --hair:color-mix(in srgb,var(--ink) 10%,transparent);
+    --hair-strong:color-mix(in srgb,var(--ink) 18%,transparent);
+    --shadow:0 1px 2px rgba(20,22,28,.05),0 8px 24px rgba(20,22,28,.07);
+    --shadow-lift:0 2px 6px rgba(20,22,28,.08),0 18px 44px rgba(20,22,28,.13);
+    --r:16px; --r-sm:10px;
+    /* system fonts only (air-gap safe). drop a Fraunces face in locally if you want it. */
+    --display:"Fraunces","Iowan Old Style",Georgia,"Times New Roman",serif;
+    --body:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:var(--body);color:var(--ink-700);line-height:1.55;background:var(--cream);-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1280px;margin:0 auto;padding:0 22px}
+  .view{display:none}.view.active{display:block}
+  .dim{color:var(--ink-300)}
+  button{font-family:inherit;cursor:pointer}
+  a{color:var(--clay-600);text-decoration:none}a:hover{text-decoration:underline}
+  /* app bar */
+  .appbar{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--cream) 86%,transparent);backdrop-filter:saturate(1.2) blur(8px);border-bottom:1px solid var(--hair)}
+  .appbar .wrap{display:flex;align-items:center;gap:13px;height:56px;max-width:none}
+  .appbar .mark{width:30px;height:30px;border-radius:9px;background:color-mix(in srgb,var(--clay) 14%,transparent);display:flex;align-items:center;justify-content:center;flex:0 0 auto;color:var(--clay-600)}
+  .appbar .mark svg{width:17px;height:17px}
+  .appbar .at{font-family:var(--display);font-weight:600;font-size:17px;color:var(--ink)}
+  .appbar .as{font-size:12.5px;color:var(--ink-300);border-left:1px solid var(--hair-strong);padding-left:13px;margin-left:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .appbar .spacer{flex:1}
+  @media(max-width:640px){.appbar .as{display:none}}
+  /* governance tier pills (populated only if the manifest provides window.VAULT_TIERS) */
+  .pill{display:inline-flex;align-items:center;font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:999px;border:1px solid var(--hair-strong);color:var(--ink-400)}
+  .pill.canonical{color:#fff;background:var(--success);border-color:transparent}
+  .pill.working{color:var(--clay-600);background:color-mix(in srgb,var(--clay) 14%,transparent);border-color:transparent}
+  .pill.ephemeral{color:var(--ink-400);background:var(--fog)}
+  /* vault explorer */
+  .vsearch{flex:1;display:flex;align-items:center;gap:9px;background:var(--fog);border:1px solid var(--hair-strong);border-radius:999px;padding:10px 16px}
+  .vsearch svg{width:15px;height:15px;flex:0 0 auto;opacity:.5}
+  .vsearch input{border:0;background:transparent;outline:none;font-family:var(--body);font-size:14px;width:100%;color:var(--ink-700)}
+  .vcount{font-size:12.5px;color:var(--ink-300);white-space:nowrap}
+  /* vault app shell: locked to the viewport, three toggleable panels */
+  .vshell{height:calc(100vh - 84px);display:flex;flex-direction:column;gap:12px;padding:14px 0 0}
+  .vshell-top{display:flex;align-items:center;gap:11px;flex:0 0 auto}
+  .vshell-top .vsearch{flex:1;margin:0}
+  .vtgl{width:38px;height:38px;flex:0 0 auto;border:1px solid var(--hair-strong);background:var(--fog);border-radius:10px;color:var(--ink-400);display:flex;align-items:center;justify-content:center;transition:.16s}
+  .vtgl:hover{color:var(--clay-600);border-color:var(--clay-light)} .vtgl svg{width:18px;height:18px}
+  .vtgl.on{background:color-mix(in srgb,var(--clay) 12%,transparent);border-color:var(--clay-light);color:var(--clay-600)}
+  .vshell-body{flex:1;min-height:0;position:relative;display:grid;grid-template-columns:var(--tw,288px) minmax(0,1fr);gap:14px}
+  .vshell-body.has-toc{grid-template-columns:var(--tw,288px) minmax(0,1fr) var(--cw,248px)}
+  .vshell-body.tree-collapsed{grid-template-columns:minmax(0,1fr)}
+  .vshell-body.tree-collapsed.has-toc{grid-template-columns:minmax(0,1fr) var(--cw,248px)}
+  .vshell-body.tree-collapsed .vtree{display:none}
+  .vresizer{position:absolute;top:0;bottom:0;width:11px;cursor:col-resize;z-index:6;display:none}
+  .vresizer.show{display:block}
+  .vresizer::after{content:"";position:absolute;left:4px;top:0;bottom:0;width:2px;border-radius:2px;background:transparent;transition:background .15s}
+  .vresizer:hover::after,.vresizer.drag::after{background:var(--clay-light)}
+  body.resizing{cursor:col-resize;user-select:none}
+  .vshell-foot{flex:0 0 auto;font-size:11.5px;color:var(--ink-300);padding:9px 4px 0;border-top:1px solid var(--hair);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vtocpanel{height:100%;overflow-y:auto;border:1px solid var(--hair);border-radius:var(--r);background:var(--fog);padding:15px 14px;scrollbar-width:thin;scrollbar-color:var(--hair-strong) transparent}
+  .vtocpanel:empty{display:none}
+  .vtoc-h{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-300);font-weight:700;margin-bottom:10px}
+  .vtocpanel a{display:block;font-size:12.5px;color:var(--ink-400);padding:4px 0 4px 10px;border-left:2px solid transparent;text-decoration:none;transition:.14s;line-height:1.35}
+  .vtocpanel a:hover{color:var(--clay-600);border-left-color:var(--clay-light);text-decoration:none}
+  .vtocpanel a.lvl-h3{padding-left:22px;font-size:12px}
+  .vtocpanel a.cur{color:var(--clay-600);border-left-color:var(--clay);font-weight:700}
+  .vtree{background:var(--fog);border:1px solid var(--hair);border-radius:var(--r);padding:10px;height:100%;overflow-y:auto;overflow-x:hidden}
+  .vtree::-webkit-scrollbar,.vmain::-webkit-scrollbar{width:9px}
+  .vtree::-webkit-scrollbar-thumb,.vmain::-webkit-scrollbar-thumb{background:var(--hair-strong);border-radius:9px;border:2px solid transparent;background-clip:padding-box}
+  .vtree::-webkit-scrollbar-thumb:hover,.vmain::-webkit-scrollbar-thumb:hover{background:var(--clay-light);background-clip:padding-box}
+  .vtree::-webkit-scrollbar-track,.vmain::-webkit-scrollbar-track{background:transparent}
+  .vtree,.vmain{scrollbar-width:thin;scrollbar-color:var(--hair-strong) transparent}
+  .tnode .tchildren{margin-left:13px;display:none}.tnode.open>.tchildren{display:block}
+  .trow{display:flex;align-items:center;gap:7px;padding:6px 9px;border-radius:8px;cursor:pointer;font-size:13.5px;color:var(--ink-700);transition:background .14s,color .14s}
+  .trow:hover{background:color-mix(in srgb,var(--ink) 6%,transparent)}.trow.sel{background:color-mix(in srgb,var(--clay) 12%,transparent);color:var(--clay-600);font-weight:700}
+  .trow .tcar{width:12px;flex:0 0 auto;color:var(--ink-300);transition:transform .2s;font-size:10px}
+  .tnode.open>.trow .tcar{transform:rotate(90deg)}
+  .trow .tfi{flex:0 0 auto;font-size:13px;filter:grayscale(.2)}
+  .trow .tnm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .trow .tct{margin-left:auto;font-size:11px;color:var(--ink-300);font-variant-numeric:tabular-nums;padding-left:6px}
+  .vmain{min-width:0;height:100%;overflow-y:auto;overflow-x:hidden;padding:2px 10px 24px 2px;border:1px solid var(--hair);border-radius:var(--r);background:linear-gradient(180deg,color-mix(in srgb,var(--paper) 55%,transparent),transparent 120px)}
+  .vmain>*{padding-left:8px}
+  .vcrumb{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13.5px;position:sticky;top:0;z-index:6;background:var(--cream);padding:12px 8px 10px;margin:0 -2px 9px -2px;border-bottom:1px solid var(--hair)}
+  .vcrumb a{color:var(--clay-600);cursor:pointer;font-weight:700}.vcrumb .sep{color:var(--ink-300)}.vcrumb .cur{color:var(--ink);font-weight:700;font-family:var(--display)}
+  .vdesc{font-size:13px;color:var(--ink-400);margin-bottom:15px;max-width:720px}
+  .vitems{display:flex;flex-direction:column;gap:7px}
+  .vitem{display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--fog);border:1px solid var(--hair);border-radius:var(--r-sm);text-decoration:none;color:var(--ink-700);transition:transform .16s,box-shadow .16s,border-color .16s}
+  .vitem:hover{transform:translateX(3px);box-shadow:var(--shadow);border-color:var(--hair-strong);text-decoration:none}
+  .vitem .vic{width:34px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;letter-spacing:.03em;flex:0 0 auto;color:#fff}
+  .vitem .vnm{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vitem .vnm .vpp{font-size:11.5px;color:var(--ink-300);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vitem .vmeta{font-size:11.5px;color:var(--ink-300);flex:0 0 auto}
+  /* world-class iconography: document-shaped file icons + category-tinted folder glyphs */
+  .vitem .vic{width:30px;height:34px;border-radius:0;background:none;color:inherit;font-size:0;display:flex;align-items:center;justify-content:center}
+  .vic svg{width:100%;height:100%;display:block;transition:transform .2s cubic-bezier(.22,1,.36,1)}
+  .vic.vic-sm{width:19px;height:23px}
+  .vic text{font-family:var(--body)}
+  .fic{width:36px;height:34px;flex:0 0 auto;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;background:var(--fic-bg,color-mix(in srgb,var(--clay) 10%,transparent));transition:transform .2s cubic-bezier(.22,1,.36,1)}
+  .tfi{display:inline-flex;align-items:center;justify-content:center;filter:none}
+  .vitem.isdir{border-left:3px solid var(--ft,var(--clay-light));padding-left:11px}
+  .vitem:hover .fic{transform:scale(1.06)}
+  .vitem:hover .vic svg{transform:translateY(-1.5px) scale(1.05)}
+  /* tree chevron + selected-icon brighten (container .tcar already rotates on open) */
+  .trow .tcar svg{width:9px;height:9px;display:block}
+  .trow.sel .tfi svg path[fill-opacity],.tnode.open>.trow .tfi svg path[fill-opacity]{fill-opacity:.3}
+  /* staggered list entrance (Murch rhythm) */
+  @keyframes vrise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+  .vitems .vitem,.vitems .vrecent,.vitems .vtools,.vitems .vgroup{animation:vrise .34s cubic-bezier(.22,1,.36,1) both;animation-delay:var(--d,0s)}
+  @media(prefers-reduced-motion:reduce){.vitems .vitem,.vitems .vrecent,.vitems .vtools,.vitems .vgroup,.vic svg,.fic{animation:none!important;transition:none!important}}
+  /* breathing empty state (Miyazaki ma) */
+  @keyframes vbreath{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.05);opacity:1}}
+  .vempty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:54px 24px;animation:vrise .5s ease both}
+  .vempty .veic{width:64px;height:64px;border-radius:18px;display:flex;align-items:center;justify-content:center;background:var(--veic-bg,color-mix(in srgb,var(--clay) 10%,transparent));animation:vbreath 4.5s ease-in-out infinite;margin-bottom:18px}
+  .vempty .veic svg{width:30px;height:30px}
+  .vempty .vet{font-family:var(--display);font-size:18px;color:var(--ink);margin-bottom:6px}
+  .vempty .ves{font-size:13.5px;color:var(--ink-300);max-width:340px;line-height:1.5}
+  /* type-filter chips */
+  .vtypes{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .vtype{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--hair-strong);background:var(--fog);color:var(--ink-400);font-size:11px;font-weight:700;padding:4px 9px 4px 7px;border-radius:999px;transition:.16s;letter-spacing:.02em}
+  .vtype:hover{color:var(--ink);border-color:var(--clay-light)}
+  .vtype.on{color:#fff;border-color:transparent;background:var(--tc,var(--clay))}
+  .vtype .tdot{width:8px;height:8px;border-radius:2px;background:var(--tc,var(--ink-300));flex:0 0 auto}
+  .vtype.on .tdot{background:rgba(255,255,255,.9)}
+  /* reader chrome: type icon + parent eyebrow */
+  .rtop .rt-id{display:flex;align-items:center;gap:11px;min-width:0}
+  .rtop .rt-id .vic{width:27px;height:31px;flex:0 0 auto;display:flex;align-items:center;justify-content:center}
+  .rtop .rt-txt{min-width:0}
+  .rtop .rt-eyebrow{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-300);font-weight:700;display:flex;align-items:center;gap:5px;margin-bottom:1px}
+  .rtop .rt-eyebrow svg{width:11px;height:11px;opacity:.7}
+  /* keyboard hint in status bar */
+  .vshell-foot .vkbd{float:right;display:inline-flex;gap:9px;align-items:center}
+  .vshell-foot .vkbd kbd{font-family:ui-monospace,Menlo,monospace;font-size:10px;background:var(--cream);border:1px solid var(--hair-strong);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--ink-400);line-height:1.5}
+  @media(max-width:600px){.vshell-foot .vkbd{display:none}}
+  /* palette: file icons + group-tinted keys */
+  .pitem .pfic{width:18px;height:22px;flex:0 0 auto;display:inline-flex}
+  .pitem .pfic svg{width:100%;height:100%;display:block}
+  @media(max-width:820px){.vshell{height:auto}.vshell-body,.vshell-body.has-toc,.vshell-body.tree-collapsed,.vshell-body.tree-collapsed.has-toc{grid-template-columns:1fr}.vtree{height:auto;max-height:300px}.vmain{height:auto;overflow:visible}.vtocpanel{display:none}.vcrumb{position:static}}
+  /* inline reader */
+  .vreader{background:var(--fog);border:1px solid var(--hair);border-radius:var(--r);padding:24px 30px;max-width:840px;line-height:1.65;font-size:15px;color:var(--ink-700);box-shadow:var(--shadow)}
+  .vreader .rtop{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:13px;border-bottom:1px solid var(--hair)}
+  .vreader .rtop .rt{font-family:var(--display);font-weight:600;color:var(--ink);font-size:16px;word-break:break-word}
+  .vreader h1,.vreader h2,.vreader h3,.vreader h4{font-family:var(--display);color:var(--ink);margin:22px 0 9px;line-height:1.22;font-weight:600}
+  .vreader h1{font-size:26px}.vreader h2{font-size:21px}.vreader h3{font-size:17px}.vreader h4{font-size:15px}
+  .vreader p{margin:0 0 12px}.vreader ul,.vreader ol{margin:0 0 12px;padding-left:22px}.vreader li{margin:5px 0}
+  .vreader strong{color:var(--ink-700)} .vreader em{color:var(--ink-400)}
+  .vreader code{background:color-mix(in srgb,var(--clay) 10%,transparent);color:var(--clay-600);padding:1px 6px;border-radius:5px;font-size:13px;font-family:ui-monospace,Menlo,monospace}
+  .vreader pre{background:var(--ink-700);color:var(--cream);padding:14px 16px;border-radius:8px;overflow:auto;font-size:12.5px;margin:0 0 14px}
+  .vreader pre code{background:none;color:inherit;padding:0}
+  .vreader blockquote{border-left:3px solid var(--clay);padding:3px 0 3px 15px;margin:0 0 13px;color:var(--ink-400)}
+  .vreader table{border-collapse:collapse;width:100%;margin:0 0 14px;font-size:12.5px;display:block;overflow-x:auto}
+  .vreader th,.vreader td{border:1px solid var(--hair-strong);padding:7px 10px;text-align:left;vertical-align:top}
+  .vreader th{background:color-mix(in srgb,var(--clay) 8%,transparent);font-weight:700;color:var(--ink)}
+  .vreader hr{border:0;border-top:1px solid var(--hair);margin:18px 0}
+  .vreader a{color:var(--clay-600)}
+  .vbinary{background:var(--fog);border:1px dashed var(--hair-strong);border-radius:var(--r);padding:26px;text-align:center}
+  .vbinary code{user-select:all;background:color-mix(in srgb,var(--ink) 8%,transparent);padding:5px 9px;border-radius:6px;font-size:12.5px;word-break:break-all;display:inline-block}
+  /* vault: toolbar, recent, search snippet, inline preview, toc, keyboard */
+  .vtools{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 2px 11px;margin-bottom:6px;border-bottom:1px dashed var(--hair);flex-wrap:wrap}
+  .vtools-l{font-size:12px;color:var(--ink-300);font-weight:700}
+  .vsorts{display:flex;gap:6px}
+  .vsort{border:1px solid var(--hair-strong);background:var(--fog);color:var(--ink-400);font-size:11.5px;font-weight:700;padding:4px 11px;border-radius:999px;transition:.16s}
+  .vsort:hover{color:var(--ink);border-color:var(--clay-light)} .vsort.on{background:var(--clay);border-color:var(--clay);color:#fff}
+  .vrecent{margin-bottom:18px}
+  .vrecent-l,.vgroup{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--clay-600);font-weight:700;margin:4px 2px 9px}
+  .vgroup{margin-top:18px}
+  .vrchips{display:flex;flex-wrap:wrap;gap:8px}
+  .vrchip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--hair);background:var(--fog);border-radius:999px;padding:6px 13px 6px 7px;font-size:12.5px;color:var(--ink-700);transition:.16s;max-width:300px}
+  .vrchip:hover{border-color:var(--clay-light);box-shadow:var(--shadow);transform:translateY(-1px)}
+  .vrchip .rcn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vrdt{color:var(--ink-300);font-size:11px;font-variant-numeric:tabular-nums;flex:0 0 auto}
+  .vitem .vmeta .vdt{color:var(--ink-300);margin-right:9px;font-variant-numeric:tabular-nums;font-size:11px}
+  .vitem.fileactive{border-color:var(--clay);background:color-mix(in srgb,var(--clay) 7%,transparent)}
+  .vitem:focus-visible,.trow:focus-visible{outline:2px solid var(--clay);outline-offset:1px}
+  .vsnip{display:block;font-size:11.5px;color:var(--ink-400);margin-top:3px;line-height:1.45}
+  .vsnip mark,.vreader mark{background:color-mix(in srgb,var(--clay) 28%,transparent);color:var(--ink-700);border-radius:3px;padding:0 2px}
+  .rtools{display:flex;align-items:center;gap:11px;flex:0 0 auto}
+  .copybtn{border:1px solid var(--hair-strong);background:var(--fog);color:var(--ink-400);font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:999px;transition:.16s}
+  .copybtn:hover{color:var(--ink);border-color:var(--clay-light)}
+  .vprev-pdf{width:100%;height:76vh;border:1px solid var(--hair);border-radius:8px;background:#fff}
+  .vprev-img{display:flex;justify-content:center;padding:20px;background:repeating-conic-gradient(color-mix(in srgb,var(--ink) 5%,transparent) 0% 25%,transparent 0% 50%) 50%/22px 22px;border:1px solid var(--hair);border-radius:8px}
+  .vprev-img img{max-width:100%;max-height:68vh}
+  .vtoc{border:1px solid var(--hair);border-radius:8px;padding:11px 14px;margin:0 0 18px;background:var(--fog)}
+  .vtoc-l{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-300);font-weight:700;margin-bottom:7px}
+  .vtoc a{display:block;font-size:13px;color:var(--ink-400);padding:3px 0 3px 9px;text-decoration:none;border-left:2px solid transparent;transition:.14s}
+  .vtoc a:hover{color:var(--clay-600);border-left-color:var(--clay);text-decoration:none}
+  .vtoc a.lvl-h3{padding-left:22px;font-size:12.5px}
+
+</style>
+</head>
+<body>
+
+<header class="appbar"><div class="wrap">
+  <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.1"/></svg></span>
+  <span class="at" id="appTitle">Vault Explorer</span>
+  <span class="as" id="appSub">A governed knowledge store, file by file</span>
+  <span class="spacer"></span>
+</div></header>
+
+<main class="wrap">
+  <div class="view active" id="v-vault">
+    <div class="vshell">
+      <div class="vshell-top">
+        <button class="vtgl on" id="tgl-tree" aria-label="Toggle folder panel" title="Toggle folders (left)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button>
+        <label class="vsearch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="vq" type="text" placeholder="Search file names and contents..." autocomplete="off" aria-label="Search vault files by name or content"></label>
+        <span class="vcount" id="vcount"></span>
+        <button class="vtgl" id="tgl-toc" aria-label="Toggle outline panel" title="Toggle outline (right)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="15" y1="4" x2="15" y2="20"/></svg></button>
+      </div>
+      <div class="vshell-body" id="vshell-body">
+        <div class="vtree" id="vtree" role="tree" aria-label="Vault folders"></div>
+        <div class="vmain"><div class="vcrumb" id="vcrumb"></div><div class="vdesc" id="vdesc"></div><div class="vitems" id="vitems"></div></div>
+        <aside class="vtocpanel" id="vtocpanel" aria-label="Document outline"></aside>
+        <div class="vresizer" id="rsz-l" aria-hidden="true"></div>
+        <div class="vresizer" id="rsz-r" aria-hidden="true"></div>
+      </div>
+      <div class="vshell-foot"><span class="vkbd" aria-hidden="true"><kbd>/</kbd> search<span style="opacity:.4">·</span><kbd>&uarr;</kbd><kbd>&darr;</kbd> move<span style="opacity:.4">·</span><kbd>&crarr;</kbd> open<span style="opacity:.4">·</span><kbd>Esc</kbd> clear</span><span id="vstatus">Loading vault...</span></div>
+    </div>
+
+</main>
+
+<script src="manifest.js"></script>
+<script>
+const el=(h)=>{const t=document.createElement("template");t.innerHTML=h.trim();return t.content.firstChild;};
+const esc=(s)=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+// header is configurable from the manifest
+if(window.VAULT_TITLE){document.getElementById("appTitle").textContent=window.VAULT_TITLE;document.title=window.VAULT_TITLE;}
+if(window.VAULT_SUBTITLE){document.getElementById("appSub").textContent=window.VAULT_SUBTITLE;}
+
+(function(){
+  const FILES=(window.VAULT_FILES||[]).slice(), BASE=window.VAULT_BASE||"";
+  const INIT_HASH=location.hash||"";  // capture before any render wipes it (setVaultHash)
+  if(!FILES.length){document.getElementById("vitems").innerHTML=vEmpty({tint:"#B07A1E",svg:'<path d="M12 5l8 14H4z"/><path d="M12 10v4M12 16h.01"/>',title:"Vault manifest not loaded",sub:"Open this file directly from disk so the file manifest can load, then reload the page."});return;}
+  const root={name:"",path:"",dirs:{},files:[]};
+  FILES.forEach(p=>{const parts=p.split("/");let node=root;for(let i=0;i<parts.length-1;i++){const seg=parts[i];node.dirs[seg]=node.dirs[seg]||{name:seg,path:parts.slice(0,i+1).join("/"),dirs:{},files:[]};node=node.dirs[seg];}node.files.push({name:parts[parts.length-1],path:p});});
+  const countOf=(n)=>{let c=n.files.length;for(const k in n.dirs)c+=countOf(n.dirs[k]);return c;};
+  const nodeByPath=(path)=>{if(!path)return root;let n=root;for(const seg of path.split("/")){if(n&&n.dirs[seg])n=n.dirs[seg];else return n;}return n;};
+  const extOf=(name)=>{const e=(name.split(".").pop()||"").toLowerCase();return ["md","pdf","typ","svg","html","json"].includes(e)?e:"txt";};
+  const tierMap=window.VAULT_TIERS||{};
+  const descMap=window.VAULT_FOLDER_DESC||{};
+  const ROOT_LABEL=window.VAULT_ROOT_LABEL||"Vault";
+  const ROOT_DESC=window.VAULT_DESC||"Browse the vault. Open a folder to drill in, click any file to open it, or search names and contents across every file.";
+  /* ---- iconography: document-shaped file icons + semantic category folder glyphs ---- */
+  const EXT_META={md:{c:"#E2803D",t:"MD"},pdf:{c:"#B0432E",t:"PDF"},typ:{c:"#A68A4D",t:"TYP"},svg:{c:"#47505C",t:"SVG"},html:{c:"#1F7A3E",t:"HTML"},json:{c:"#5C6470",t:"JSON"},txt:{c:"#8A8275",t:"TXT"}};
+  function fileIcon(ext,cls){const f=EXT_META[ext]||EXT_META.txt,c=f.c,lab=f.t,fs=lab.length>=4?6.1:(lab.length===3?7:7.8);
+    return `<span class="vic${cls?" "+cls:""}"><svg viewBox="0 0 26 32" aria-hidden="true">`
+      +`<path d="M5 1.4h9.4L23 9.7V27.6A3 3 0 0 1 20 30.6H5A3 3 0 0 1 2 27.6V4.4A3 3 0 0 1 5 1.4z" fill="${c}" fill-opacity=".12" stroke="${c}" stroke-opacity=".5" stroke-width="1.3"/>`
+      +`<path d="M14.2 1.6V7.2A2.5 2.5 0 0 0 16.7 9.7H22.6" fill="none" stroke="${c}" stroke-opacity=".5" stroke-width="1.3"/>`
+      +`<rect x="2" y="18" width="21" height="9.4" rx="2.4" fill="${c}"/>`
+      +`<text x="12.5" y="24.7" text-anchor="middle" font-size="${fs}" font-weight="800" letter-spacing=".3" fill="#fff">${lab}</text>`
+      +`</svg></span>`;}
+  const FOLDER_TINT={archive:"#A68A4D",audiobook:"#8A6BA8",brand:"#E2803D",communications:"#4E7CA8",corporate:"#47505C","customer-facing":"#2F8F86",customers:"#2E8B57",governance:"#B07A1E","operating-scope":"#C76E2F",operations:"#6B7280",pdfs:"#9A5B3E",product:"#3E72A8",regulatory:"#6E4FA0",research:"#2F9E6E",risk:"#C2432E",technology:"#44617F",typst:"#B59348",vault:"#3A4250",_default:"#C76E2F"};
+  const FOLDER_EM={
+    archive:'<path d="M4 7h16M5 7l1-2h12l1 2M6 7v11h12V7"/><path d="M10 11h4"/>',
+    audiobook:'<path d="M5 13v-1a7 7 0 0 1 14 0v1"/><path d="M5 13h2v5H6a1 1 0 0 1-1-1z"/><path d="M19 13h-2v5h1a1 1 0 0 0 1-1z"/>',
+    brand:'<path d="M12 4l1.7 4.1L18 10l-4.3 1.9L12 16l-1.7-4.1L6 10l4.3-1.9z"/>',
+    communications:'<path d="M20 12a7 7 0 0 1-10 6.3L5 19l.8-4A7 7 0 1 1 20 12z"/>',
+    corporate:'<path d="M6 20V5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v15"/><path d="M15 9h3a1 1 0 0 1 1 1v10"/><path d="M9 8h3M9 12h3M9 16h3"/><path d="M4 20h16"/>',
+    "customer-facing":'<path d="M4 10v4a1 1 0 0 0 1 1h2l5 4V5L7 9H5a1 1 0 0 0-1 1z"/><path d="M16 9a4 4 0 0 1 0 6"/>',
+    customers:'<circle cx="9" cy="9" r="3"/><path d="M4 19a5 5 0 0 1 10 0"/><path d="M16 7a3 3 0 0 1 0 6M20 19a5 5 0 0 0-3.5-4.8"/>',
+    governance:'<path d="M12 4l7 2.5V11c0 4.3-3 7.3-7 8.5C8 18.3 5 15.3 5 11V6.5z"/><path d="M9.5 12l1.8 1.8L15 10"/>',
+    "operating-scope":'<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3.4"/>',
+    operations:'<circle cx="12" cy="12" r="3"/><path d="M12 4v2.4M12 17.6V20M5.6 5.6l1.7 1.7M16.7 16.7l1.7 1.7M4 12h2.4M17.6 12H20M5.6 18.4l1.7-1.7M16.7 7.3l1.7-1.7"/>',
+    pdfs:'<path d="M14 4H8a1.5 1.5 0 0 0-1.5 1.5v13A1.5 1.5 0 0 0 8 20h8a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 4v4h3.5M9 13h6M9 16h4"/>',
+    product:'<path d="M12 4l7 4v8l-7 4-7-4V8z"/><path d="M5 8l7 4 7-4M12 12v8"/>',
+    regulatory:'<path d="M12 5v14M8 19h8M5 8h14"/><path d="M7 8l-2.2 4.6a2.6 2.6 0 0 0 4.4 0z"/><path d="M17 8l-2.2 4.6a2.6 2.6 0 0 0 4.4 0z"/>',
+    research:'<path d="M10 4h4M11 4v5L6.6 17A1.5 1.5 0 0 0 8 19.3h8A1.5 1.5 0 0 0 17.4 17L13 9V4"/><path d="M8.6 14h6.8"/>',
+    risk:'<path d="M12 5l7.5 13.5a1 1 0 0 1-.9 1.5H5.4a1 1 0 0 1-.9-1.5z"/><path d="M12 10v4M12 17h.01"/>',
+    technology:'<rect x="7" y="7" width="10" height="10" rx="1.5"/><rect x="10" y="10" width="4" height="4"/><path d="M9 4v3M15 4v3M9 17v3M15 17v3M4 9h3M4 15h3M17 9h3M17 15h3"/>',
+    typst:'<path d="M5 7V5h14v2M12 5v14M9 19h6"/>',
+    vault:'<rect x="6" y="11" width="12" height="8" rx="1.6"/><path d="M8.5 11V8.5a3.5 3.5 0 0 1 7 0V11"/><circle cx="12" cy="15" r="1"/>',
+    _default:''};
+  function folderKey(name){const n=(name||"").toLowerCase();if(FOLDER_TINT[n])return n;const has=s=>n.indexOf(s)>=0;
+    if(has("archive")||has("graduated")||has("superseded")||has("deprecated"))return"archive";
+    if(has("audio")||has("podcast")||has("voice"))return"audiobook";
+    if(has("regulat")||has("complian")||has("legal")||has("counsel")||has("licens"))return"regulatory";
+    if(has("governance")||has("board")||has("policy")||has("charter"))return"governance";
+    if(has("research")||has("dossier")||has("diligence"))return"research";
+    if(has("risk"))return"risk";
+    if(has("comm"))return"communications";
+    if(has("customer-facing")||has("public")||has("outreach")||has("marketing"))return"customer-facing";
+    if(has("customer")||has("client")||has("agenc"))return"customers";
+    if(has("brand")||has("design")||has("identity"))return"brand";
+    if(has("tech")||has("engineering")||has("architecture")||has("substrate")||has("infra")||has("stack"))return"technology";
+    if(has("product")||has("spec")||has("feature"))return"product";
+    if(has("corporate")||has("company")||has("formation")||has("cap-table")||has("equity")||has("entity"))return"corporate";
+    if(has("operat"))return"operations";
+    if(has("pdf"))return"pdfs";
+    if(has("typ"))return"typst";
+    if(has("vault"))return"vault";
+    // generic dev / knowledge-repo keywords (so any folder tree lights up, not just domain vaults)
+    if(has("doc")||has("guide")||has("manual")||has("handbook")||has("wiki")||has("reference"))return"pdfs";
+    if(has("src")||has("source")||has("lib")||has("core")||has("app")||has("api")||has("sdk")||has("backend")||has("frontend")||has("server")||has("client")||has("module")||has("code")||has("engine"))return"technology";
+    if(has("test")||has("e2e")||has("fixture")||has("mock")||has("bench"))return"product";
+    if(has("example")||has("demo")||has("sample")||has("tutorial")||has("cookbook")||has("recipe")||has("playground"))return"product";
+    if(has("config")||has("setting")||has("setup")||has("deploy")||has("script")||has("build")||has("dist")||has("bin")||has("ops")||has("ci"))return"operations";
+    if(has("asset")||has("image")||has("img")||has("media")||has("static")||has("icon")||has("logo")||has("font")||has("style")||has("theme")||has("ui"))return"brand";
+    if(has("data")||has("dataset")||has("corpus")||has("seed")||has("schema")||has("migration")||has("store")||has("db")||has("note")||has("journal"))return"research";
+    return"_default";}
+  function folderSvg(name,px){const k=folderKey(name),c=FOLDER_TINT[k]||FOLDER_TINT._default,em=FOLDER_EM[k]||"";
+    return `<svg viewBox="0 0 24 24" aria-hidden="true" style="width:${px}px;height:${px}px;display:block">`
+      +`<path d="M3 7.2A1.8 1.8 0 0 1 4.8 5.4H9l1.8 1.9h8.4A1.8 1.8 0 0 1 21 9.1v8.1A1.8 1.8 0 0 1 19.2 19H4.8A1.8 1.8 0 0 1 3 17.2z" fill="${c}" fill-opacity=".16" stroke="${c}" stroke-opacity=".55" stroke-width="1.25"/>`
+      +(em?`<g transform="translate(6.96 7) scale(.42)" fill="none" stroke="${c}" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">${em}</g>`:"")
+      +`</svg>`;}
+  function folderIconCard(name){const k=folderKey(name),c=FOLDER_TINT[k]||FOLDER_TINT._default;
+    return `<span class="fic" style="--fic-bg:color-mix(in srgb,${c} 13%,transparent)">${folderSvg(name,24)}</span>`;}
+  const CHEV='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+  function vEmpty(o){return `<div class="vempty"><div class="veic" style="--veic-bg:color-mix(in srgb,${o.tint} 12%,transparent)"><svg viewBox="0 0 24 24" fill="none" stroke="${o.tint}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${o.svg}</svg></div><div class="vet">${o.title}</div><div class="ves">${o.sub}</div></div>`;}
+  const EM_SEARCH='<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',EM_FOLDER='<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',EM_ALERT='<path d="M12 5l8 14H4z"/><path d="M12 10v4M12 16h.01"/>';
+  window.__icons={file:(ext,cls)=>fileIcon(ext,cls),fileSm:(ext)=>fileIcon(ext,"vic-sm").replace('class="vic vic-sm"','class="pfic"'),extOf:(n)=>extOf(n)};
+  let cur="";
+  function renderTree(){const t=document.getElementById("vtree");t.innerHTML="";
+    (function rec(node,container,depth){Object.keys(node.dirs).sort().forEach(k=>{const d=node.dirs[k];
+      const wrap=document.createElement("div");wrap.className="tnode";if(d.path===cur||cur.indexOf(d.path+"/")===0)wrap.classList.add("open");
+      const hasKids=Object.keys(d.dirs).length>0;
+      const tb=(depth===0&&tierMap[d.name])?`<span class="pill ${tierMap[d.name][1]}" style="margin-left:5px;font-size:9px;padding:2px 6px">${tierMap[d.name][0]}</span>`:"";
+      const row=document.createElement("div");row.className="trow"+(d.path===cur?" sel":"");row.tabIndex=0;row.setAttribute("role","treeitem");
+      row.innerHTML=`<span class="tcar">${hasKids?CHEV:"&nbsp;"}</span><span class="tfi">${folderSvg(d.name,17)}</span><span class="tnm">${d.name}</span>${tb}<span class="tct">${countOf(d)}</span>`;
+      row.onclick=(e)=>{e.stopPropagation();if(hasKids)wrap.classList.toggle("open");selectFolder(d.path);};
+      wrap.appendChild(row);const kids=document.createElement("div");kids.className="tchildren";rec(d,kids,depth+1);wrap.appendChild(kids);container.appendChild(wrap);});})(root,t,0);
+  }
+  const CONTENT=window.VAULT_CONTENT||{};const META=window.VAULT_META||{};const metaOf=(p)=>META[p]||{};
+  let sortMode="name",openPath="",typeFilter="all";
+  const allFiles=FILES.map(p=>({name:p.split("/").pop(),path:p}));
+  const escRe=(s)=>s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+  function snippet(text,q){const i=text.toLowerCase().indexOf(q);if(i<0)return"";const s=Math.max(0,i-42),e=Math.min(text.length,i+q.length+72);
+    const frag=(s>0?"...":"")+text.slice(s,e).replace(/\s+/g," ").trim()+(e<text.length?"...":"");
+    return esc(frag).replace(new RegExp("("+escRe(q)+")","ig"),"<mark>$1</mark>");}
+  function sortFiles(arr){const a=arr.slice();
+    if(sortMode==="modified")a.sort((x,y)=>(metaOf(y.path).m||"").localeCompare(metaOf(x.path).m||""));
+    else if(sortMode==="type")a.sort((x,y)=>extOf(x.name).localeCompare(extOf(y.name))||x.name.localeCompare(y.name));
+    else a.sort((x,y)=>x.name.localeCompare(y.name));return a;}
+  function setVaultHash(suffix){if(history.replaceState&&document.getElementById("v-vault").classList.contains("active"))history.replaceState(null,"","#vault"+(suffix==="/"?"":suffix));}
+  function fileRow(f,withPath,snip){const e=extOf(f.name);const hasC=CONTENT[f.path]!=null;const mm=metaOf(f.path);
+    const row=document.createElement("div");row.className="vitem"+(f.path===openPath?" fileactive":"");row.style.cursor="pointer";row.tabIndex=0;
+    const sub=withPath?`<span class="vpp">${esc(f.path.slice(0,f.path.length-f.name.length-1)||"root")}</span>`:(snip?`<span class="vsnip">${snip}</span>`:"");
+    row.innerHTML=`${fileIcon(e)}<span class="vnm">${esc(f.name)}${sub}</span><span class="vmeta">${mm.m?`<span class="vdt">${mm.m}</span>`:""}${hasC?"read":"open"} &rsaquo;</span>`;
+    const go=()=>openFile(f.path);row.onclick=go;row.onkeydown=(ev)=>{if(ev.key==="Enter"){ev.preventDefault();go();}};return row;}
+  function crumbFor(path){const cb=document.getElementById("vcrumb");
+    if(!path){cb.innerHTML=`<span class="cur">${esc(ROOT_LABEL)}</span>`;return;}
+    const segs=path.split("/");
+    cb.innerHTML=`<a data-p="">${esc(ROOT_LABEL)}</a>`+segs.map((s,i)=>`<span class="sep">/</span>${i===segs.length-1?`<span class="cur">${esc(s)}</span>`:`<a data-p="${segs.slice(0,i+1).join("/")}">${esc(s)}</a>`}`).join("");
+    cb.querySelectorAll("a").forEach(a=>a.onclick=()=>selectFolder(a.dataset.p));}
+  function openFile(path){openPath=path;const name=path.split("/").pop();crumbFor(path);document.getElementById("vdesc").textContent="";
+    const items=document.getElementById("vitems");const c=CONTENT[path];const ext=extOf(name);const url=BASE+encodeURI(path);const disk=esc(BASE.replace("file://","")+path);
+    const _par=path.slice(0,path.length-name.length-1);const _eb=_par?`<span class="rt-eyebrow">${folderSvg(_par.split("/").pop(),12)}${esc(_par)}</span>`:`<span class="rt-eyebrow">Vault root</span>`;
+    const bar=`<div class="rtop"><span class="rt-id">${fileIcon(ext,"")}<span class="rt-txt">${_eb}<span class="rt">${esc(name)}</span></span></span><span class="rtools"><button class="copybtn" data-cp="${disk}">copy path</button><a href="${url}" target="_blank" rel="noopener" style="font-size:12px;white-space:nowrap">open in tab &#8599;</a></span></div>`;
+    if(c!=null){items.innerHTML=`<div class="vreader">${bar}${md2html(c,path)}</div>`;}
+    else if(ext==="pdf"){items.innerHTML=`<div class="vreader">${bar}<iframe class="vprev-pdf" src="${url}" title="${esc(name)}"></iframe></div>`;}
+    else if(ext==="svg"){items.innerHTML=`<div class="vreader">${bar}<div class="vprev-img"><img src="${url}" alt="${esc(name)}"></div></div>`;}
+    else{items.innerHTML=`<div class="vreader">${bar}<div class="vbinary"><p class="dim" style="font-size:13.5px;margin:0 0 12px">A ${ext.toUpperCase()} file. Open it in a new tab, or copy the path to open it from your file browser or terminal.</p><code>${disk}</code></div></div>`;}
+    const st=document.getElementById("vstatus");if(st)st.textContent=BASE.replace("file://","")+path;
+    wireReader();layoutResizers();setVaultHash("!"+path);const _m=document.querySelector(".vmain");if(_m)_m.scrollTo({top:0});}
+  function wireReader(){
+    document.querySelectorAll(".vreader .copybtn").forEach(b=>b.onclick=()=>{try{navigator.clipboard&&navigator.clipboard.writeText(b.dataset.cp);}catch(e){}b.textContent="copied";setTimeout(()=>b.textContent="copy path",1200);});
+    const panel=document.getElementById("vtocpanel"),body=document.getElementById("vshell-body"),m=document.querySelector(".vmain"),tt=document.getElementById("tgl-toc");
+    if(!panel||!body)return;
+    const hs=[...document.querySelectorAll(".vreader h2, .vreader h3")];
+    if(hs.length<3){panel.innerHTML="";body.classList.remove("has-toc");if(tt)tt.classList.remove("on");if(m)m.onscroll=null;return;}
+    hs.forEach((h,i)=>h.id="vh"+i);
+    panel.innerHTML=`<div class="vtoc-h">On this page</div>`+hs.map((h,i)=>`<a href="#vh${i}" data-i="${i}" class="lvl-${h.tagName.toLowerCase()}">${esc(h.textContent)}</a>`).join("");
+    panel.querySelectorAll("a").forEach(a=>a.onclick=(ev)=>{ev.preventDefault();const t=document.getElementById("vh"+a.dataset.i);if(t&&m){const mr=m.getBoundingClientRect(),tr=t.getBoundingClientRect();m.scrollTo({top:m.scrollTop+(tr.top-mr.top)-14,behavior:"smooth"});}});
+    body.classList.add("has-toc");if(tt)tt.classList.add("on");
+    const links=[...panel.querySelectorAll("a")];
+    if(m){m.onscroll=()=>{const mr=m.getBoundingClientRect();let cur=0;hs.forEach((h,i)=>{if(h.getBoundingClientRect().top-mr.top<90)cur=i;});links.forEach((a,i)=>a.classList.toggle("cur",i===cur));};m.onscroll();}}
+  function md2html(src,docPath){
+    src=src.replace(/\r\n?/g,"\n").replace(/^---\n[\s\S]*?\n---\n/,"");
+    const docDir=docPath?docPath.split("/").slice(0,-1).join("/"):"";
+    const lines=src.split("\n");let html="",i=0;
+    const inline=(t)=>esc(t).replace(/`([^`]+)`/g,(m,c)=>`<code>${c}</code>`).replace(/!\[([^\]]*)\]\(([^)]+)\)/g,(m,alt,u0)=>{let u=u0.trim();if(!/^(https?:|\/|file:|data:)/.test(u))u=BASE+encodeURI((docDir?docDir+"/":"")+u);return '<img alt="'+alt+'" src="'+u+'" loading="lazy">';}).replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>").replace(/(^|[^*])\*([^*\n]+)\*/g,"$1<em>$2</em>").replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+    function listBlock(start){const buf=[];let j=start;while(j<lines.length){const mm=lines[j].match(/^(\s*)([-*]|\d+\.)\s+(.*)$/);if(!mm)break;buf.push({ind:mm[1].replace(/\t/g,"  ").length,ord:/\d/.test(mm[2]),txt:mm[3]});j++;}
+      function rec(p,ind){let h="";const ordered=buf[p].ord;while(p<buf.length&&buf[p].ind>=ind){if(buf[p].ind>ind){p++;continue;}const cur=buf[p];p++;let child="";if(p<buf.length&&buf[p].ind>ind){const r=rec(p,buf[p].ind);child=r.h;p=r.p;}h+=`<li>${inline(cur.txt)}${child}</li>`;}return{h:`<${ordered?"ol":"ul"}>${h}</${ordered?"ol":"ul"}>`,p};}
+      return{html:rec(0,buf[0].ind).h,next:j};}
+    while(i<lines.length){let ln=lines[i];
+      if(/^```/.test(ln)){let code=[];i++;while(i<lines.length&&!/^```/.test(lines[i])){code.push(lines[i]);i++;}i++;html+=`<pre><code>${esc(code.join("\n"))}</code></pre>`;continue;}
+      if(/^\s*$/.test(ln)){i++;continue;}
+      let h=ln.match(/^(#{1,6})\s+(.*)$/);if(h){const lv=Math.min(h[1].length,4);html+=`<h${lv}>${inline(h[2])}</h${lv}>`;i++;continue;}
+      if(/^\s*([-*_])\1{2,}\s*$/.test(ln)){html+="<hr>";i++;continue;}
+      if(/^>\s?/.test(ln)){let q=[];while(i<lines.length&&/^>\s?/.test(lines[i])){q.push(lines[i].replace(/^>\s?/,""));i++;}html+=`<blockquote>${inline(q.join(" "))}</blockquote>`;continue;}
+      if(/^\s*\|.*\|\s*$/.test(ln)&&i+1<lines.length&&lines[i+1].indexOf("-")>=0&&/^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i+1])){
+        const pr=(r)=>r.trim().replace(/^\||\|$/g,"").split("|").map(c=>c.trim());
+        const head=pr(ln);i+=2;let rows=[];while(i<lines.length&&/^\s*\|.*\|\s*$/.test(lines[i])){rows.push(pr(lines[i]));i++;}
+        html+="<table><thead><tr>"+head.map(c=>`<th>${inline(c)}</th>`).join("")+"</tr></thead><tbody>"+rows.map(r=>"<tr>"+r.map(c=>`<td>${inline(c)}</td>`).join("")+"</tr>").join("")+"</tbody></table>";continue;}
+      if(/^\s*([-*]|\d+\.)\s+/.test(ln)){const lb=listBlock(i);html+=lb.html;i=lb.next;continue;}
+      let para=[ln];i++;while(i<lines.length&&!/^\s*$/.test(lines[i])&&!/^(#{1,6})\s|^```|^\s*[-*]\s|^\s*\d+\.\s|^>\s?|^\s*\|/.test(lines[i])){para.push(lines[i]);i++;}
+      html+=`<p>${inline(para.join(" "))}</p>`;}
+    return html;}
+  function renderContents(){openPath="";const node=nodeByPath(cur);const items=document.getElementById("vitems");items.innerHTML="";
+    const _b=document.getElementById("vshell-body");if(_b)_b.classList.remove("has-toc");const _tp=document.getElementById("vtocpanel");if(_tp)_tp.innerHTML="";const _tt=document.getElementById("tgl-toc");if(_tt)_tt.classList.remove("on");const _vm=document.querySelector(".vmain");if(_vm)_vm.onscroll=null;const _st=document.getElementById("vstatus");if(_st)_st.textContent=ROOT_DESC;
+    crumbFor(cur);
+    const segs=cur?cur.split("/"):[];const top=segs[0]||"";
+    document.getElementById("vdesc").textContent=!cur?ROOT_DESC:((segs.length===1&&descMap[top])?descMap[top]:"");
+    if(!cur){const recent=allFiles.filter(f=>metaOf(f.path).m).sort((x,y)=>metaOf(y.path).m.localeCompare(metaOf(x.path).m)).slice(0,8);
+      if(recent.length){const wrap=el(`<div class="vrecent"><div class="vrecent-l">Recently updated</div><div class="vrchips"></div></div>`);
+        recent.forEach(f=>{const chip=el(`<button class="vrchip">${fileIcon(extOf(f.name),"vic-sm")}<span class="rcn">${esc(f.name)}</span><span class="vrdt">${metaOf(f.path).m}</span></button>`);chip.onclick=()=>openFile(f.path);wrap.querySelector(".vrchips").appendChild(chip);});
+        items.appendChild(wrap);}}
+    const dirKeys=Object.keys(node.dirs).sort();
+    let stg=0;const nextD=()=>"animation-delay:"+(Math.min(stg++,14)*0.022).toFixed(3)+"s";
+    const types=[...new Set(node.files.map(f=>extOf(f.name)))];
+    if(typeFilter!=="all"&&!types.includes(typeFilter))typeFilter="all";
+    if(node.files.length){const tb=el(`<div class="vtools" style="${nextD()}"><span class="vtools-l">${node.files.length} file${node.files.length>1?"s":""}${dirKeys.length?", "+dirKeys.length+" folder"+(dirKeys.length>1?"s":""):""}</span><span class="vsorts"></span></div>`);
+      [["name","Name"],["type","Type"],["modified","Recent"]].forEach(([k,lab])=>{const b=el(`<button class="vsort${sortMode===k?" on":""}">${lab}</button>`);b.onclick=()=>{sortMode=k;renderContents();};tb.querySelector(".vsorts").appendChild(b);});
+      items.appendChild(tb);
+      if(types.length>1){const tf=el(`<div class="vtools" style="padding-top:0;border:0;margin-top:-2px;${nextD()}"><span class="vtypes"></span></div>`);const tw=tf.querySelector(".vtypes");
+        const mk=(key,lab,c,on,dot)=>{const b=el(`<button class="vtype${on?" on":""}" style="--tc:${c}">${dot?'<span class="tdot"></span>':""}${lab}</button>`);b.onclick=()=>{typeFilter=key;renderContents();};return b;};
+        tw.appendChild(mk("all","All","#C76E2F",typeFilter==="all",false));
+        types.sort().forEach(t=>tw.appendChild(mk(t,(EXT_META[t]||EXT_META.txt).t,(EXT_META[t]||EXT_META.txt).c,typeFilter===t,true)));
+        items.appendChild(tf);}}
+    dirKeys.forEach(k=>{const d=node.dirs[k];const _fc=countOf(d),_sf=Object.keys(d.dirs).length,_tint=FOLDER_TINT[folderKey(d.name)]||FOLDER_TINT._default,_meta=(_sf?_sf+" folder"+(_sf>1?"s":"")+" · ":"")+_fc+" file"+(_fc>1?"s":"");const row=el(`<div class="vitem isdir" tabindex="0" style="--ft:${_tint};${nextD()};cursor:pointer">${folderIconCard(d.name)}<span class="vnm">${esc(d.name)}</span><span class="vmeta">${_meta} &rsaquo;</span></div>`);
+      const go=()=>selectFolder(d.path);row.onclick=go;row.onkeydown=(ev)=>{if(ev.key==="Enter"){ev.preventDefault();go();}};items.appendChild(row);});
+    const shown=sortFiles(node.files).filter(f=>typeFilter==="all"||extOf(f.name)===typeFilter);
+    shown.forEach(f=>{const r=fileRow(f,false);r.style.cssText+=";"+nextD();items.appendChild(r);});
+    if(node.files.length&&!shown.length){const fm=EXT_META[typeFilter]||EXT_META.txt;items.appendChild(el(vEmpty({tint:fm.c,svg:EM_SEARCH,title:"No "+fm.t+" files here",sub:"This folder has other file types. Clear the filter to see them all."})));}
+    if(!dirKeys.length&&!node.files.length){const _t=FOLDER_TINT[folderKey(segs[segs.length-1]||"")]||FOLDER_TINT._default;items.appendChild(el(vEmpty({tint:_t,svg:EM_FOLDER,title:"Nothing here yet",sub:"This folder is empty."})));}
+  }
+  function selectFolder(path){cur=path;typeFilter="all";const vq=document.getElementById("vq");if(vq)vq.value="";renderTree();renderContents();const _m=document.querySelector(".vmain");if(_m)_m.scrollTop=0;layoutResizers();setVaultHash("/"+path);}
+  function doSearch(qraw){const q=(qraw||"").trim();const ql=q.toLowerCase();const items=document.getElementById("vitems");const _m=document.querySelector(".vmain");if(_m){_m.scrollTop=0;_m.onscroll=null;}openPath="";
+    const _b=document.getElementById("vshell-body");if(_b)_b.classList.remove("has-toc");const _tp=document.getElementById("vtocpanel");if(_tp)_tp.innerHTML="";const _tt=document.getElementById("tgl-toc");if(_tt)_tt.classList.remove("on");
+    if(!ql){renderContents();return;}
+    document.getElementById("vcrumb").innerHTML=`<span class="cur">Search</span> <span class="sep">/</span> <span class="dim">"${esc(q)}"</span>`;document.getElementById("vdesc").textContent="";
+    const nameHits=[],contentHits=[];
+    FILES.forEach(p=>{if(p.toLowerCase().includes(ql)){nameHits.push({name:p.split("/").pop(),path:p});return;}
+      const c=CONTENT[p];if(c&&c.toLowerCase().includes(ql))contentHits.push({name:p.split("/").pop(),path:p,snip:snippet(c,ql)});});
+    items.innerHTML="";const total=nameHits.length+contentHits.length;
+    if(!total){items.appendChild(el(vEmpty({tint:"#6B7280",svg:EM_SEARCH,title:"No matches for “"+esc(q)+"”",sub:"Try a shorter term, a different spelling, or search by file name instead of contents."})));return;}
+    items.appendChild(el(`<div class="vtools"><span class="vtools-l">${total} match${total>1?"es":""} for "${esc(q)}" (${nameHits.length} in names, ${contentHits.length} in contents)</span></div>`));
+    if(nameHits.length){items.appendChild(el(`<div class="vgroup">In file names</div>`));nameHits.slice(0,150).forEach(f=>items.appendChild(fileRow(f,true)));}
+    if(contentHits.length){items.appendChild(el(`<div class="vgroup">In contents</div>`));contentHits.slice(0,150).forEach(f=>items.appendChild(fileRow(f,false,f.snip)));}
+    layoutResizers();
+  }
+  document.getElementById("vq").addEventListener("input",e=>doSearch(e.target.value));
+  document.getElementById("vcount").textContent=countOf(root)+" files in "+(function c(n){let d=0;for(const k in n.dirs)d+=1+c(n.dirs[k]);return d;})(root)+" folders";
+  function treeKeys(e){const rows=[...document.querySelectorAll("#vtree .trow")];if(!rows.length)return;const i=rows.indexOf(document.activeElement);
+    if(e.key==="ArrowDown"){e.preventDefault();(rows[Math.min(rows.length-1,i+1)]||rows[0]).focus();}
+    else if(e.key==="ArrowUp"){e.preventDefault();(rows[Math.max(0,i-1)]||rows[0]).focus();}
+    else if((e.key==="Enter"||e.key==="ArrowRight"||e.key==="ArrowLeft")&&document.activeElement.classList&&document.activeElement.classList.contains("trow")){e.preventDefault();document.activeElement.click();}}
+  document.getElementById("vtree").addEventListener("keydown",treeKeys);
+  document.addEventListener("keydown",e=>{if(!document.getElementById("v-vault").classList.contains("active"))return;const a=document.activeElement;
+    if(e.key==="/"&&(!a||a.tagName!=="INPUT")){e.preventDefault();document.getElementById("vq").focus();}
+    else if(e.key==="Escape"&&a&&a.id==="vq"){a.value="";doSearch("");a.blur();}});
+  const sbody=document.getElementById("vshell-body"),tglTree=document.getElementById("tgl-tree"),tglToc=document.getElementById("tgl-toc");
+  if(tglTree&&sbody)tglTree.onclick=()=>{const c=sbody.classList.toggle("tree-collapsed");tglTree.classList.toggle("on",!c);layoutResizers();savePrefs();};
+  if(tglToc&&sbody)tglToc.onclick=()=>{const p=document.getElementById("vtocpanel");if(!p||!p.innerHTML.trim())return;const on=sbody.classList.toggle("has-toc");tglToc.classList.toggle("on",on);layoutResizers();};
+  const lsKey="qp-vault-prefs-v1";
+  function savePrefs(){try{const b=document.getElementById("vshell-body");localStorage.setItem(lsKey,JSON.stringify({tw:b.style.getPropertyValue("--tw"),cw:b.style.getPropertyValue("--cw"),tc:b.classList.contains("tree-collapsed")}));}catch(e){}}
+  function loadPrefs(){try{const p=JSON.parse(localStorage.getItem(lsKey)||"{}");const b=document.getElementById("vshell-body");if(!b)return;if(p.tw)b.style.setProperty("--tw",p.tw);if(p.cw)b.style.setProperty("--cw",p.cw);if(p.tc){b.classList.add("tree-collapsed");if(tglTree)tglTree.classList.remove("on");}}catch(e){}}
+  function layoutResizers(){const b=document.getElementById("vshell-body");if(!b)return;const br=b.getBoundingClientRect();if(br.width<2)return;
+    const tree=document.getElementById("vtree"),toc=document.getElementById("vtocpanel"),lh=document.getElementById("rsz-l"),rh=document.getElementById("rsz-r");
+    if(lh){if(!b.classList.contains("tree-collapsed")&&tree){lh.classList.add("show");lh.style.left=(tree.getBoundingClientRect().right-br.left+2)+"px";}else lh.classList.remove("show");}
+    if(rh){if(b.classList.contains("has-toc")&&toc){rh.classList.add("show");rh.style.left=(toc.getBoundingClientRect().left-br.left-9)+"px";}else rh.classList.remove("show");}}
+  function startDrag(which,e){e.preventDefault();const b=document.getElementById("vshell-body");document.body.classList.add("resizing");
+    const handle=document.getElementById(which==="l"?"rsz-l":"rsz-r");if(handle)handle.classList.add("drag");
+    const sx=e.clientX,tree=document.getElementById("vtree"),toc=document.getElementById("vtocpanel");
+    const stw=tree?tree.getBoundingClientRect().width:288,scw=toc?toc.getBoundingClientRect().width:248;
+    const mv=(ev)=>{const dx=ev.clientX-sx;if(which==="l")b.style.setProperty("--tw",Math.max(190,Math.min(480,stw+dx))+"px");else b.style.setProperty("--cw",Math.max(180,Math.min(440,scw-dx))+"px");layoutResizers();};
+    const up=()=>{document.removeEventListener("mousemove",mv);document.removeEventListener("mouseup",up);document.body.classList.remove("resizing");if(handle)handle.classList.remove("drag");savePrefs();};
+    document.addEventListener("mousemove",mv);document.addEventListener("mouseup",up);}
+  {const lh=document.getElementById("rsz-l"),rh=document.getElementById("rsz-r");if(lh)lh.addEventListener("mousedown",e=>startDrag("l",e));if(rh)rh.addEventListener("mousedown",e=>startDrag("r",e));}
+  window.addEventListener("resize",layoutResizers);
+  loadPrefs();
+  window.__vault={open:openFile,folder:selectFolder,layout:layoutResizers};
+  renderTree();
+  // deep-link restore: #vault/<folder> opens a folder, #vault!<path> opens a file; else show root
+  (function(){const h=decodeURIComponent(INIT_HASH.replace(/^#/,""));const rest=h.indexOf("vault")===0?h.slice(5):"";
+    if(rest[0]==="!"){const p=rest.slice(1);selectFolder(p.split("/").slice(0,-1).join("/"));openFile(p);}
+    else if(rest[0]==="/"&&rest.length>1){selectFolder(rest.slice(1));}
+    else{selectFolder("");}})();
+})();
+
+</script>
+</body>
+</html>

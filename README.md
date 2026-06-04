@@ -367,6 +367,20 @@ app.include_router(router, prefix="/v1/vault")
 # lifecycle, collections, provenance, batch, export, content
 ```
 
+### Web Explorer
+
+A single-file, no-build, air-gap-safe browser UI for reading a vault. Folder tree,
+inline markdown reader, full-text search, semantic icons, and keyboard navigation, with
+zero network requests.
+
+```bash
+cd examples/web-explorer
+python generate_manifest.py /path/to/your/vault --title "My Vault"
+open index.html
+```
+
+See [`examples/web-explorer/`](examples/web-explorer/) and the [Web Explorer guide](docs/web-explorer.md).
+
 ---
 
 ## Security
@@ -424,6 +438,7 @@ Each independently useful. Together, the governed AI platform for autonomous org
 | [Security Model](docs/security.md) | CISOs, Security Teams |
 | [CLI Reference](docs/cli.md) | DevOps, Developers |
 | [FastAPI Integration](docs/fastapi.md) | Backend Developers |
+| [Web Explorer](docs/web-explorer.md) | Anyone browsing a vault |
 
 ---
 

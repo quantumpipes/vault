@@ -1,0 +1,3 @@
+# Generated manifest: machine-specific (absolute file:// paths) and may embed private
+# file contents. Regenerate with: python generate_manifest.py <dir>
+manifest.js
