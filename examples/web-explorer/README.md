@@ -1,11 +1,15 @@
 # QP Vault web explorer
 
-A single-file, no-build, air-gap-safe web UI for browsing a vault on disk. Open it in
-any browser and you get a folder tree, an inline markdown reader, full-text search,
-semantic folder and document-file icons, a type filter, a document outline, and full
-keyboard navigation. No server, no framework, no external requests.
+A single-file, no-build, air-gap-safe web UI for browsing a vault. Open it in any browser
+and you get a folder tree, an inline markdown reader, full-text search, semantic folder
+and document-file icons, a type filter, a document outline, and full keyboard navigation.
+No server, no framework, no external requests.
 
-![one HTML file, one generator script](.) <!-- screenshot optional -->
+Point it at a directory on disk, **or** at a `vault.export_vault()` JSON to get a
+governance view: trust-tier pills, lifecycle, content ids, supersession chains, and
+**in-browser SHA3-256 re-verification** of every resource.
+
+![QP Vault web explorer showing a canonical resource with trust tier, lifecycle, content id, and verification](screenshot.png)
 
 ## Quick start
 
@@ -48,10 +52,43 @@ Optional globals tune the chrome and governance display:
 | `window.VAULT_FOLDER_DESC` | `{ [folder]: string }` | one-line description per top-level folder |
 | `window.VAULT_TIERS` | `{ [folder]: [label, cssClass] }` | governance tier pill on a folder, e.g. `["Canonical","canonical"]` (classes: `canonical`, `working`, `ephemeral`) |
 
-`generate_manifest.py` is just the simplest producer of that contract. Because it is only
-a contract, the same `window.VAULT_*` shape can be emitted from a real qp-vault export
-(carrying trust tiers, content-addressed IDs, and lifecycle), so this surface can later
-front a governed vault rather than a raw directory.
+`generate_manifest.py` is just the simplest producer of that contract.
+
+## Governance mode (qp-vault export)
+
+Pass a `vault.export_vault()` JSON instead of a directory and the explorer becomes a
+governance view of the actual store:
+
+```sh
+# in Python: vault.export_vault("vault.json")
+python generate_manifest.py --from-export vault.json --title "My Vault"
+open index.html
+```
+
+Resources are grouped under a top-level **trust-tier** folder (CANONICAL / WORKING /
+EPHEMERAL / ARCHIVED). The export adds these globals:
+
+| Global | Shape | Purpose |
+|--------|-------|---------|
+| `window.VAULT_GOV` | `{ [path]: { tier, lifecycle, cls, type, cid, hash, merkle, size, created, updated, supersedes, superseded_by, tags, id, name } }` | per-resource governance metadata |
+| `window.VAULT_CHUNKS` | `{ [path]: [ { c: content, h: cid } ] }` | chunk content + content ids; drives the reader, search, and verification |
+| `window.VAULT_IDPATH` | `{ [resource_id]: path }` | resolves supersession links to a path |
+
+In governance mode the explorer shows a **trust-tier pill** on every resource, a
+**lifecycle** badge, the **content id** (SHA3-256), classification, size, tags, and
+clickable **supersedes / superseded-by** links. Search results are **trust-weighted**
+(CANONICAL 1.5x, WORKING 1.0x, EPHEMERAL 0.7x, ARCHIVED 0.5x).
+
+### In-browser verification
+
+Web Crypto does not implement SHA3, so `sha3.js` (a small, dependency-free FIPS 202
+implementation, verified against Python `hashlib`) ships alongside the explorer. Click
+**re-verify content id** on any resource and the browser re-hashes each chunk
+(`vault://sha3-256/<sha3(content)>`) and the resource digest (`sha3(concat(sorted(cids)))`,
+matching `resource_manager.compute_resource_hash`) and reports **verified** or
+**tampered**. This happens entirely offline, with no trust in the server that produced
+the manifest. It is the explorer's reason to exist: *knowledge that can't be verified
+can't be trusted.*
 
 ## Generator options
 
@@ -107,7 +144,23 @@ at private paths (this folder's `.gitignore` excludes `manifest.js` for that rea
 ```
 examples/web-explorer/
   index.html            the explorer (self-contained: HTML + CSS + JS)
-  generate_manifest.py  stdlib-only manifest generator
-  manifest.js           generated, git-ignored (run the generator to create it)
+  sha3.js               dependency-free SHA3-256 for in-browser verification
+  generate_manifest.py  stdlib-only manifest generator (directory scan + export adapter)
+  manifest.sample.js    committed governance demo (loads on first open)
+  sample-export.json    the export the demo is built from
+  manifest.js           generated, git-ignored (run the generator to create it; overrides the demo)
+  screenshot.png        the image used in this README
+  tests/                contract tests (python) + sha3/verification tests (node)
   README.md             this file
 ```
+
+## Tests
+
+```sh
+python tests/test_generate_manifest.py    # manifest contract: on-disk + export modes
+node --test tests/test_sha3.mjs           # SHA3-256 vectors + verify accepts/rejects
+```
+
+Both run in CI (`.github/workflows/python-ci.yaml`, the `web-explorer` job). The contract
+test extracts nothing from a stale copy: it runs the real generator and asserts the
+emitted `window.VAULT_*` shape, so the generator can never drift from `index.html`.

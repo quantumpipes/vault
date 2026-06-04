@@ -1,0 +1,158 @@
+{
+  "version": "1.1.0",
+  "resource_count": 5,
+  "resources": [
+    {
+      "id": "r-handbook",
+      "name": "company-handbook.md",
+      "content_hash": "b8c29ea5e0effc31921e675056f44f960f0381e4bb0f3277a6f3fc5efddd43f6",
+      "cid": "vault://sha3-256/b8c29ea5e0effc31921e675056f44f960f0381e4bb0f3277a6f3fc5efddd43f6",
+      "trust_tier": "canonical",
+      "data_classification": "public",
+      "resource_type": "document",
+      "status": "indexed",
+      "lifecycle": "active",
+      "supersedes": null,
+      "superseded_by": null,
+      "tenant_id": null,
+      "tags": [
+        "handbook",
+        "governance"
+      ],
+      "metadata": {},
+      "mime_type": "text/markdown",
+      "size_bytes": 463,
+      "chunk_count": 1,
+      "merkle_root": "b8c29ea5e0effc31921e675056f44f960f0381e4bb0f3277a6f3fc5efddd43f6",
+      "created_at": "2026-05-20T09:00:00Z",
+      "updated_at": "2026-05-20T09:00:00Z",
+      "_chunks": [
+        {
+          "content": "# Company Handbook\n\nThe authoritative source for how we operate. This document is **canonical**: it is\nimmutable and carries a 1.5x search boost in qp-vault.\n\n## Principles\n\n- Knowledge that can't be verified can't be trusted.\n- Every fact has provenance, every read is verified, every write is auditable.\n\n## Governance\n\nResources move through a lifecycle (draft, review, active, superseded, archived) and\ncarry a trust tier. Search results are weighted by tier.",
+          "cid": "vault://sha3-256/2a19522a7633ff6542c8e29c0f67349e734af6a326b4709af7c15ff491a467b0"
+        }
+      ]
+    },
+    {
+      "id": "r-security",
+      "name": "security-policy.md",
+      "content_hash": "8beb8489b30c4ee7e1afd07d751b2d8f576287b89d0d7cbddb66cecb1b09e2d0",
+      "cid": "vault://sha3-256/8beb8489b30c4ee7e1afd07d751b2d8f576287b89d0d7cbddb66cecb1b09e2d0",
+      "trust_tier": "canonical",
+      "data_classification": "internal",
+      "resource_type": "document",
+      "status": "indexed",
+      "lifecycle": "active",
+      "supersedes": null,
+      "superseded_by": null,
+      "tenant_id": null,
+      "tags": [
+        "security",
+        "policy"
+      ],
+      "metadata": {},
+      "mime_type": "text/markdown",
+      "size_bytes": 339,
+      "chunk_count": 1,
+      "merkle_root": "8beb8489b30c4ee7e1afd07d751b2d8f576287b89d0d7cbddb66cecb1b09e2d0",
+      "created_at": "2026-05-20T09:00:00Z",
+      "updated_at": "2026-05-20T09:00:00Z",
+      "_chunks": [
+        {
+          "content": "# Security Policy\n\nAll content entering the vault is screened by the Membrane, chunked, and assigned a\nSHA3-256 content id (CID). The CID is `vault://sha3-256/<digest>`.\n\n## Verification\n\nAnyone can re-derive a resource's content id offline and confirm it matches. Tampering\nwith stored content changes its CID and is detected immediately.",
+          "cid": "vault://sha3-256/32d04f0675bb54272cb188b9fda169775ba7f1004947c5d1b6c9a3917b8d2386"
+        }
+      ]
+    },
+    {
+      "id": "r-q3",
+      "name": "q3-roadmap-draft.md",
+      "content_hash": "4c4f85af27629cada4ae1fdfbd1b94ea8bcaeb26184442331b4016082e3c8f81",
+      "cid": "vault://sha3-256/4c4f85af27629cada4ae1fdfbd1b94ea8bcaeb26184442331b4016082e3c8f81",
+      "trust_tier": "working",
+      "data_classification": "internal",
+      "resource_type": "document",
+      "status": "indexed",
+      "lifecycle": "draft",
+      "supersedes": "r-q2",
+      "superseded_by": null,
+      "tenant_id": null,
+      "tags": [
+        "roadmap"
+      ],
+      "metadata": {},
+      "mime_type": "text/markdown",
+      "size_bytes": 201,
+      "chunk_count": 1,
+      "merkle_root": "4c4f85af27629cada4ae1fdfbd1b94ea8bcaeb26184442331b4016082e3c8f81",
+      "created_at": "2026-05-28T09:00:00Z",
+      "updated_at": "2026-05-28T09:00:00Z",
+      "_chunks": [
+        {
+          "content": "# Q3 Roadmap (Draft)\n\nWorking draft, not yet authoritative. This supersedes the Q2 roadmap.\n\n## Themes\n\n1. Hybrid trust-weighted retrieval\n2. Knowledge-graph traversal\n3. Post-quantum signature rollout",
+          "cid": "vault://sha3-256/2642a6886b2b9495fe97ba513a9c7537744c7c091262c383fbf1592a27d62211"
+        }
+      ]
+    },
+    {
+      "id": "r-notes",
+      "name": "meeting-notes-2026-05-30.md",
+      "content_hash": "69539abe189b8a78fb18b39bcf86b9100483aae60e88c3ef0337f8130b9b128f",
+      "cid": "vault://sha3-256/69539abe189b8a78fb18b39bcf86b9100483aae60e88c3ef0337f8130b9b128f",
+      "trust_tier": "ephemeral",
+      "data_classification": "internal",
+      "resource_type": "document",
+      "status": "indexed",
+      "lifecycle": "active",
+      "supersedes": null,
+      "superseded_by": null,
+      "tenant_id": null,
+      "tags": [
+        "notes"
+      ],
+      "metadata": {},
+      "mime_type": "text/markdown",
+      "size_bytes": 192,
+      "chunk_count": 1,
+      "merkle_root": "69539abe189b8a78fb18b39bcf86b9100483aae60e88c3ef0337f8130b9b128f",
+      "created_at": "2026-05-30T09:00:00Z",
+      "updated_at": "2026-05-30T09:00:00Z",
+      "_chunks": [
+        {
+          "content": "# Meeting Notes, 2026-05-30\n\nEphemeral capture. Lower search weight (0.7x). Safe to prune.\n\n- Reviewed the export format for the web explorer.\n- Agreed: governance must be visible at a glance.",
+          "cid": "vault://sha3-256/a59eeebff01669bee3d46700b23d1f54c6117947af03506a86e3d624ee727517"
+        }
+      ]
+    },
+    {
+      "id": "r-q2",
+      "name": "q2-roadmap.md",
+      "content_hash": "2e0265cea10f0d10e1be5fed5a185475cbafda60dce02ec71b002ed9b6f09862",
+      "cid": "vault://sha3-256/2e0265cea10f0d10e1be5fed5a185475cbafda60dce02ec71b002ed9b6f09862",
+      "trust_tier": "archived",
+      "data_classification": "internal",
+      "resource_type": "document",
+      "status": "indexed",
+      "lifecycle": "superseded",
+      "supersedes": null,
+      "superseded_by": "r-q3",
+      "tenant_id": null,
+      "tags": [
+        "roadmap"
+      ],
+      "metadata": {},
+      "mime_type": "text/markdown",
+      "size_bytes": 204,
+      "chunk_count": 1,
+      "merkle_root": "2e0265cea10f0d10e1be5fed5a185475cbafda60dce02ec71b002ed9b6f09862",
+      "created_at": "2026-03-15T09:00:00Z",
+      "updated_at": "2026-05-28T09:00:00Z",
+      "_chunks": [
+        {
+          "content": "# Q2 Roadmap (Archived)\n\nSuperseded by the Q3 roadmap. Retained for provenance and time-travel queries.\n\n## Shipped\n\n- Content addressing and Merkle verification\n- RBAC and the Membrane screening pipeline",
+          "cid": "vault://sha3-256/29bd3026a81becddceaa56de282f18fddcbf3101014d2ce41b12b41b32d8f962"
+        }
+      ]
+    }
+  ]
+}

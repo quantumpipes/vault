@@ -45,7 +45,26 @@ Optional globals tune the chrome and governance display:
 | `window.VAULT_FOLDER_DESC` | `{ [folder]: string }` | one-line description per top-level folder |
 | `window.VAULT_TIERS` | `{ [folder]: [label, cssClass] }` | governance tier pill, e.g. `["Canonical", "canonical"]` (classes: `canonical`, `working`, `ephemeral`) |
 
-Because the explorer only depends on that contract, `generate_manifest.py` is just the simplest producer. The same `window.VAULT_*` shape can be emitted from a qp-vault export carrying real [trust tiers](trust-tiers.md), content-addressed IDs, and [lifecycle](lifecycle.md) state, so the same UI can front a governed vault instead of a raw directory.
+Because the explorer only depends on that contract, `generate_manifest.py` is just the simplest producer.
+
+## Governance mode (from a vault export)
+
+Point the generator at a [`vault.export_vault()`](api-reference.md) JSON instead of a directory and the explorer becomes a governance view of the real store:
+
+```bash
+# in Python: vault.export_vault("vault.json")
+cd examples/web-explorer
+python generate_manifest.py --from-export vault.json --title "My Vault"
+open index.html
+```
+
+Resources are grouped under a top-level [trust-tier](trust-tiers.md) folder (CANONICAL / WORKING / EPHEMERAL / ARCHIVED). The export adds `window.VAULT_GOV` (per-resource tier, [lifecycle](lifecycle.md), content id, classification, size, tags, supersession ids), `window.VAULT_CHUNKS` (chunk content plus content ids, which drive the reader, search, and verification), and `window.VAULT_IDPATH` (resolves supersession links).
+
+In governance mode the explorer shows a trust-tier pill on every resource, a lifecycle badge, the SHA3-256 content id, clickable supersedes / superseded-by links, and trust-weighted search ordering (CANONICAL 1.5x down to ARCHIVED 0.5x).
+
+### In-browser verification
+
+Web Crypto does not implement SHA3, so a small dependency-free `sha3.js` (FIPS 202, verified against Python `hashlib`) ships with the explorer. The **re-verify content id** button re-hashes each chunk (`vault://sha3-256/<sha3(content)>`) and the resource digest (`sha3(concat(sorted(cids)))`, matching `resource_manager.compute_resource_hash`) and reports verified or tampered, entirely offline. See the [Security Model](security.md) for the content-addressing and Merkle design this checks.
 
 ## Generator
 

@@ -45,6 +45,21 @@ jobs:
       - run: pip install -e ".[sqlite,fastapi,integrity,encryption,cli,dev]"
       - run: pytest tests/ -v --tb=short --cov=qp_vault --cov-report=term-missing
 
+  web-explorer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: manifest contract test (python)
+        run: python examples/web-explorer/tests/test_generate_manifest.py
+      - name: sha3 + verification test (node)
+        run: node --test examples/web-explorer/tests/test_sha3.mjs
+
   publish:
     needs: [lint, test]
     if: startsWith(github.ref, 'refs/tags/v')

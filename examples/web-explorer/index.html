@@ -54,6 +54,24 @@
   .pill.canonical{color:#fff;background:var(--success);border-color:transparent}
   .pill.working{color:var(--clay-600);background:color-mix(in srgb,var(--clay) 14%,transparent);border-color:transparent}
   .pill.ephemeral{color:var(--ink-400);background:var(--fog)}
+  /* governance (export mode): tier/lifecycle pills, metadata panel, in-browser verification */
+  .gtier{display:inline-flex;align-items:center;font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:999px;color:#fff;background:var(--gt,#888);flex:0 0 auto}
+  .vitem .gtier{flex:0 0 auto;margin-right:2px}
+  .glife{display:inline-flex;align-items:center;font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:2px 7px;border-radius:999px;color:var(--gl,#666);background:color-mix(in srgb,var(--gl,#666) 14%,transparent)}
+  .rt-badges{display:inline-flex;gap:6px;margin-left:3px;vertical-align:middle}
+  .rt-badges .gtier,.rt-badges .glife{position:relative;top:-1px}
+  .gpanel{border:1px solid var(--hair);border-radius:10px;background:color-mix(in srgb,var(--paper) 50%,transparent);padding:9px 14px;margin:0 0 18px;font-size:12.5px}
+  .gpanel .grow{display:flex;gap:12px;padding:5px 0;border-bottom:1px solid var(--hair)}
+  .gpanel .grow:last-child{border-bottom:0}
+  .gpanel .gk{flex:0 0 118px;color:var(--ink-300);font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:10px;padding-top:2px}
+  .gpanel .gv{flex:1;min-width:0;color:var(--ink-700);word-break:break-word;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .gcid{font-family:ui-monospace,Menlo,monospace;font-size:11px;background:color-mix(in srgb,var(--ink) 7%,transparent);padding:2px 6px;border-radius:5px;word-break:break-all}
+  .gcopy,.gverify{border:1px solid var(--hair-strong);background:var(--fog);color:var(--ink-400);font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:999px;transition:.15s;white-space:nowrap}
+  .gcopy:hover,.gverify:hover{color:var(--clay-600);border-color:var(--clay-light)}
+  .gtag{display:inline-flex;font-size:10.5px;color:var(--ink-400);background:var(--fog);border:1px solid var(--hair);border-radius:999px;padding:1px 8px}
+  .gsup{color:var(--clay-600);cursor:pointer;font-weight:700}
+  .gverdict .vok{color:var(--success);font-weight:800}
+  .gverdict .vbad{color:var(--danger);font-weight:800}
   /* vault explorer */
   .vsearch{flex:1;display:flex;align-items:center;gap:9px;background:var(--fog);border:1px solid var(--hair-strong);border-radius:999px;padding:10px 16px}
   .vsearch svg{width:15px;height:15px;flex:0 0 auto;opacity:.5}
@@ -237,7 +255,10 @@
 
 </main>
 
-<script src="manifest.js"></script>
+<script src="sha3.js"></script>
+<!-- committed demo manifest (governance sample); a user-generated manifest.js below overrides it -->
+<script src="manifest.sample.js"></script>
+<script src="manifest.js" onerror="void 0"></script>
 <script>
 const el=(h)=>{const t=document.createElement("template");t.innerHTML=h.trim();return t.content.firstChild;};
 const esc=(s)=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
@@ -327,17 +348,33 @@ if(window.VAULT_SUBTITLE){document.getElementById("appSub").textContent=window.V
   const EM_SEARCH='<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',EM_FOLDER='<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',EM_ALERT='<path d="M12 5l8 14H4z"/><path d="M12 10v4M12 16h.01"/>';
   window.__icons={file:(ext,cls)=>fileIcon(ext,cls),fileSm:(ext)=>fileIcon(ext,"vic-sm").replace('class="vic vic-sm"','class="pfic"'),extOf:(n)=>extOf(n)};
   let cur="";
-  function renderTree(){const t=document.getElementById("vtree");t.innerHTML="";
-    (function rec(node,container,depth){Object.keys(node.dirs).sort().forEach(k=>{const d=node.dirs[k];
-      const wrap=document.createElement("div");wrap.className="tnode";if(d.path===cur||cur.indexOf(d.path+"/")===0)wrap.classList.add("open");
-      const hasKids=Object.keys(d.dirs).length>0;
-      const tb=(depth===0&&tierMap[d.name])?`<span class="pill ${tierMap[d.name][1]}" style="margin-left:5px;font-size:9px;padding:2px 6px">${tierMap[d.name][0]}</span>`:"";
-      const row=document.createElement("div");row.className="trow"+(d.path===cur?" sel":"");row.tabIndex=0;row.setAttribute("role","treeitem");
-      row.innerHTML=`<span class="tcar">${hasKids?CHEV:"&nbsp;"}</span><span class="tfi">${folderSvg(d.name,17)}</span><span class="tnm">${d.name}</span>${tb}<span class="tct">${countOf(d)}</span>`;
-      row.onclick=(e)=>{e.stopPropagation();if(hasKids)wrap.classList.toggle("open");selectFolder(d.path);};
-      wrap.appendChild(row);const kids=document.createElement("div");kids.className="tchildren";rec(d,kids,depth+1);wrap.appendChild(kids);container.appendChild(wrap);});})(root,t,0);
+  // lazy tree (R4 scale): a node's children are built only when it is expanded, so a
+  // 40k-resource vault renders only the visible path, not the whole DOM upfront.
+  function buildNode(d,container,depth){
+    const wrap=document.createElement("div");wrap.className="tnode";
+    const expanded=d.path===cur||cur.indexOf(d.path+"/")===0;if(expanded)wrap.classList.add("open");
+    const hasKids=Object.keys(d.dirs).length>0;
+    const tb=(depth===0&&tierMap[d.name])?`<span class="pill ${tierMap[d.name][1]}" style="margin-left:5px;font-size:9px;padding:2px 6px">${tierMap[d.name][0]}</span>`:"";
+    const row=document.createElement("div");row.className="trow"+(d.path===cur?" sel":"");row.tabIndex=0;row.setAttribute("role","treeitem");
+    row.innerHTML=`<span class="tcar">${hasKids?CHEV:"&nbsp;"}</span><span class="tfi">${folderSvg(d.name,17)}</span><span class="tnm">${d.name}</span>${tb}<span class="tct">${countOf(d)}</span>`;
+    const kids=document.createElement("div");kids.className="tchildren";
+    if(hasKids&&expanded){populateChildren(kids,d,depth+1);}
+    row.onclick=(e)=>{e.stopPropagation();if(hasKids){const opening=!wrap.classList.contains("open");wrap.classList.toggle("open");if(opening&&!kids.dataset.built)populateChildren(kids,d,depth+1);}selectFolder(d.path);};
+    wrap.appendChild(row);wrap.appendChild(kids);container.appendChild(wrap);
   }
+  function populateChildren(container,node,depth){container.dataset.built="1";Object.keys(node.dirs).sort().forEach(k=>buildNode(node.dirs[k],container,depth));}
+  function renderTree(){const t=document.getElementById("vtree");t.innerHTML="";populateChildren(t,root,0);}
   const CONTENT=window.VAULT_CONTENT||{};const META=window.VAULT_META||{};const metaOf=(p)=>META[p]||{};
+  /* ---- governance (export mode): trust tiers, lifecycle, content ids, verification ---- */
+  const GOV=window.VAULT_GOV||{};const CHUNKS=window.VAULT_CHUNKS||{};const IDPATH=window.VAULT_IDPATH||{};
+  const hasGov=Object.keys(GOV).length>0;
+  const TIER_META={canonical:{w:1.5,c:"#1F7A3E",lab:"Canonical"},working:{w:1.0,c:"#4F62D8",lab:"Working"},ephemeral:{w:0.7,c:"#B07A1E",lab:"Ephemeral"},archived:{w:0.5,c:"#6B7280",lab:"Archived"}};
+  const LIFE_C={active:"#1F7A3E",draft:"#4F62D8",review:"#B07A1E",superseded:"#9A5B3E",archived:"#6B7280",deprecated:"#B0432E"};
+  const tierWeight=(p)=>{const g=GOV[p];return g&&TIER_META[g.tier]?TIER_META[g.tier].w:1.0;};
+  function tierPill(tier){const t=TIER_META[tier];return t?`<span class="gtier" style="--gt:${t.c}" title="${t.lab}: ${t.w}x search weight">${t.lab}</span>`:"";}
+  function lifePill(life){if(!life)return"";const c=LIFE_C[life]||"#6B7280";return `<span class="glife" style="--gl:${c}">${life}</span>`;}
+  function contentOf(p){if(CHUNKS[p])return CHUNKS[p].map(c=>c.c).join("\n\n");return CONTENT[p];}
+  const hasContent=(p)=>CHUNKS[p]!=null||CONTENT[p]!=null;
   let sortMode="name",openPath="",typeFilter="all";
   const allFiles=FILES.map(p=>({name:p.split("/").pop(),path:p}));
   const escRe=(s)=>s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
@@ -349,28 +386,72 @@ if(window.VAULT_SUBTITLE){document.getElementById("appSub").textContent=window.V
     else if(sortMode==="type")a.sort((x,y)=>extOf(x.name).localeCompare(extOf(y.name))||x.name.localeCompare(y.name));
     else a.sort((x,y)=>x.name.localeCompare(y.name));return a;}
   function setVaultHash(suffix){if(history.replaceState&&document.getElementById("v-vault").classList.contains("active"))history.replaceState(null,"","#vault"+(suffix==="/"?"":suffix));}
-  function fileRow(f,withPath,snip){const e=extOf(f.name);const hasC=CONTENT[f.path]!=null;const mm=metaOf(f.path);
+  function fileRow(f,withPath,snip){const e=extOf(f.name);const hasC=hasContent(f.path);const mm=metaOf(f.path);const g=GOV[f.path];
     const row=document.createElement("div");row.className="vitem"+(f.path===openPath?" fileactive":"");row.style.cursor="pointer";row.tabIndex=0;
     const sub=withPath?`<span class="vpp">${esc(f.path.slice(0,f.path.length-f.name.length-1)||"root")}</span>`:(snip?`<span class="vsnip">${snip}</span>`:"");
-    row.innerHTML=`${fileIcon(e)}<span class="vnm">${esc(f.name)}${sub}</span><span class="vmeta">${mm.m?`<span class="vdt">${mm.m}</span>`:""}${hasC?"read":"open"} &rsaquo;</span>`;
+    row.innerHTML=`${fileIcon(e)}<span class="vnm">${esc(f.name)}${sub}</span>${g?tierPill(g.tier):""}<span class="vmeta">${mm.m?`<span class="vdt">${mm.m}</span>`:""}${hasC?"read":"open"} &rsaquo;</span>`;
     const go=()=>openFile(f.path);row.onclick=go;row.onkeydown=(ev)=>{if(ev.key==="Enter"){ev.preventDefault();go();}};return row;}
   function crumbFor(path){const cb=document.getElementById("vcrumb");
     if(!path){cb.innerHTML=`<span class="cur">${esc(ROOT_LABEL)}</span>`;return;}
     const segs=path.split("/");
     cb.innerHTML=`<a data-p="">${esc(ROOT_LABEL)}</a>`+segs.map((s,i)=>`<span class="sep">/</span>${i===segs.length-1?`<span class="cur">${esc(s)}</span>`:`<a data-p="${segs.slice(0,i+1).join("/")}">${esc(s)}</a>`}`).join("");
     cb.querySelectorAll("a").forEach(a=>a.onclick=()=>selectFolder(a.dataset.p));}
+  const CODE_EXT=["js","mjs","cjs","ts","tsx","jsx","py","pyi","css","scss","html","htm","xml","sh","bash","zsh","sql","yaml","yml","toml","ini","cfg","conf","graphql","proto","tex","bib"];
+  const IMG_EXT=["png","jpg","jpeg","gif","webp","avif","bmp","ico"];
+  function codeBlock(t){return `<pre class="vcode"><code>${esc(t)}</code></pre>`;}
+  function jsonPretty(t){try{return codeBlock(JSON.stringify(JSON.parse(t),null,2));}catch(e){return codeBlock(t);}}
+  function csvTable(t,sep){const rows=t.replace(/\r/g,"").split("\n").filter(r=>r.length).map(r=>r.split(sep));
+    if(!rows.length||rows.length>300)return codeBlock(t);const head=rows[0];
+    return `<table>${head?`<thead><tr>${head.map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead>`:""}<tbody>${rows.slice(1).map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;}
+  function verifyResource(path){const ch=CHUNKS[path],g=GOV[path];if(!ch||!window.SHA3)return null;
+    let okChunks=0;for(const c of ch){if("vault://sha3-256/"+SHA3.sha3_256(c.c)===c.h)okChunks++;}
+    const recHash=SHA3.sha3_256(ch.map(c=>c.h).slice().sort().join(""));
+    const hashOK=g&&g.hash?recHash===g.hash:null;
+    return {okChunks,total:ch.length,hashOK,allOK:okChunks===ch.length&&hashOK!==false};}
+  function govPanel(path){const g=GOV[path];if(!g)return"";const rows=[];
+    if(g.cid)rows.push(["Content ID",`<code class="gcid">${esc(g.cid)}</code> <button class="gcopy" data-gc="${esc(g.cid)}">copy</button>`]);
+    if(g.cls)rows.push(["Classification",esc(g.cls)]);
+    if(g.type)rows.push(["Type",esc(g.type)]);
+    if(g.size)rows.push(["Size",g.size+" bytes"]);
+    if(g.created)rows.push(["Created",esc(g.created)]);
+    if(g.updated&&g.updated!==g.created)rows.push(["Updated",esc(g.updated)]);
+    if(g.tags&&g.tags.length)rows.push(["Tags",g.tags.map(t=>`<span class="gtag">${esc(t)}</span>`).join(" ")]);
+    const link=(id)=>{const p=IDPATH[id];return p?`<a class="gsup" data-gp="${esc(p)}">${esc(p.split("/").pop())}</a>`:`<span class="dim">${esc(id)}</span>`;};
+    if(g.supersedes)rows.push(["Supersedes",link(g.supersedes)]);
+    if(g.superseded_by)rows.push(["Superseded by",link(g.superseded_by)]);
+    const canV=CHUNKS[path]&&window.SHA3;
+    rows.push(["Integrity",`<span class="gverdict" id="gverdict"><span class="dim">not yet verified</span></span> ${canV?`<button class="gverify" data-vp="${esc(path)}">re-verify content id</button>`:'<span class="dim">no chunk data</span>'}`]);
+    return `<div class="gpanel">${rows.map(r=>`<div class="grow"><span class="gk">${r[0]}</span><span class="gv">${r[1]}</span></div>`).join("")}</div>`;}
   function openFile(path){openPath=path;const name=path.split("/").pop();crumbFor(path);document.getElementById("vdesc").textContent="";
-    const items=document.getElementById("vitems");const c=CONTENT[path];const ext=extOf(name);const url=BASE+encodeURI(path);const disk=esc(BASE.replace("file://","")+path);
+    const items=document.getElementById("vitems");const c=contentOf(path);const ext=extOf(name);const raw=(name.split(".").pop()||"").toLowerCase();
+    const url=BASE+encodeURI(path);const disk=esc((BASE.replace("file://","")||"")+path);const g=GOV[path];
     const _par=path.slice(0,path.length-name.length-1);const _eb=_par?`<span class="rt-eyebrow">${folderSvg(_par.split("/").pop(),12)}${esc(_par)}</span>`:`<span class="rt-eyebrow">Vault root</span>`;
-    const bar=`<div class="rtop"><span class="rt-id">${fileIcon(ext,"")}<span class="rt-txt">${_eb}<span class="rt">${esc(name)}</span></span></span><span class="rtools"><button class="copybtn" data-cp="${disk}">copy path</button><a href="${url}" target="_blank" rel="noopener" style="font-size:12px;white-space:nowrap">open in tab &#8599;</a></span></div>`;
-    if(c!=null){items.innerHTML=`<div class="vreader">${bar}${md2html(c,path)}</div>`;}
-    else if(ext==="pdf"){items.innerHTML=`<div class="vreader">${bar}<iframe class="vprev-pdf" src="${url}" title="${esc(name)}"></iframe></div>`;}
-    else if(ext==="svg"){items.innerHTML=`<div class="vreader">${bar}<div class="vprev-img"><img src="${url}" alt="${esc(name)}"></div></div>`;}
-    else{items.innerHTML=`<div class="vreader">${bar}<div class="vbinary"><p class="dim" style="font-size:13.5px;margin:0 0 12px">A ${ext.toUpperCase()} file. Open it in a new tab, or copy the path to open it from your file browser or terminal.</p><code>${disk}</code></div></div>`;}
-    const st=document.getElementById("vstatus");if(st)st.textContent=BASE.replace("file://","")+path;
+    const badges=g?`<span class="rt-badges">${tierPill(g.tier)}${lifePill(g.lifecycle)}</span>`:"";
+    const openLink=BASE?`<a href="${url}" target="_blank" rel="noopener" style="font-size:12px;white-space:nowrap">open in tab &#8599;</a>`:"";
+    const bar=`<div class="rtop"><span class="rt-id">${fileIcon(ext,"")}<span class="rt-txt">${_eb}<span class="rt">${esc(name)}</span>${badges}</span></span><span class="rtools"><button class="copybtn" data-cp="${disk}">copy path</button>${openLink}</span></div>`;
+    const gp=govPanel(path);
+    let body;
+    if(c!=null){
+      if(raw==="json"||raw==="jsonc")body=jsonPretty(c);
+      else if(raw==="csv")body=csvTable(c,",");
+      else if(raw==="tsv")body=csvTable(c,"\t");
+      else if(CODE_EXT.includes(raw))body=codeBlock(c);
+      else body=md2html(c,path);
+    }
+    else if(ext==="pdf"&&BASE)body=`<iframe class="vprev-pdf" src="${url}" title="${esc(name)}"></iframe>`;
+    else if((ext==="svg"||IMG_EXT.includes(raw))&&BASE)body=`<div class="vprev-img"><img src="${url}" alt="${esc(name)}"></div>`;
+    else body=`<div class="vbinary"><p class="dim" style="font-size:13.5px;margin:0 0 12px">A ${(raw||"binary").toUpperCase()} file with no inline preview. ${BASE?"Open it in a new tab, or copy":"Copy"} the path to open it from your file browser.</p><code>${disk}</code></div>`;
+    items.innerHTML=`<div class="vreader">${bar}${gp}${body}</div>`;
+    const st=document.getElementById("vstatus");if(st)st.textContent=(BASE.replace("file://","")||"")+path;
     wireReader();layoutResizers();setVaultHash("!"+path);const _m=document.querySelector(".vmain");if(_m)_m.scrollTo({top:0});}
   function wireReader(){
     document.querySelectorAll(".vreader .copybtn").forEach(b=>b.onclick=()=>{try{navigator.clipboard&&navigator.clipboard.writeText(b.dataset.cp);}catch(e){}b.textContent="copied";setTimeout(()=>b.textContent="copy path",1200);});
+    document.querySelectorAll(".vreader .gcopy").forEach(b=>b.onclick=()=>{try{navigator.clipboard&&navigator.clipboard.writeText(b.dataset.gc);}catch(e){}b.textContent="copied";setTimeout(()=>b.textContent="copy",1200);});
+    document.querySelectorAll(".vreader .gsup").forEach(a=>a.onclick=()=>openFile(a.dataset.gp));
+    document.querySelectorAll(".vreader .gverify").forEach(b=>b.onclick=()=>{const r=verifyResource(b.dataset.vp);const out=document.getElementById("gverdict");if(!out)return;
+      if(!r){out.innerHTML='<span class="vbad">cannot verify</span>';return;}
+      out.innerHTML=r.allOK?`<span class="vok">verified</span> <span class="dim">${r.total} chunk${r.total>1?"s":""} re-hashed, content id${r.total>1?"s":""} match${r.hashOK?", digest OK":""}</span>`:`<span class="vbad">tampered</span> <span class="dim">${r.okChunks}/${r.total} chunks match${r.hashOK===false?", digest mismatch":""}</span>`;
+      b.textContent="re-verify content id";});
     const panel=document.getElementById("vtocpanel"),body=document.getElementById("vshell-body"),m=document.querySelector(".vmain"),tt=document.getElementById("tgl-toc");
     if(!panel||!body)return;
     const hs=[...document.querySelectorAll(".vreader h2, .vreader h3")];
@@ -438,10 +519,11 @@ if(window.VAULT_SUBTITLE){document.getElementById("appSub").textContent=window.V
     document.getElementById("vcrumb").innerHTML=`<span class="cur">Search</span> <span class="sep">/</span> <span class="dim">"${esc(q)}"</span>`;document.getElementById("vdesc").textContent="";
     const nameHits=[],contentHits=[];
     FILES.forEach(p=>{if(p.toLowerCase().includes(ql)){nameHits.push({name:p.split("/").pop(),path:p});return;}
-      const c=CONTENT[p];if(c&&c.toLowerCase().includes(ql))contentHits.push({name:p.split("/").pop(),path:p,snip:snippet(c,ql)});});
+      const c=contentOf(p);if(c&&c.toLowerCase().includes(ql))contentHits.push({name:p.split("/").pop(),path:p,snip:snippet(c,ql)});});
+    if(hasGov){const byTier=(a,b)=>tierWeight(b.path)-tierWeight(a.path)||a.name.localeCompare(b.name);nameHits.sort(byTier);contentHits.sort(byTier);}
     items.innerHTML="";const total=nameHits.length+contentHits.length;
     if(!total){items.appendChild(el(vEmpty({tint:"#6B7280",svg:EM_SEARCH,title:"No matches for “"+esc(q)+"”",sub:"Try a shorter term, a different spelling, or search by file name instead of contents."})));return;}
-    items.appendChild(el(`<div class="vtools"><span class="vtools-l">${total} match${total>1?"es":""} for "${esc(q)}" (${nameHits.length} in names, ${contentHits.length} in contents)</span></div>`));
+    items.appendChild(el(`<div class="vtools"><span class="vtools-l">${total} match${total>1?"es":""} for "${esc(q)}" (${nameHits.length} in names, ${contentHits.length} in contents)${hasGov?", trust-weighted":""}</span></div>`));
     if(nameHits.length){items.appendChild(el(`<div class="vgroup">In file names</div>`));nameHits.slice(0,150).forEach(f=>items.appendChild(fileRow(f,true)));}
     if(contentHits.length){items.appendChild(el(`<div class="vgroup">In contents</div>`));contentHits.slice(0,150).forEach(f=>items.appendChild(fileRow(f,false,f.snip)));}
     layoutResizers();
