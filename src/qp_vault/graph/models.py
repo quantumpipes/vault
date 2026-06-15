@@ -86,10 +86,32 @@ class GraphEdge(BaseModel):
     weight: float = Field(default=0.5, ge=0.0, le=1.0)
     bidirectional: bool = Field(default=False)
     source_resource_id: UUID | None = Field(default=None)
+    # Bitemporal + curation (world-model v2): when the fact held true in the
+    # world (valid_from/valid_to; valid_to=None means still valid, set to
+    # INVALIDATE, never delete), how trusted it is (candidate -> reviewed ->
+    # asserted; only reviewed/asserted are act-eligible), and the capsule that
+    # sealed the assertion. Defaults keep every existing edge an undated,
+    # asserted, unsourced fact, so this is backward compatible.
+    valid_from: datetime | None = Field(default=None)
+    valid_to: datetime | None = Field(default=None)
+    assertion: str = Field(default="asserted")  # candidate | reviewed | asserted
+    provenance: str | None = Field(default=None)  # capsule:// URI of the assertion
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     model_config = {"from_attributes": True}
+
+    def valid_at(self, when: datetime) -> bool:
+        """True if this edge's fact held at ``when`` (bitemporal valid-time)."""
+        if self.valid_from is not None and when < self.valid_from:
+            return False
+        if self.valid_to is not None and when >= self.valid_to:
+            return False
+        return True
+
+    def is_act_eligible(self) -> bool:
+        """Only reviewed/asserted edges are facts an agent may act on (the gate)."""
+        return self.assertion in ("reviewed", "asserted")
 
 
 class GraphMention(BaseModel):

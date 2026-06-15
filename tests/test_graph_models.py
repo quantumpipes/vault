@@ -151,3 +151,40 @@ class TestDetectedEntityModel:
             DetectedEntity(name="X", confidence=1.5)
         with pytest.raises(ValidationError):
             DetectedEntity(name="X", confidence=-0.1)
+
+
+def test_graph_edge_bitemporal_valid_at() -> None:
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from qp_vault.graph.models import GraphEdge
+
+    edge = GraphEdge(
+        source_node_id=uuid4(), target_node_id=uuid4(), relation_type="holds",
+        valid_from=datetime(2026, 1, 1, tzinfo=UTC), valid_to=datetime(2026, 6, 1, tzinfo=UTC),
+    )
+    assert edge.valid_at(datetime(2026, 3, 1, tzinfo=UTC)) is True
+    assert edge.valid_at(datetime(2025, 12, 1, tzinfo=UTC)) is False  # before
+    assert edge.valid_at(datetime(2026, 6, 1, tzinfo=UTC)) is False  # at/after valid_to
+
+
+def test_graph_edge_defaults_are_backward_compatible() -> None:
+    from uuid import uuid4
+
+    from qp_vault.graph.models import GraphEdge
+
+    edge = GraphEdge(source_node_id=uuid4(), target_node_id=uuid4(), relation_type="mentions")
+    # Existing edges are undated, asserted, unsourced facts.
+    assert edge.valid_from is None and edge.valid_to is None
+    assert edge.assertion == "asserted" and edge.is_act_eligible() is True
+
+
+def test_graph_edge_candidate_is_not_act_eligible() -> None:
+    from uuid import uuid4
+
+    from qp_vault.graph.models import GraphEdge
+
+    edge = GraphEdge(
+        source_node_id=uuid4(), target_node_id=uuid4(), relation_type="holds", assertion="candidate",
+    )
+    assert edge.is_act_eligible() is False
