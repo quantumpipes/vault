@@ -100,7 +100,9 @@
   .vtoc-h{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-300);font-weight:700;margin-bottom:10px}
   .vtocpanel a{display:block;font-size:12.5px;color:var(--ink-400);padding:4px 0 4px 10px;border-left:2px solid transparent;text-decoration:none;transition:.14s;line-height:1.35}
   .vtocpanel a:hover{color:var(--clay-600);border-left-color:var(--clay-light);text-decoration:none}
+  .vtocpanel a.lvl-h1{padding-left:6px;font-weight:600;color:var(--ink-600)}
   .vtocpanel a.lvl-h3{padding-left:22px;font-size:12px}
+  .vtocpanel a.lvl-h4{padding-left:34px;font-size:11.5px}
   .vtocpanel a.cur{color:var(--clay-600);border-left-color:var(--clay);font-weight:700}
   .vtree{background:var(--fog);border:1px solid var(--hair);border-radius:var(--r);padding:10px;height:100%;overflow-y:auto;overflow-x:hidden}
   .vtree::-webkit-scrollbar,.vmain::-webkit-scrollbar{width:9px}
@@ -268,10 +270,21 @@ if(window.VAULT_SUBTITLE){document.getElementById("appSub").textContent=window.V
 
 (function(){
   const FILES=(window.VAULT_FILES||[]).slice(), BASE=window.VAULT_BASE||"";
+  // LAZY data source (optional): when window.VAULT_LOAD_DIR(path) is defined the
+  // explorer loads one folder at a time instead of requiring the whole file list
+  // upfront, so it scales to very large vaults. Backward compatible: with no
+  // VAULT_LOAD_DIR it uses the eager window.VAULT_FILES manifest exactly as before.
+  const LAZY=typeof window.VAULT_LOAD_DIR==="function";
   const INIT_HASH=location.hash||"";  // capture before any render wipes it (setVaultHash)
-  if(!FILES.length){document.getElementById("vitems").innerHTML=vEmpty({tint:"#B07A1E",svg:'<path d="M12 5l8 14H4z"/><path d="M12 10v4M12 16h.01"/>',title:"Vault manifest not loaded",sub:"Open this file directly from disk so the file manifest can load, then reload the page."});return;}
-  const root={name:"",path:"",dirs:{},files:[]};
-  FILES.forEach(p=>{const parts=p.split("/");let node=root;for(let i=0;i<parts.length-1;i++){const seg=parts[i];node.dirs[seg]=node.dirs[seg]||{name:seg,path:parts.slice(0,i+1).join("/"),dirs:{},files:[]};node=node.dirs[seg];}node.files.push({name:parts[parts.length-1],path:p});});
+  if(!LAZY&&!FILES.length){document.getElementById("vitems").innerHTML=vEmpty({tint:"#B07A1E",svg:'<path d="M12 5l8 14H4z"/><path d="M12 10v4M12 16h.01"/>',title:"Vault manifest not loaded",sub:"Open this file directly from disk so the file manifest can load, then reload the page."});return;}
+  const root={name:"",path:"",dirs:{},files:[],loaded:!LAZY};
+  if(!LAZY){FILES.forEach(p=>{const parts=p.split("/");let node=root;for(let i=0;i<parts.length-1;i++){const seg=parts[i];node.dirs[seg]=node.dirs[seg]||{name:seg,path:parts.slice(0,i+1).join("/"),dirs:{},files:[],loaded:true};node=node.dirs[seg];}node.files.push({name:parts[parts.length-1],path:p});});}
+  // Populate a node's immediate children from the lazy source (idempotent).
+  async function ensureLoaded(node){if(!LAZY||!node||node.loaded)return;
+    let res; try{res=await window.VAULT_LOAD_DIR(node.path);}catch(e){node.loaded=true;return;}
+    res=res||{};(res.folders||[]).forEach(f=>{if(!node.dirs[f.name])node.dirs[f.name]={name:f.name,path:f.path,dirs:{},files:[],loaded:false};});
+    (res.files||[]).forEach(f=>{if(!node.files.some(x=>x.path===f.path)){const o={name:f.name,path:f.path};if(f.tier)o.tier=f.tier;node.files.push(o);}});
+    node.loaded=true;}
   const countOf=(n)=>{let c=n.files.length;for(const k in n.dirs)c+=countOf(n.dirs[k]);return c;};
   const nodeByPath=(path)=>{if(!path)return root;let n=root;for(const seg of path.split("/")){if(n&&n.dirs[seg])n=n.dirs[seg];else return n;}return n;};
   const extOf=(name)=>{const e=(name.split(".").pop()||"").toLowerCase();return ["md","pdf","typ","svg","html","json"].includes(e)?e:"txt";};
@@ -353,13 +366,17 @@ if(window.VAULT_SUBTITLE){document.getElementById("appSub").textContent=window.V
   function buildNode(d,container,depth){
     const wrap=document.createElement("div");wrap.className="tnode";
     const expanded=d.path===cur||cur.indexOf(d.path+"/")===0;if(expanded)wrap.classList.add("open");
-    const hasKids=Object.keys(d.dirs).length>0;
+    // In lazy mode an unexpanded folder's children are unknown, so it is always
+    // treated as expandable; the count is shown only once the folder is loaded.
+    const hasKids=(LAZY&&!d.loaded)||Object.keys(d.dirs).length>0;
     const tb=(depth===0&&tierMap[d.name])?`<span class="pill ${tierMap[d.name][1]}" style="margin-left:5px;font-size:9px;padding:2px 6px">${tierMap[d.name][0]}</span>`:"";
     const row=document.createElement("div");row.className="trow"+(d.path===cur?" sel":"");row.tabIndex=0;row.setAttribute("role","treeitem");
-    row.innerHTML=`<span class="tcar">${hasKids?CHEV:"&nbsp;"}</span><span class="tfi">${folderSvg(d.name,17)}</span><span class="tnm">${d.name}</span>${tb}<span class="tct">${countOf(d)}</span>`;
+    const _ct=(LAZY&&!d.loaded)?"":('<span class="tct">'+countOf(d)+'</span>');
+    row.innerHTML=`<span class="tcar">${hasKids?CHEV:"&nbsp;"}</span><span class="tfi">${folderSvg(d.name,17)}</span><span class="tnm">${d.name}</span>${tb}${_ct}`;
     const kids=document.createElement("div");kids.className="tchildren";
-    if(hasKids&&expanded){populateChildren(kids,d,depth+1);}
-    row.onclick=(e)=>{e.stopPropagation();if(hasKids){const opening=!wrap.classList.contains("open");wrap.classList.toggle("open");if(opening&&!kids.dataset.built)populateChildren(kids,d,depth+1);}selectFolder(d.path);};
+    const fill=()=>populateChildren(kids,d,depth+1);
+    if(hasKids&&expanded){if(LAZY&&!d.loaded)ensureLoaded(d).then(fill);else fill();}
+    row.onclick=(e)=>{e.stopPropagation();if(hasKids){const opening=!wrap.classList.contains("open");wrap.classList.toggle("open");if(opening&&!kids.dataset.built){if(LAZY&&!d.loaded){kids.dataset.built="1";ensureLoaded(d).then(()=>{kids.innerHTML="";Object.keys(d.dirs).sort().forEach(k=>buildNode(d.dirs[k],kids,depth+1));});}else fill();}}selectFolder(d.path);};
     wrap.appendChild(row);wrap.appendChild(kids);container.appendChild(wrap);
   }
   function populateChildren(container,node,depth){container.dataset.built="1";Object.keys(node.dirs).sort().forEach(k=>buildNode(node.dirs[k],container,depth));}
@@ -422,7 +439,11 @@ if(window.VAULT_SUBTITLE){document.getElementById("appSub").textContent=window.V
     const canV=CHUNKS[path]&&window.SHA3;
     rows.push(["Integrity",`<span class="gverdict" id="gverdict"><span class="dim">not yet verified</span></span> ${canV?`<button class="gverify" data-vp="${esc(path)}">re-verify content id</button>`:'<span class="dim">no chunk data</span>'}`]);
     return `<div class="gpanel">${rows.map(r=>`<div class="grow"><span class="gk">${r[0]}</span><span class="gv">${r[1]}</span></div>`).join("")}</div>`;}
-  function openFile(path){openPath=path;const name=path.split("/").pop();crumbFor(path);document.getElementById("vdesc").textContent="";
+  function openFile(path){
+    // Lazy content: fetch on first open via the optional loader, then re-render.
+    if(LAZY&&contentOf(path)==null&&typeof window.VAULT_LOAD_CONTENT==="function"){window.__vcTried=window.__vcTried||{};
+      if(!window.__vcTried[path]){window.__vcTried[path]=1;window.VAULT_LOAD_CONTENT(path).then(t=>{if(t!=null){CONTENT[path]=t;if(openPath===path)openFile(path);}});}}
+    openPath=path;const name=path.split("/").pop();crumbFor(path);document.getElementById("vdesc").textContent="";
     const items=document.getElementById("vitems");const c=contentOf(path);const ext=extOf(name);const raw=(name.split(".").pop()||"").toLowerCase();
     const url=BASE+encodeURI(path);const disk=esc((BASE.replace("file://","")||"")+path);const g=GOV[path];
     const _par=path.slice(0,path.length-name.length-1);const _eb=_par?`<span class="rt-eyebrow">${folderSvg(_par.split("/").pop(),12)}${esc(_par)}</span>`:`<span class="rt-eyebrow">Vault root</span>`;
@@ -454,8 +475,8 @@ if(window.VAULT_SUBTITLE){document.getElementById("appSub").textContent=window.V
       b.textContent="re-verify content id";});
     const panel=document.getElementById("vtocpanel"),body=document.getElementById("vshell-body"),m=document.querySelector(".vmain"),tt=document.getElementById("tgl-toc");
     if(!panel||!body)return;
-    const hs=[...document.querySelectorAll(".vreader h2, .vreader h3")];
-    if(hs.length<3){panel.innerHTML="";body.classList.remove("has-toc");if(tt)tt.classList.remove("on");if(m)m.onscroll=null;return;}
+    const hs=[...document.querySelectorAll(".vreader h1, .vreader h2, .vreader h3, .vreader h4")];
+    if(hs.length<2){panel.innerHTML="";body.classList.remove("has-toc");if(tt)tt.classList.remove("on");if(m)m.onscroll=null;return;}
     hs.forEach((h,i)=>h.id="vh"+i);
     panel.innerHTML=`<div class="vtoc-h">On this page</div>`+hs.map((h,i)=>`<a href="#vh${i}" data-i="${i}" class="lvl-${h.tagName.toLowerCase()}">${esc(h.textContent)}</a>`).join("");
     panel.querySelectorAll("a").forEach(a=>a.onclick=(ev)=>{ev.preventDefault();const t=document.getElementById("vh"+a.dataset.i);if(t&&m){const mr=m.getBoundingClientRect(),tr=t.getBoundingClientRect();m.scrollTo({top:m.scrollTop+(tr.top-mr.top)-14,behavior:"smooth"});}});
@@ -494,7 +515,7 @@ if(window.VAULT_SUBTITLE){document.getElementById("appSub").textContent=window.V
     crumbFor(cur);
     const segs=cur?cur.split("/"):[];const top=segs[0]||"";
     document.getElementById("vdesc").textContent=!cur?ROOT_DESC:((segs.length===1&&descMap[top])?descMap[top]:"");
-    if(!cur){const recent=allFiles.filter(f=>metaOf(f.path).m).sort((x,y)=>metaOf(y.path).m.localeCompare(metaOf(x.path).m)).slice(0,8);
+    if(!cur&&!LAZY){const recent=allFiles.filter(f=>metaOf(f.path).m).sort((x,y)=>metaOf(y.path).m.localeCompare(metaOf(x.path).m)).slice(0,8);
       if(recent.length){const wrap=el(`<div class="vrecent"><div class="vrecent-l">Recently updated</div><div class="vrchips"></div></div>`);
         recent.forEach(f=>{const chip=el(`<button class="vrchip">${fileIcon(extOf(f.name),"vic-sm")}<span class="rcn">${esc(f.name)}</span><span class="vrdt">${metaOf(f.path).m}</span></button>`);chip.onclick=()=>openFile(f.path);wrap.querySelector(".vrchips").appendChild(chip);});
         items.appendChild(wrap);}}
@@ -517,13 +538,18 @@ if(window.VAULT_SUBTITLE){document.getElementById("appSub").textContent=window.V
     if(node.files.length&&!shown.length){const fm=EXT_META[typeFilter]||EXT_META.txt;items.appendChild(el(vEmpty({tint:fm.c,svg:EM_SEARCH,title:"No "+fm.t+" files here",sub:"This folder has other file types. Clear the filter to see them all."})));}
     if(!dirKeys.length&&!node.files.length){const _t=FOLDER_TINT[folderKey(segs[segs.length-1]||"")]||FOLDER_TINT._default;items.appendChild(el(vEmpty({tint:_t,svg:EM_FOLDER,title:"Nothing here yet",sub:"This folder is empty."})));}
   }
-  function selectFolder(path){cur=path;typeFilter="all";const vq=document.getElementById("vq");if(vq)vq.value="";renderTree();renderContents();const _m=document.querySelector(".vmain");if(_m)_m.scrollTop=0;layoutResizers();setVaultHash("/"+path);}
+  async function selectFolder(path){cur=path;typeFilter="all";const vq=document.getElementById("vq");if(vq)vq.value="";
+    if(LAZY){const n=nodeByPath(cur);await ensureLoaded(n);await Promise.all(Object.keys(n.dirs).map(k=>ensureLoaded(n.dirs[k])));}
+    renderTree();renderContents();const _m=document.querySelector(".vmain");if(_m)_m.scrollTop=0;layoutResizers();setVaultHash("/"+path);}
   function doSearch(qraw){const q=(qraw||"").trim();const ql=q.toLowerCase();const items=document.getElementById("vitems");const _m=document.querySelector(".vmain");if(_m){_m.scrollTop=0;_m.onscroll=null;}openPath="";
     const _b=document.getElementById("vshell-body");if(_b)_b.classList.remove("has-toc");const _tp=document.getElementById("vtocpanel");if(_tp)_tp.innerHTML="";const _tt=document.getElementById("tgl-toc");if(_tt)_tt.classList.remove("on");
     if(!ql){renderContents();return;}
     document.getElementById("vcrumb").innerHTML=`<span class="cur">Search</span> <span class="sep">/</span> <span class="dim">"${esc(q)}"</span>`;document.getElementById("vdesc").textContent="";
     const nameHits=[],contentHits=[];
-    FILES.forEach(p=>{if(p.toLowerCase().includes(ql)){nameHits.push({name:p.split("/").pop(),path:p});return;}
+    // Eager: search the whole manifest. Lazy: search the files loaded so far (the
+    // folders browsed); a host can supply window.VAULT_SEARCH for full-vault search.
+    const corpus=LAZY?(function collect(n,acc){n.files.forEach(f=>acc.push(f.path));for(const k in n.dirs)collect(n.dirs[k],acc);return acc;})(root,[]):FILES;
+    corpus.forEach(p=>{if(p.toLowerCase().includes(ql)){nameHits.push({name:p.split("/").pop(),path:p});return;}
       const c=contentOf(p);if(c&&c.toLowerCase().includes(ql))contentHits.push({name:p.split("/").pop(),path:p,snip:snippet(c,ql)});});
     if(hasGov){const byTier=(a,b)=>tierWeight(b.path)-tierWeight(a.path)||a.name.localeCompare(b.name);nameHits.sort(byTier);contentHits.sort(byTier);}
     items.innerHTML="";const total=nameHits.length+contentHits.length;
@@ -534,21 +560,25 @@ if(window.VAULT_SUBTITLE){document.getElementById("appSub").textContent=window.V
     layoutResizers();
   }
   document.getElementById("vq").addEventListener("input",e=>doSearch(e.target.value));
-  document.getElementById("vcount").textContent=countOf(root)+" files in "+(function c(n){let d=0;for(const k in n.dirs)d+=1+c(n.dirs[k]);return d;})(root)+" folders";
+  document.getElementById("vcount").textContent=LAZY?"":(countOf(root)+" files in "+(function c(n){let d=0;for(const k in n.dirs)d+=1+c(n.dirs[k]);return d;})(root)+" folders");
   function treeKeys(e){const rows=[...document.querySelectorAll("#vtree .trow")];if(!rows.length)return;const i=rows.indexOf(document.activeElement);
     if(e.key==="ArrowDown"){e.preventDefault();(rows[Math.min(rows.length-1,i+1)]||rows[0]).focus();}
     else if(e.key==="ArrowUp"){e.preventDefault();(rows[Math.max(0,i-1)]||rows[0]).focus();}
     else if((e.key==="Enter"||e.key==="ArrowRight"||e.key==="ArrowLeft")&&document.activeElement.classList&&document.activeElement.classList.contains("trow")){e.preventDefault();document.activeElement.click();}}
   document.getElementById("vtree").addEventListener("keydown",treeKeys);
-  document.addEventListener("keydown",e=>{if(!document.getElementById("v-vault").classList.contains("active"))return;const a=document.activeElement;
+  document.addEventListener("keydown",e=>{const vv=document.getElementById("v-vault");if(vv&&!vv.classList.contains("active"))return;const a=document.activeElement;
     if(e.key==="/"&&(!a||a.tagName!=="INPUT")){e.preventDefault();document.getElementById("vq").focus();}
+    else if(e.key==="t"&&(!a||a.tagName!=="INPUT")){e.preventDefault();const tg=document.getElementById("tgl-toc");if(tg)tg.click();}
     else if(e.key==="Escape"&&a&&a.id==="vq"){a.value="";doSearch("");a.blur();}});
   const sbody=document.getElementById("vshell-body"),tglTree=document.getElementById("tgl-tree"),tglToc=document.getElementById("tgl-toc");
   if(tglTree&&sbody)tglTree.onclick=()=>{const c=sbody.classList.toggle("tree-collapsed");tglTree.classList.toggle("on",!c);layoutResizers();savePrefs();};
   if(tglToc&&sbody)tglToc.onclick=()=>{const p=document.getElementById("vtocpanel");if(!p||!p.innerHTML.trim())return;const on=sbody.classList.toggle("has-toc");tglToc.classList.toggle("on",on);layoutResizers();};
   const lsKey="qp-vault-prefs-v1";
-  function savePrefs(){try{const b=document.getElementById("vshell-body");localStorage.setItem(lsKey,JSON.stringify({tw:b.style.getPropertyValue("--tw"),cw:b.style.getPropertyValue("--cw"),tc:b.classList.contains("tree-collapsed")}));}catch(e){}}
-  function loadPrefs(){try{const p=JSON.parse(localStorage.getItem(lsKey)||"{}");const b=document.getElementById("vshell-body");if(!b)return;if(p.tw)b.style.setProperty("--tw",p.tw);if(p.cw)b.style.setProperty("--cw",p.cw);if(p.tc){b.classList.add("tree-collapsed");if(tglTree)tglTree.classList.remove("on");}}catch(e){}}
+  // localStorage throws in a null-origin sandbox (the governed cage); fall back to
+  // sessionStorage so resizer widths still persist within the session.
+  function _store(){try{if(window.localStorage){window.localStorage.getItem(lsKey);return window.localStorage;}}catch(e){}try{if(window.sessionStorage)return window.sessionStorage;}catch(e){}return null;}
+  function savePrefs(){try{const s=_store();if(!s)return;const b=document.getElementById("vshell-body");s.setItem(lsKey,JSON.stringify({tw:b.style.getPropertyValue("--tw"),cw:b.style.getPropertyValue("--cw"),tc:b.classList.contains("tree-collapsed")}));}catch(e){}}
+  function loadPrefs(){try{const s=_store();if(!s)return;const p=JSON.parse(s.getItem(lsKey)||"{}");const b=document.getElementById("vshell-body");if(!b)return;if(p.tw)b.style.setProperty("--tw",p.tw);if(p.cw)b.style.setProperty("--cw",p.cw);if(p.tc){b.classList.add("tree-collapsed");if(tglTree)tglTree.classList.remove("on");}}catch(e){}}
   function layoutResizers(){const b=document.getElementById("vshell-body");if(!b)return;const br=b.getBoundingClientRect();if(br.width<2)return;
     const tree=document.getElementById("vtree"),toc=document.getElementById("vtocpanel"),lh=document.getElementById("rsz-l"),rh=document.getElementById("rsz-r");
     if(lh){if(!b.classList.contains("tree-collapsed")&&tree){lh.classList.add("show");lh.style.left=(tree.getBoundingClientRect().right-br.left+2)+"px";}else lh.classList.remove("show");}
@@ -563,7 +593,10 @@ if(window.VAULT_SUBTITLE){document.getElementById("appSub").textContent=window.V
   {const lh=document.getElementById("rsz-l"),rh=document.getElementById("rsz-r");if(lh)lh.addEventListener("mousedown",e=>startDrag("l",e));if(rh)rh.addEventListener("mousedown",e=>startDrag("r",e));}
   window.addEventListener("resize",layoutResizers);
   loadPrefs();
-  window.__vault={open:openFile,folder:selectFolder,layout:layoutResizers};
+  // Public API for hosts (esp. live/lazy data sources): open a file, drill into a
+  // folder, re-layout, or refresh a folder (invalidate its lazy cache and reload).
+  window.__vault={open:openFile,folder:selectFolder,layout:layoutResizers,
+    refresh:async function(p){const n=nodeByPath(p!=null?p:cur);if(n&&LAZY){n.loaded=false;n.dirs={};n.files=[];}await selectFolder(p!=null?p:cur);}};
   renderTree();
   // deep-link restore: #vault/<folder> opens a folder, #vault!<path> opens a file; else show root
   (function(){const h=decodeURIComponent(INIT_HASH.replace(/^#/,""));const rest=h.indexOf("vault")===0?h.slice(5):"";

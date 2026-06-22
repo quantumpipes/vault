@@ -54,6 +54,41 @@ Optional globals tune the chrome and governance display:
 
 `generate_manifest.py` is just the simplest producer of that contract.
 
+## Lazy data source (for large vaults)
+
+The eager contract above loads the whole file list upfront, which is fine up to tens of
+thousands of files. For a very large vault (or a live, governed source where you do not
+want to ship everything to the page), define a **lazy loader** instead and the explorer
+loads one folder at a time, on demand, like a native file explorer:
+
+| Global | Shape | Purpose |
+|---|---|---|
+| `window.VAULT_LOAD_DIR` | `(path) => Promise<{ folders: [{name,path}], files: [{name,path,tier?}] }>` | When defined, switches the explorer to lazy mode: a folder's children are fetched only when it is opened. `path` is `""` for the root. |
+| `window.VAULT_LOAD_CONTENT` | `(path) => Promise<string \| null>` | Fetch a file's text on open (instead of inlining everything in `VAULT_CONTENT`). |
+
+In lazy mode the tree, the card view, and the reader all populate incrementally; the
+optional `tier` on a file lights up its trust pill. Search covers the folders browsed so
+far (a host can wire full-vault search separately). If `VAULT_LOAD_DIR` is absent the
+explorer behaves exactly as before, so the static-manifest path is unchanged.
+
+### Governed / live hosts (write, live updates, verification)
+
+The explorer itself stays read-only and presentational; a host adds the governed pieces:
+
+- **Live updates.** Subscribe to your change feed and call `window.__vault.refresh(folder)`
+  to invalidate a folder's lazy cache and reload it (and drop the changed file from
+  `VAULT_CONTENT` so its next open re-reads). `window.__vault.open(path)` re-renders a file.
+- **Write.** Layer a small toolbar (edit/create/delete) that calls your write endpoint,
+  then `__vault.refresh()` the affected folder. The explorer needs no changes.
+- **Verification.** Populate `VAULT_GOV` / `VAULT_CHUNKS` (per resource: trust tier and a
+  `vault://sha3-256/<hex>` content id + its chunk) and the reader shows trust pills and an
+  in-browser SHA3 re-verify button (`sha3.js`).
+
+This is exactly how the Quantum Pipes governed Vault panel drives the same explorer over a
+live, scope-checked broker (`vault.dir` / `vault.get` for lazy reads, `vault.changes` for
+live, `vault.put` / `vault.create` / `vault.delete` for disk-first writes, `vault.export`
+for verification) instead of a baked manifest.
+
 ## Governance mode (qp-vault export)
 
 Pass a `vault.export_vault()` JSON instead of a directory and the explorer becomes a

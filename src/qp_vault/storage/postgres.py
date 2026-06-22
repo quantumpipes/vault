@@ -148,6 +148,14 @@ CREATE TABLE IF NOT EXISTS qp_vault.graph_edges (
     weight FLOAT DEFAULT 0.5,
     bidirectional BOOLEAN DEFAULT FALSE,
     source_resource_id TEXT REFERENCES qp_vault.resources(id) ON DELETE SET NULL,
+    -- World-model bitemporal validity + curation state (FR-3.1, Decision-1 parity
+    -- with core quantumpipes_graph_edges). assertion defaults to 'asserted' so
+    -- existing edges stay act-eligible; the confidence gate (FR-3.4) excludes
+    -- 'candidate'. valid_to NULL means still valid.
+    valid_from TIMESTAMPTZ,
+    valid_to TIMESTAMPTZ,
+    assertion VARCHAR(20) NOT NULL DEFAULT 'asserted',
+    provenance VARCHAR(500),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (source_node_id, target_node_id, relation_type)
@@ -186,6 +194,11 @@ CREATE INDEX IF NOT EXISTS idx_graph_nodes_type ON qp_vault.graph_nodes(entity_t
 CREATE INDEX IF NOT EXISTS idx_graph_nodes_slug ON qp_vault.graph_nodes(slug);
 CREATE INDEX IF NOT EXISTS idx_graph_edges_source ON qp_vault.graph_edges(source_node_id);
 CREATE INDEX IF NOT EXISTS idx_graph_edges_target ON qp_vault.graph_edges(target_node_id);
+-- World-model bitemporal/assertion columns for existing schemas (FR-3.1 parity).
+ALTER TABLE qp_vault.graph_edges ADD COLUMN IF NOT EXISTS valid_from TIMESTAMPTZ;
+ALTER TABLE qp_vault.graph_edges ADD COLUMN IF NOT EXISTS valid_to TIMESTAMPTZ;
+ALTER TABLE qp_vault.graph_edges ADD COLUMN IF NOT EXISTS assertion VARCHAR(20) NOT NULL DEFAULT 'asserted';
+ALTER TABLE qp_vault.graph_edges ADD COLUMN IF NOT EXISTS provenance VARCHAR(500);
 CREATE INDEX IF NOT EXISTS idx_graph_mentions_node ON qp_vault.graph_mentions(node_id);
 CREATE INDEX IF NOT EXISTS idx_graph_mentions_resource ON qp_vault.graph_mentions(resource_id);
 CREATE INDEX IF NOT EXISTS idx_graph_scan_jobs_space ON qp_vault.graph_scan_jobs(space_id);
@@ -225,6 +238,7 @@ WITH RECURSIVE traversal AS (
     JOIN qp_vault.graph_nodes n ON n.id = e.target_node_id
     WHERE e.source_node_id = start_node_id
       AND (filter_types IS NULL OR e.relation_type = ANY(filter_types))
+      AND e.assertion <> 'candidate'
       AND (filter_space IS NULL OR n.primary_space_id = filter_space
            OR EXISTS (SELECT 1 FROM qp_vault.graph_node_spaces ns WHERE ns.node_id = n.id AND ns.space_id = filter_space))
 
@@ -244,6 +258,7 @@ WITH RECURSIVE traversal AS (
     WHERE t.depth < max_depth
       AND NOT (e.target_node_id = ANY(t.path))
       AND (filter_types IS NULL OR e.relation_type = ANY(filter_types))
+      AND e.assertion <> 'candidate'
       AND (filter_space IS NULL OR n.primary_space_id = filter_space
            OR EXISTS (SELECT 1 FROM qp_vault.graph_node_spaces ns WHERE ns.node_id = n.id AND ns.space_id = filter_space))
 )
@@ -1164,12 +1179,18 @@ class PostgresBackend:
                 """INSERT INTO qp_vault.graph_edges (
                     id, tenant_id, source_node_id, target_node_id,
                     relation_type, properties, weight, bidirectional,
-                    source_resource_id, created_at, updated_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    source_resource_id, created_at, updated_at,
+                    valid_from, valid_to, assertion, provenance
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+                          $12, $13, $14, $15)
                 ON CONFLICT (source_node_id, target_node_id, relation_type) DO UPDATE
                 SET properties = EXCLUDED.properties,
                     weight = EXCLUDED.weight,
-                    updated_at = EXCLUDED.updated_at""",
+                    updated_at = EXCLUDED.updated_at,
+                    valid_from = EXCLUDED.valid_from,
+                    valid_to = EXCLUDED.valid_to,
+                    assertion = EXCLUDED.assertion,
+                    provenance = EXCLUDED.provenance""",
                 edge["id"], edge["tenant_id"], edge["source_node_id"],
                 edge["target_node_id"], edge["relation_type"],
                 json.dumps(edge.get("properties", {})),
@@ -1177,6 +1198,8 @@ class PostgresBackend:
                 edge.get("source_resource_id"),
                 edge.get("created_at", datetime.now(tz=UTC)),
                 edge.get("updated_at", datetime.now(tz=UTC)),
+                edge.get("valid_from"), edge.get("valid_to"),
+                edge.get("assertion", "asserted"), edge.get("provenance"),
             )
         return str(edge["id"])
 

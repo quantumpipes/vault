@@ -420,6 +420,36 @@ class AsyncVault:
             )
         return tenant_id
 
+    def _enforce_tenant_scope(self, resource: Resource) -> Resource:
+        """Reject a resource that belongs to a different tenant.
+
+        Direct-by-ID accessors (``get``, ``get_content``, ``chain`` ...) do not
+        carry a tenant filter, so on a tenant-locked vault they would otherwise
+        return *any* resource whose id the caller can name. That is a
+        cross-tenant retrieval leak (IDOR / broken access control): a locked
+        operator could read another tenant's restricted content simply by
+        guessing or replaying its id. Enforce the lock here so by-id reads are
+        scoped exactly like ``list``/``search``.
+
+        A foreign resource is reported as not-found (same shape as a missing id)
+        so the boundary does not confirm that the id exists in another tenant.
+
+        Args:
+            resource: The resource just fetched by id.
+
+        Returns:
+            The resource, unchanged, when access is permitted.
+
+        Raises:
+            VaultError: When the vault is tenant-locked and the resource belongs
+                to a different tenant.
+        """
+        if self._locked_tenant_id is None:
+            return resource
+        if resource.tenant_id != self._locked_tenant_id:
+            raise VaultError(f"Resource not found: {resource.id}")
+        return resource
+
     async def _tracked(self, operation: str, coro: Any) -> Any:
         """Run a coroutine with telemetry tracking."""
         import time as _time
@@ -622,7 +652,7 @@ class AsyncVault:
     async def get(self, resource_id: str) -> Resource:
         """Get a single resource by ID."""
         await self._ensure_initialized()
-        resource = await self._resource_manager.get(resource_id)
+        resource = self._enforce_tenant_scope(await self._resource_manager.get(resource_id))
 
         # Audit reads on RESTRICTED resources
         if resource.data_classification == DataClassification.RESTRICTED:
@@ -648,7 +678,13 @@ class AsyncVault:
             List of found Resources (missing IDs silently omitted).
         """
         await self._ensure_initialized()
-        return await self._storage.get_resources(resource_ids)
+        resources = await self._storage.get_resources(resource_ids)
+        if self._locked_tenant_id is None:
+            return resources
+        # Tenant-locked: drop any resource owned by another tenant (same silent
+        # omission contract as a missing id) so a batch read cannot exfiltrate
+        # cross-tenant resources by id.
+        return [r for r in resources if r.tenant_id == self._locked_tenant_id]
 
     async def list(
         self,
@@ -730,6 +766,9 @@ class AsyncVault:
         """Update resource metadata."""
         await self._ensure_initialized()
         self._check_permission("update")
+        # Enforce tenant scope before mutating: a locked vault must not be able
+        # to update another tenant's resource by id.
+        self._enforce_tenant_scope(await self._resource_manager.get(resource_id))
         result = await self._resource_manager.update(
             resource_id,
             name=name,
@@ -753,7 +792,7 @@ class AsyncVault:
         await self._ensure_initialized()
         self._check_permission("delete")
         # Fetch name before deletion for the event
-        resource = await self._resource_manager.get(resource_id)
+        resource = self._enforce_tenant_scope(await self._resource_manager.get(resource_id))
         await self._resource_manager.delete(resource_id, hard=hard)
         self._cache_invalidate()
         await self._fire_hook("post_delete", resource_id=resource_id)
@@ -780,7 +819,7 @@ class AsyncVault:
         self._check_permission("get_content")
 
         # Block content retrieval for quarantined resources
-        resource = await self._resource_manager.get(resource_id)
+        resource = self._enforce_tenant_scope(await self._resource_manager.get(resource_id))
         if resource.status == ResourceStatus.QUARANTINED:
             raise VaultError(
                 f"Resource {resource_id} is quarantined by Membrane screening"
@@ -808,8 +847,8 @@ class AsyncVault:
         await self._ensure_initialized()
         self._check_permission("update")
 
-        # Verify resource exists and get content
-        await self._resource_manager.get(resource_id)
+        # Verify resource exists, is in-tenant, and get content
+        self._enforce_tenant_scope(await self._resource_manager.get(resource_id))
         chunks = await self._storage.get_chunks_for_resource(resource_id)
         if not chunks:
             raise VaultError(f"No content found for resource {resource_id}")
@@ -990,6 +1029,7 @@ class AsyncVault:
         """
         await self._ensure_initialized()
         self._check_permission("get_provenance")
+        self._enforce_tenant_scope(await self._resource_manager.get(resource_id))
         return await self._storage.get_provenance(resource_id)
 
     async def set_adversarial_status(self, resource_id: str, status: str) -> Resource:
@@ -1004,6 +1044,7 @@ class AsyncVault:
         """
         await self._ensure_initialized()
         self._check_permission("set_adversarial_status")
+        self._enforce_tenant_scope(await self._resource_manager.get(resource_id))
         from qp_vault.protocols import ResourceUpdate
         return await self._storage.update_resource(
             resource_id, ResourceUpdate(adversarial_status=status)
@@ -1030,6 +1071,7 @@ class AsyncVault:
         """
         await self._ensure_initialized()
         self._check_permission("transition")
+        self._enforce_tenant_scope(await self._resource_manager.get(resource_id))
         result = await self._lifecycle.transition(resource_id, target, reason=reason)
         await self._fire_hook("post_transition", resource=result, target=target)
         await self._notify_subscribers(VaultEvent(
@@ -1047,6 +1089,9 @@ class AsyncVault:
         """Mark old resource as superseded by new resource."""
         await self._ensure_initialized()
         self._check_permission("supersede")
+        # Both ends of a supersession must be in-tenant on a locked vault.
+        self._enforce_tenant_scope(await self._resource_manager.get(old_id))
+        self._enforce_tenant_scope(await self._resource_manager.get(new_id))
         return await self._lifecycle.supersede(old_id, new_id)
 
     async def expiring(self, *, days: int = 90) -> list[Resource]:
@@ -1057,6 +1102,7 @@ class AsyncVault:
     async def chain(self, resource_id: str) -> list[Resource]:
         """Get the full supersession chain for a resource."""
         await self._ensure_initialized()
+        self._enforce_tenant_scope(await self._resource_manager.get(resource_id))
         return await self._lifecycle.chain(resource_id)
 
     async def diff(self, old_id: str, new_id: str) -> dict[str, Any]:
@@ -1468,6 +1514,12 @@ class AsyncVault:
         from qp_vault.core.hasher import compute_merkle_proof, compute_merkle_root
         from qp_vault.models import MerkleProof
 
+        # On a tenant-locked vault, refuse to mint a proof for (or confirm the
+        # existence of) a resource owned by another tenant. Only pre-fetch when
+        # locked so the unlocked empty-vault path keeps its original error.
+        if self._locked_tenant_id is not None:
+            self._enforce_tenant_scope(await self._resource_manager.get(resource_id))
+
         all_hashes = await self._storage.get_all_hashes()
         if not all_hashes:
             raise VaultError("Cannot export proof from empty vault")
@@ -1581,7 +1633,11 @@ class AsyncVault:
         self._check_permission("export_vault")
         if base_dir is not None:
             path = self._confine_path(path, base_dir)
-        resources: list[Resource] = await self._list_all_bounded()
+        # Scope the export to the locked tenant so a tenant-locked operator
+        # cannot exfiltrate every tenant's content + chunks in one call.
+        resources: list[Resource] = await self._list_all_bounded(
+            tenant_id=self._locked_tenant_id
+        )
         export_resources = []
         for r in resources:
             r_dict = r.model_dump(mode="json")
@@ -1636,12 +1692,28 @@ class AsyncVault:
             imported.append(resource)
         return imported
 
-    async def _list_all_bounded(self, *, hard_cap: int = _LIST_HARD_CAP, batch_size: int = _LIST_BATCH_SIZE) -> list[Resource]:
-        """Load all resources with pagination and a hard cap to prevent OOM."""
+    async def _list_all_bounded(
+        self,
+        *,
+        tenant_id: str | None = None,
+        hard_cap: int = _LIST_HARD_CAP,
+        batch_size: int = _LIST_BATCH_SIZE,
+    ) -> list[Resource]:
+        """Load all resources with pagination and a hard cap to prevent OOM.
+
+        Args:
+            tenant_id: When set, restrict the load to that tenant. Callers pass
+                the locked tenant so bulk operations (e.g. export) never span
+                tenants.
+            hard_cap: Maximum number of resources to load.
+            batch_size: Page size for the underlying list query.
+        """
         all_resources: list[Resource] = []
         offset = 0
         while offset < hard_cap:
-            batch = await self._resource_manager.list(limit=batch_size, offset=offset)
+            batch = await self._resource_manager.list(
+                tenant_id=tenant_id, limit=batch_size, offset=offset
+            )
             if not batch:
                 break
             all_resources.extend(batch)
