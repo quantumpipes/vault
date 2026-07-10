@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
@@ -40,6 +41,16 @@ class VaultConfig(BaseModel):
     text_weight: float = 0.3
     default_top_k: int = 10
     default_threshold: float = 0.0
+
+    # Hybrid retrieval fusion (askqp-100 I1). RRF (Reciprocal Rank Fusion) is a
+    # scale-free alternative to the linear vector/text blend. Flag-gated and OFF
+    # by default: the eval harness (I2) must show it meets or beats the legacy
+    # blend before the default flips. Env override: QP_RETRIEVAL_RRF=1.
+    rrf_enabled: bool = Field(
+        default_factory=lambda: os.getenv("QP_RETRIEVAL_RRF", "").strip().lower()
+        in ("1", "true", "yes", "on")
+    )
+    rrf_k: int = 60  # The standard RRF constant.
 
     # Grep scoring (coverage is a multiplier, these weight the base score)
     grep_rank_weight: float = 0.7       # Weight for native text rank (FTS5/trigram)

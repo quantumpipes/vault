@@ -1,0 +1,10 @@
+{"id": "q001", "question": "How long does the on-call engineer have to acknowledge an incident?", "relevant_resource_ids": ["incident-response"], "category": "lookup", "author": "bootstrap", "added": "2026-07-10"}
+{"id": "q002", "question": "What is the goal for reducing new-hire onboarding time?", "relevant_resource_ids": ["onboarding"], "category": "lookup", "author": "bootstrap", "added": "2026-07-10"}
+{"id": "q003", "question": "What does a P0 incident severity require?", "relevant_resource_ids": ["incident-response"], "category": "acronym", "author": "bootstrap", "added": "2026-07-10"}
+{"id": "q004", "question": "Which two teams coordinate to make a new hire ready on day one?", "relevant_resource_ids": ["onboarding"], "category": "synthesis", "author": "bootstrap", "added": "2026-07-10"}
+{"id": "q005", "question": "When are full database backups taken and how long are they kept?", "relevant_resource_ids": ["backup-policy"], "category": "lookup", "author": "bootstrap", "added": "2026-07-10"}
+{"id": "q006", "question": "How many years are customer records kept?", "relevant_resource_ids": ["data-retention"], "category": "paraphrase", "author": "bootstrap", "added": "2026-07-10"}
+{"id": "q007", "question": "What is the request ceiling per minute for an API key?", "relevant_resource_ids": ["api-rate-limits"], "category": "lookup", "author": "bootstrap", "added": "2026-07-10"}
+{"id": "q008", "question": "Which algorithm encrypts data at rest?", "relevant_resource_ids": ["encryption-standards"], "category": "acronym", "author": "bootstrap", "added": "2026-07-10"}
+{"id": "q009", "question": "How many approvals does a production release need?", "relevant_resource_ids": ["release-process", "code-review"], "category": "synthesis", "author": "bootstrap", "added": "2026-07-10"}
+{"id": "q010", "question": "What is not permitted during a code freeze?", "relevant_resource_ids": ["release-process"], "category": "negation", "author": "bootstrap", "added": "2026-07-10"}

@@ -1,0 +1,7 @@
+{
+  "model": "nomic-embed-text",
+  "dimension": 768,
+  "corpus_hash": "9f513c5c8cd63fe0d0eb0180171c68fe289f645fa9133541c1db6c28b7ab7187",
+  "doc_count": 12,
+  "question_count": 10
+}

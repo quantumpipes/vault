@@ -277,6 +277,17 @@ CREATE INDEX IF NOT EXISTS idx_chunks_content_trgm ON qp_vault.chunks
     USING gin (content gin_trgm_ops);
 """
 
+# Full-text arm for RRF (askqp-100 I1). A STORED generated column means zero
+# write-path changes: Postgres computes it, and ADD COLUMN populates every
+# existing row. Idempotent, so it is safe to run on each initialize().
+_FTS_DDL = """
+ALTER TABLE qp_vault.chunks
+    ADD COLUMN IF NOT EXISTS content_fts tsvector
+    GENERATED ALWAYS AS (to_tsvector('english', content)) STORED;
+CREATE INDEX IF NOT EXISTS idx_chunks_content_fts ON qp_vault.chunks
+    USING gin (content_fts);
+"""
+
 _HYBRID_SEARCH_SQL = """
 WITH scored AS (
     SELECT
@@ -309,6 +320,58 @@ WHERE (vector_sim > 0 OR text_rank > 0)
   AND ($3 * vector_sim + $4 * text_rank) >= $5
 ORDER BY raw_score DESC
 LIMIT $6
+"""
+
+# Reciprocal Rank Fusion (askqp-100 I1), flag-gated by rrf_enabled. Two ranked
+# arms (vector cosine + full-text) fused as sum(1 / (k + rank)); an item absent
+# from an arm contributes 0. The legacy linear weights/threshold are deliberately
+# NOT applied here (RRF scores live on a different scale; trust-weighting
+# downstream re-ranks as it already does), so this query binds a compact,
+# fully-referenced parameter set (every param must be typeable by Postgres):
+# $1 embedding, $2 query_text, $3 top_k, $4 rrf_k; filter clauses start at $5.
+# The resources alias `r` inside each CTE matches the {extra_where} clauses built
+# for the legacy query (which reference `r.`).
+_RRF_SEARCH_SQL = """
+WITH vec AS (
+    SELECT c.id, ROW_NUMBER() OVER (ORDER BY c.embedding <=> $1::vector) AS r
+    FROM qp_vault.chunks c
+    JOIN qp_vault.resources r ON c.resource_id = r.id
+    WHERE $1::vector IS NOT NULL AND c.embedding IS NOT NULL
+      AND r.status = 'indexed'
+      {extra_where}
+    LIMIT $3 * 4
+),
+fts AS (
+    SELECT c.id, ROW_NUMBER() OVER (
+        ORDER BY ts_rank_cd(c.content_fts, plainto_tsquery('english', $2)) DESC
+    ) AS r
+    FROM qp_vault.chunks c
+    JOIN qp_vault.resources r ON c.resource_id = r.id
+    WHERE $2 != '' AND c.content_fts @@ plainto_tsquery('english', $2)
+      AND r.status = 'indexed'
+      {extra_where}
+    LIMIT $3 * 4
+)
+SELECT
+    c.id AS chunk_id,
+    c.resource_id,
+    c.content,
+    c.cid AS chunk_cid,
+    c.page_number,
+    c.section_title,
+    r.name AS resource_name,
+    r.trust_tier,
+    r.lifecycle,
+    COALESCE(1.0 / ($4 + vec.r), 0) + COALESCE(1.0 / ($4 + fts.r), 0) AS raw_score,
+    COALESCE(1.0 / ($4 + vec.r), 0) AS vector_sim,
+    COALESCE(1.0 / ($4 + fts.r), 0) AS text_rank
+FROM (SELECT id FROM vec UNION SELECT id FROM fts) u
+JOIN qp_vault.chunks c ON c.id = u.id
+JOIN qp_vault.resources r ON c.resource_id = r.id
+LEFT JOIN vec ON vec.id = u.id
+LEFT JOIN fts ON fts.id = u.id
+ORDER BY raw_score DESC
+LIMIT $3
 """
 
 
@@ -344,6 +407,8 @@ class PostgresBackend:
         ssl: bool | str = "prefer",
         ssl_verify: bool = False,
         graph_schema: str = "qp_vault",
+        rrf_enabled: bool = False,
+        rrf_k: int = 60,
     ) -> None:
         """Initialize PostgresBackend.
 
@@ -358,6 +423,10 @@ class PostgresBackend:
             graph_schema: Schema prefix for graph tables. Set to ``"quantumpipes"``
                 to read/write Core's existing ``quantumpipes_graph_*`` tables
                 during the migration period. Default: ``"qp_vault"``.
+            rrf_enabled: When True, ``search`` fuses the vector and full-text arms
+                with Reciprocal Rank Fusion instead of the linear weighted blend
+                (askqp-100 I1). Off by default; flip via config/``QP_RETRIEVAL_RRF``.
+            rrf_k: The RRF constant ``k`` (standard value 60).
         """
         if not HAS_ASYNCPG:
             raise ImportError(
@@ -381,6 +450,8 @@ class PostgresBackend:
                 f"got: {graph_schema!r}"
             )
         self._graph_schema = graph_schema
+        self._rrf_enabled = rrf_enabled
+        self._rrf_k = rrf_k
         self._pool: Any = None
 
     def _gt(self, table: str) -> str:
@@ -467,6 +538,8 @@ class PostgresBackend:
                 await conn.execute(_HNSW_INDEX)
             with contextlib.suppress(Exception):
                 await conn.execute(_TRGM_INDEX)
+            with contextlib.suppress(Exception):
+                await conn.execute(_FTS_DDL)
             gs = self._graph_schema
             graph_ddl = _GRAPH_SCHEMA.replace("qp_vault.", f"{gs}.")
             await conn.execute(graph_ddl)
@@ -688,10 +761,12 @@ class PostgresBackend:
         """Hybrid search: pgvector cosine + pg_trgm similarity."""
         pool = await self._get_pool()
 
-        # Build parameterized filter conditions (no string interpolation)
+        # Build parameterized filter conditions (no string interpolation).
+        # Legacy binds $1-$6, so filters start at $7. RRF binds a compact
+        # $1-$4 (emb, text, top_k, rrf_k), so its filters start at $5.
         extra_conditions: list[str] = []
         extra_params: list[Any] = []
-        param_idx = 7  # $1-$6 are used by the base query
+        param_idx = 5 if self._rrf_enabled else 7
 
         if query.filters:
             if query.filters.trust_tier:
@@ -708,19 +783,29 @@ class PostgresBackend:
                 param_idx += 1
 
         extra_where = (" AND " + " AND ".join(extra_conditions)) if extra_conditions else ""
-        sql = _HYBRID_SEARCH_SQL.format(extra_where=extra_where)
-
         embedding_param = str(query.query_embedding) if query.query_embedding else None
 
-        all_params = [
-            embedding_param,
-            query.query_text or "",
-            query.vector_weight,
-            query.text_weight,
-            query.threshold,
-            query.top_k,
-            *extra_params,
-        ]
+        if self._rrf_enabled:
+            # Compact, fully-referenced params: $1 emb, $2 text, $3 top_k, $4 k.
+            sql = _RRF_SEARCH_SQL.format(extra_where=extra_where)
+            all_params = [
+                embedding_param,
+                query.query_text or "",
+                query.top_k,
+                self._rrf_k,
+                *extra_params,
+            ]
+        else:
+            sql = _HYBRID_SEARCH_SQL.format(extra_where=extra_where)
+            all_params = [
+                embedding_param,
+                query.query_text or "",
+                query.vector_weight,
+                query.text_weight,
+                query.threshold,
+                query.top_k,
+                *extra_params,
+            ]
 
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *all_params)
