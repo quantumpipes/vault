@@ -60,7 +60,8 @@ docs/             16 topic docs (getting-started, architecture, trust-tiers, lif
 - Type hints on every public function, docstrings on public classes and methods.
 - **Async-first:** all I/O must be async. Never block the event loop.
 - **No hardcoded values:** configurable settings go through `VaultConfig`.
-- **Crypto allowlist:** SHA3-256, AES-256-GCM, ML-KEM-768, ML-DSA-65, Ed25519 (via qp-capsule). **Never** MD5, SHA1, SHA2, RSA, 3DES, RC4.
+- **Crypto allowlist:** SHA3-256, AES-256-GCM, ML-KEM-768, ML-DSA-65, Ed25519 (via qp-capsule). **Never** MD5, SHA1, RSA, 3DES, RC4.
+  <!-- SHA2 removed from the ban 2026-07-28: Ed25519 uses SHA-512 internally, so the ban prohibited the signature scheme this file allowlists. See root CLAUDE.md. -->
 
 Plugin pattern:
 ```python
