@@ -53,6 +53,10 @@ services:
       VAULT_TEST_POSTGRES_DSN: "postgresql://vault:vault_test@postgres:5432/test_vault"
       VAULT_TEST_OLLAMA: "1"
       OLLAMA_HOST: "http://ollama:11434"
+      # Sidecar service on the same compose network, not a loopback name. The
+      # on-device gate matches loopback only, so declare it or every embedding
+      # call in this suite refuses.
+      QP_LOCAL_INFERENCE_HOSTS: "ollama"
       VAULT_TEST_ALL_EXTRAS: "1"
     volumes:
       - ./tests:/app/tests:ro
