@@ -9,7 +9,7 @@ Run:
     python examples/quickstart.py
 """
 
-from qp_vault import Vault, TrustTier, MemoryLayer
+from qp_vault import Vault
 
 # Create a vault (SQLite, zero config)
 vault = Vault("./example-vault")
