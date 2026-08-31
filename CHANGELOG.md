@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-08-30
+
+**Why this follows 1.5.2 and not 1.6.0.** Versions 1.6.0 and 1.7.0 were tagged in git and never
+reached PyPI: CI was red at both tags, `publish` needs `lint`, and the skipped job went unnoticed.
+So `pip install qp-vault` served 1.5.2 from 2026-04-09 until this release, and everything below
+has been sitting in `main` unpublished. The two tags stay in git as history. They will not appear
+on the index, because the tree at `v1.7.0` carries 24 lint errors and sits fourteen commits behind
+the code released here.
+
+### Release engineering
+
+- **The toolchain is pinned.** `lint` ran `pip install ruff` with no pin, so a ruff release could
+  turn `main` red with nobody having changed a line, and a red `lint` silently keeps the last good
+  artifact as the published one. ruff and mypy are now pinned in `.github/workflows/python-ci.yaml`
+  and upgrading either is a deliberate line in a diff.
+- **`publish` is gated on `typecheck`.** It was gated only on `lint` and `test`, which is how 1.5.2
+  reached the index from a run whose overall conclusion reads `failure`.
+- **`ruff format --check` runs in CI**, and `src/` and `tests/` were formatted to match. 95 files
+  were unformatted, which is what happens when a formatter is installed and never asserted on.
+- **The tag must match both declared versions.** `scripts/check_release_consistency.py` refuses a
+  publish whose tag disagrees with `pyproject.toml` or `__version__`. `pyproject` read 1.7.0 while
+  `main` sat fourteen commits past that tag, and nothing in the build objected.
+- **CI runs on a nightly schedule.** Both tag failures went unnoticed for months because nothing
+  ran again after the push that broke them.
+- **`tests/test_release_guards.py`** plants the specific defect each of the guards above claims to
+  catch and asserts the red, so none of them can quietly become decoration.
+
+### Fixed
+
+- `graph/models.py` `valid_at()` returns the exclusive upper bound directly instead of through a
+  negated branch, and says so in a comment.
+- `processing/docling_parser.py` `capability()` carries a real `-> DocumentIntelligence` return
+  annotation. It had a `# noqa: ANN201` aimed at ruff, which suppressed nothing ruff reported while
+  mypy failed on that exact line.
+
+
 ### Fixed
 - **Postgres graph schema FK type mismatch.** The graph tables declared their
   references to `qp_vault.resources(id)` as `UUID`, but `resources.id` is `TEXT`

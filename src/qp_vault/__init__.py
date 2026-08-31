@@ -26,7 +26,7 @@ Quick start:
 Docs: https://github.com/quantumpipes/vault
 """
 
-__version__ = "1.7.0"
+__version__ = "1.8.0"
 __author__ = "Quantum Pipes Technologies, LLC"
 __license__ = "Apache-2.0"
 
@@ -136,17 +136,22 @@ def __getattr__(name: str) -> type:
     """Lazy import for Vault, AsyncVault, and graph types to avoid circular imports."""
     if name == "Vault":
         from qp_vault.vault import Vault
+
         return Vault
     if name == "AsyncVault":
         from qp_vault.vault import AsyncVault
+
         return AsyncVault
     if name == "GraphEngine":
         from qp_vault.graph.service import GraphEngine
+
         return GraphEngine
     if name == "GraphNode":
         from qp_vault.graph.models import GraphNode
+
         return GraphNode
     if name == "GraphEdge":
         from qp_vault.graph.models import GraphEdge
+
         return GraphEdge
     raise AttributeError(f"module 'qp_vault' has no attribute {name!r}")
