@@ -1,3 +1,12 @@
+# Vault CI.
+#
+# THE TOOLCHAIN IS PINNED ON PURPOSE, and the reason is written here rather than remembered.
+# This job used to run `pip install ruff` with no pin. That means a ruff release can turn `main`
+# red with nobody having changed a line of code, and because `publish` needs `lint`, a red lint
+# silently keeps the LAST GOOD ARTIFACT as the public one. That is not theoretical: v1.6.0 and
+# v1.7.0 were both tagged and neither reached PyPI, so `pip install qp-vault` served 1.5.2 from
+# 2026-04-09 for five months, including its unauthenticated FastAPI router. Upgrading the pin is
+# a deliberate line in a diff. Drifting into a new one is not.
 name: Python CI
 
 on:
@@ -6,9 +15,22 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+  # A silent red becomes a dated red. Both tag failures went unnoticed for months because nothing
+  # ran again after the push that broke them.
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  RUFF_VERSION: "0.15.5"
+  MYPY_VERSION: "1.20.*"
+  # The LINT interpreter, which is the syntax level ruff and mypy judge against. It tracks
+  # `requires-python`, not the newest runtime: this is a library, and its floor is the oldest
+  # Python a consumer runs.
+  LINT_PYTHON: "3.12"
 
 jobs:
   lint:
@@ -17,9 +39,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
-      - run: pip install ruff
+          python-version: ${{ env.LINT_PYTHON }}
+      - run: pip install "ruff==${{ env.RUFF_VERSION }}"
       - run: ruff check src/ tests/
+      # Formatting is checked, not merely available. 95 files were unformatted when this line was
+      # added, which is what happens when a formatter is installed and never asserted on.
+      - run: ruff format --check src/ tests/
 
   typecheck:
     runs-on: ubuntu-latest
@@ -27,8 +52,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: ${{ env.LINT_PYTHON }}
       - run: pip install -e ".[sqlite,fastapi,integrity,encryption,cli,dev]"
+      - run: pip install "mypy==${{ env.MYPY_VERSION }}"
       - run: mypy src/qp_vault/
 
   test:
@@ -51,7 +77,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: ${{ env.LINT_PYTHON }}
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -61,7 +87,10 @@ jobs:
         run: node --test examples/web-explorer/tests/test_sha3.mjs
 
   publish:
-    needs: [lint, test]
+    # `typecheck` is in this list now. It was not, and that is how 1.5.2 reached PyPI from a run
+    # whose overall conclusion reads `failure`: only typecheck was red, publish did not care, and
+    # a reader checking the RUN instead of the JOB concluded 1.5.2 had never shipped.
+    needs: [lint, typecheck, test, web-explorer]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: pypi
@@ -71,7 +100,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: ${{ env.LINT_PYTHON }}
+      # The tag and the package must agree, or the index carries bytes under a name that does not
+      # describe them. `pyproject` said 1.7.0 while `main` sat fourteen commits past the v1.7.0
+      # tag, and nothing in the build would have objected.
+      # The guard proves it can still go red BEFORE its pass is trusted. A release gate that
+      # silently stopped checking would otherwise wave every tag through, and nothing about the
+      # green would look different.
+      - name: release guard self-test
+        run: python3 scripts/check_release_consistency.py --self-test
+      - name: tag matches the declared version
+        run: python3 scripts/check_release_consistency.py --tag "${GITHUB_REF_NAME}"
       - run: pip install build
       - run: python -m build
       - uses: pypa/gh-action-pypi-publish@release/v1
