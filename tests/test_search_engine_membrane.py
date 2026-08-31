@@ -113,14 +113,20 @@ class TestApplyTrustWeightingEdgeCases:
         """Higher 2D trust score should rank higher even with same raw relevance."""
         results = [
             SearchResult(
-                chunk_id="c1", resource_id="r1", resource_name="low.pdf",
-                content="x", trust_tier=TrustTier.EPHEMERAL,
+                chunk_id="c1",
+                resource_id="r1",
+                resource_name="low.pdf",
+                content="x",
+                trust_tier=TrustTier.EPHEMERAL,
                 adversarial_status=AdversarialStatus.SUSPICIOUS,
                 relevance=1.0,
             ),
             SearchResult(
-                chunk_id="c2", resource_id="r2", resource_name="high.pdf",
-                content="x", trust_tier=TrustTier.CANONICAL,
+                chunk_id="c2",
+                resource_id="r2",
+                resource_name="high.pdf",
+                content="x",
+                trust_tier=TrustTier.CANONICAL,
                 adversarial_status=AdversarialStatus.VERIFIED,
                 relevance=1.0,
             ),
@@ -136,14 +142,20 @@ class TestApplyTrustWeightingEdgeCases:
         """Raw relevance can overcome trust disadvantage."""
         results = [
             SearchResult(
-                chunk_id="c1", resource_id="r1", resource_name="high_rel.pdf",
-                content="x", trust_tier=TrustTier.WORKING,
+                chunk_id="c1",
+                resource_id="r1",
+                resource_name="high_rel.pdf",
+                content="x",
+                trust_tier=TrustTier.WORKING,
                 adversarial_status=AdversarialStatus.UNVERIFIED,
                 relevance=10.0,
             ),
             SearchResult(
-                chunk_id="c2", resource_id="r2", resource_name="low_rel.pdf",
-                content="x", trust_tier=TrustTier.CANONICAL,
+                chunk_id="c2",
+                resource_id="r2",
+                resource_name="low_rel.pdf",
+                content="x",
+                trust_tier=TrustTier.CANONICAL,
                 adversarial_status=AdversarialStatus.VERIFIED,
                 relevance=1.0,
             ),
@@ -156,8 +168,12 @@ class TestApplyTrustWeightingEdgeCases:
         """SearchResult without adversarial_status defaults to UNVERIFIED (0.7x)."""
         results = [
             SearchResult(
-                chunk_id="c1", resource_id="r1", resource_name="doc.pdf",
-                content="x", trust_tier=TrustTier.WORKING, relevance=1.0,
+                chunk_id="c1",
+                resource_id="r1",
+                resource_name="doc.pdf",
+                content="x",
+                trust_tier=TrustTier.WORKING,
+                relevance=1.0,
             ),
         ]
         weighted = apply_trust_weighting(results)
@@ -169,15 +185,17 @@ class TestApplyTrustWeightingEdgeCases:
         results = []
         for tier in TrustTier:
             for status in AdversarialStatus:
-                results.append(SearchResult(
-                    chunk_id=f"c-{tier.value}-{status.value}",
-                    resource_id=f"r-{tier.value}-{status.value}",
-                    resource_name=f"{tier.value}_{status.value}.pdf",
-                    content="x",
-                    trust_tier=tier,
-                    adversarial_status=status,
-                    relevance=1.0,
-                ))
+                results.append(
+                    SearchResult(
+                        chunk_id=f"c-{tier.value}-{status.value}",
+                        resource_id=f"r-{tier.value}-{status.value}",
+                        resource_name=f"{tier.value}_{status.value}.pdf",
+                        content="x",
+                        trust_tier=tier,
+                        adversarial_status=status,
+                        relevance=1.0,
+                    )
+                )
         weighted = apply_trust_weighting(results)
 
         # All should have non-zero relevance

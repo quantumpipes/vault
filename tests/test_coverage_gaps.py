@@ -308,6 +308,7 @@ class TestVaultOps:
 
 try:
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM as _AESGCM  # noqa: F401
+
     _HAS_CRYPTO = True
 except ImportError:
     _HAS_CRYPTO = False

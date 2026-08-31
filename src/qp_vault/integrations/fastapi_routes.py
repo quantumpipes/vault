@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 try:
     from fastapi import APIRouter, Depends, HTTPException, Query
     from pydantic import BaseModel, Field
+
     HAS_FASTAPI = True
 except ImportError:
     HAS_FASTAPI = False
@@ -30,8 +31,7 @@ except ImportError:
 def _require_fastapi() -> None:
     if not HAS_FASTAPI:
         raise ImportError(
-            "FastAPI is required for vault routes. "
-            "Install with: pip install qp-vault[fastapi]"
+            "FastAPI is required for vault routes. Install with: pip install qp-vault[fastapi]"
         )
 
 
@@ -137,6 +137,7 @@ def create_vault_router(
 
     from qp_vault.exceptions import LifecycleError, StorageError, VaultError
     from qp_vault.rbac import check_permission
+
     _logger = logging.getLogger("qp_vault.api")
 
     if require_auth and role_resolver is None:
@@ -165,6 +166,7 @@ def create_vault_router(
         app is responsible for access control.
         """
         if role_resolver is None:
+
             async def _noop() -> None:
                 return None
 
@@ -272,7 +274,9 @@ def create_vault_router(
             raise _handle_error(e) from e
         return {"data": {"deleted": True}, "meta": {}}
 
-    @router.post("/resources/{resource_id}/transition", dependencies=[Depends(_guard("transition"))])
+    @router.post(
+        "/resources/{resource_id}/transition", dependencies=[Depends(_guard("transition"))]
+    )
     async def transition_resource(resource_id: str, req: TransitionRequest) -> dict[str, Any]:
         try:
             resource = await vault.transition(resource_id, req.target, reason=req.reason)
@@ -360,7 +364,9 @@ def create_vault_router(
             raise _handle_error(e) from e
         return {"data": {"content": text}, "meta": {}}
 
-    @router.get("/resources/{resource_id}/provenance", dependencies=[Depends(_guard("get_provenance"))])
+    @router.get(
+        "/resources/{resource_id}/provenance", dependencies=[Depends(_guard("get_provenance"))]
+    )
     async def get_provenance(resource_id: str) -> dict[str, Any]:
         records = await vault.get_provenance(resource_id)
         return {"data": records, "meta": {"count": len(records)}}
@@ -372,7 +378,9 @@ def create_vault_router(
 
     @router.post("/collections", dependencies=[Depends(_guard("create_collection"))])
     async def create_collection(req: dict[str, Any]) -> dict[str, Any]:
-        result = await vault.create_collection(req.get("name", ""), description=req.get("description", ""))
+        result = await vault.create_collection(
+            req.get("name", ""), description=req.get("description", "")
+        )
         return {"data": result, "meta": {}}
 
     @router.post("/search/faceted", dependencies=[Depends(_guard("search_with_facets"))])
@@ -446,7 +454,10 @@ def create_vault_router(
         resources = await vault.get_multiple(clean_ids)
         return {"data": [r.model_dump() for r in resources], "meta": {"count": len(resources)}}
 
-    @router.patch("/resources/{resource_id}/adversarial", dependencies=[Depends(_guard("set_adversarial_status"))])
+    @router.patch(
+        "/resources/{resource_id}/adversarial",
+        dependencies=[Depends(_guard("set_adversarial_status"))],
+    )
     async def set_adversarial_status(resource_id: str, req: dict[str, Any]) -> dict[str, Any]:
         """Set adversarial verification status on a resource."""
         status_val = req.get("status")
@@ -454,7 +465,10 @@ def create_vault_router(
             raise HTTPException(status_code=400, detail="'status' field required")
         valid_statuses = {"unverified", "verified", "suspicious", "quarantined"}
         if status_val not in valid_statuses:
-            raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(sorted(valid_statuses))}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status. Must be one of: {', '.join(sorted(valid_statuses))}",
+            )
         try:
             resource = await vault.set_adversarial_status(resource_id, status_val)
         except Exception as e:
@@ -475,6 +489,7 @@ def create_vault_router(
         # Confine the caller path to io_base_dir at the boundary so a path that
         # escapes (traversal/absolute/symlink) is a clear 400, not a generic 5xx.
         from pathlib import Path as _Path
+
         base = _Path(io_base_dir).resolve()
         candidate = _Path(path)
         resolved = (base / candidate if not candidate.is_absolute() else candidate).resolve()

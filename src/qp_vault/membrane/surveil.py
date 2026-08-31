@@ -55,22 +55,26 @@ def apply_surveil(
 
         # Apply surveillance penalty for suspicious resources
         if adv_status == AdversarialStatus.SUSPICIOUS:
-            r = r.model_copy(update={
-                "relevance": r.relevance * 0.3,
-                "explain_metadata": {
-                    **(r.explain_metadata or {}),
-                    "surveil": "suspicious, relevance penalized 0.3x",
-                },
-            })
+            r = r.model_copy(
+                update={
+                    "relevance": r.relevance * 0.3,
+                    "explain_metadata": {
+                        **(r.explain_metadata or {}),
+                        "surveil": "suspicious, relevance penalized 0.3x",
+                    },
+                }
+            )
 
         # Add verification boost for explicitly verified resources
         if adv_status == AdversarialStatus.VERIFIED:
-            r = r.model_copy(update={
-                "explain_metadata": {
-                    **(r.explain_metadata or {}),
-                    "surveil": "verified",
-                },
-            })
+            r = r.model_copy(
+                update={
+                    "explain_metadata": {
+                        **(r.explain_metadata or {}),
+                        "surveil": "verified",
+                    },
+                }
+            )
 
         if r.relevance >= quarantine_threshold:
             filtered.append(r)

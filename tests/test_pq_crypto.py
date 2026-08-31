@@ -9,6 +9,7 @@ import pytest
 
 try:
     import oqs  # noqa: F401
+
     HAS_OQS = True
 except (ImportError, SystemExit):
     HAS_OQS = False

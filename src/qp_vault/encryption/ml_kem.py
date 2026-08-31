@@ -14,6 +14,7 @@ from __future__ import annotations
 
 try:
     import oqs
+
     HAS_OQS = True
 except ImportError:
     HAS_OQS = False
@@ -38,8 +39,7 @@ class MLKEMKeyManager:
     def __init__(self) -> None:
         if not HAS_OQS:
             raise ImportError(
-                "liboqs-python is required for ML-KEM-768. "
-                "Install with: pip install qp-vault[pq]"
+                "liboqs-python is required for ML-KEM-768. Install with: pip install qp-vault[pq]"
             )
 
     def generate_keypair(self) -> tuple[bytes, bytes]:

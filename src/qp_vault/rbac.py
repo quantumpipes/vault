@@ -71,9 +71,7 @@ ROLE_HIERARCHY: dict[Role, int] = {
 }
 
 
-def check_permission(
-    role: Role | str | None, operation: str, *, strict: bool = False
-) -> None:
+def check_permission(role: Role | str | None, operation: str, *, strict: bool = False) -> None:
     """Check if a role has permission for an operation.
 
     Args:

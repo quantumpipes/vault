@@ -47,13 +47,14 @@ class VaultConfig(BaseModel):
     # by default: the eval harness (I2) must show it meets or beats the legacy
     # blend before the default flips. Env override: QP_RETRIEVAL_RRF=1.
     rrf_enabled: bool = Field(
-        default_factory=lambda: os.getenv("QP_RETRIEVAL_RRF", "").strip().lower()
-        in ("1", "true", "yes", "on")
+        default_factory=lambda: (
+            os.getenv("QP_RETRIEVAL_RRF", "").strip().lower() in ("1", "true", "yes", "on")
+        )
     )
     rrf_k: int = 60  # The standard RRF constant.
 
     # Grep scoring (coverage is a multiplier, these weight the base score)
-    grep_rank_weight: float = 0.7       # Weight for native text rank (FTS5/trigram)
+    grep_rank_weight: float = 0.7  # Weight for native text rank (FTS5/trigram)
     grep_proximity_weight: float = 0.3  # Weight for keyword proximity within chunk
 
     # Trust weights (trust_tier -> multiplier)
@@ -92,9 +93,7 @@ class VaultConfig(BaseModel):
     # Memory layer defaults
     layer_defaults: dict[str, LayerDefaults] = Field(
         default_factory=lambda: {
-            "operational": LayerDefaults(
-                trust_tier="working", half_life_days=90, search_boost=1.5
-            ),
+            "operational": LayerDefaults(trust_tier="working", half_life_days=90, search_boost=1.5),
             "strategic": LayerDefaults(
                 trust_tier="canonical", half_life_days=365, search_boost=1.0
             ),

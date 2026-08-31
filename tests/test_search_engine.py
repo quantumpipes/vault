@@ -94,8 +94,8 @@ class TestApplyTrustWeighting:
 
     def test_sorts_by_composite_relevance(self):
         results = [
-            _make_result("ephemeral", 0.9),   # 0.9 * 0.7 = 0.63
-            _make_result("canonical", 0.5),    # 0.5 * 1.5 = 0.75
+            _make_result("ephemeral", 0.9),  # 0.9 * 0.7 = 0.63
+            _make_result("canonical", 0.5),  # 0.5 * 1.5 = 0.75
         ]
         weighted = apply_trust_weighting(results)
         # Canonical should win despite lower raw score

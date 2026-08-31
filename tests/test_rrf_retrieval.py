@@ -160,9 +160,7 @@ async def test_trust_tier_filter_applies_in_both_modes():
     for rrf in (False, True):
         b = await _make_backend(rrf=rrf)
         try:
-            results = await b.search(
-                _query(filters=ResourceFilter(trust_tier="canonical"))
-            )
+            results = await b.search(_query(filters=ResourceFilter(trust_tier="canonical")))
             ids = {r.resource_id for r in results}
             assert ids == {"A"}, f"rrf={rrf}: expected only canonical doc A, got {ids}"
         finally:

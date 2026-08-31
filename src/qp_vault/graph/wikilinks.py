@@ -84,12 +84,14 @@ def parse_wikilinks(text: str) -> list[WikilinkRef]:
             continue
         seen_names.add(name_lower)
 
-        refs.append(WikilinkRef(
-            name=name,
-            display_text=display,
-            start=match.start(),
-            end=match.end(),
-        ))
+        refs.append(
+            WikilinkRef(
+                name=name,
+                display_text=display,
+                start=match.start(),
+                end=match.end(),
+            )
+        )
 
     return refs
 
@@ -116,20 +118,24 @@ async def resolve_wikilinks(
         node = await resolver.resolve_by_name(ref.name, space_id=space_id)
 
         if node:
-            results.append(ResolvedWikilink(
-                name=ref.name,
-                display_text=ref.display_text,
-                node_id=node.id,
-                entity_type=node.entity_type,
-                resolved=True,
-            ))
+            results.append(
+                ResolvedWikilink(
+                    name=ref.name,
+                    display_text=ref.display_text,
+                    node_id=node.id,
+                    entity_type=node.entity_type,
+                    resolved=True,
+                )
+            )
         else:
-            results.append(ResolvedWikilink(
-                name=ref.name,
-                display_text=ref.display_text,
-                node_id=None,
-                entity_type=None,
-                resolved=False,
-            ))
+            results.append(
+                ResolvedWikilink(
+                    name=ref.name,
+                    display_text=ref.display_text,
+                    node_id=None,
+                    entity_type=None,
+                    resolved=False,
+                )
+            )
 
     return results

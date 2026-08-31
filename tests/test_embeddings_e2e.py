@@ -65,11 +65,13 @@ class TestSentenceTransformerEmbedder:
         from qp_vault.embeddings.sentence import SentenceTransformerEmbedder
 
         e = SentenceTransformerEmbedder()
-        vecs = await e.embed([
-            "The cat sat on the mat",
-            "A feline rested on the rug",
-            "Quantum computing uses qubits",
-        ])
+        vecs = await e.embed(
+            [
+                "The cat sat on the mat",
+                "A feline rested on the rug",
+                "Quantum computing uses qubits",
+            ]
+        )
 
         # Cosine similarity helper
         def cosine(a: list[float], b: list[float]) -> float:

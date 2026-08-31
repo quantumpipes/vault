@@ -78,6 +78,7 @@ def _sanitize_name(name: str) -> str:
     """
     import re
     import unicodedata
+
     # Unicode NFC normalization (prevents homograph collisions)
     name = unicodedata.normalize("NFC", name)
     # Replace backslashes with forward slashes for cross-platform path stripping
@@ -96,6 +97,7 @@ def _sanitize_name(name: str) -> str:
 def _sanitize_tags(tags: list[str]) -> list[str]:
     """Validate and sanitize tag list."""
     import re
+
     if len(tags) > _MAX_TAGS:
         raise VaultError(f"Too many tags ({len(tags)}), maximum {_MAX_TAGS}")
     clean: list[str] = []
@@ -116,6 +118,7 @@ def _sanitize_tags(tags: list[str]) -> list[str]:
 def _validate_metadata(metadata: dict[str, Any]) -> None:
     """Validate metadata keys and values for size and safety."""
     import re
+
     if len(metadata) > _MAX_METADATA_KEYS:
         raise VaultError(f"Too many metadata keys ({len(metadata)}), maximum {_MAX_METADATA_KEYS}")
     for key, value in metadata.items():
@@ -128,6 +131,7 @@ def _validate_metadata(metadata: dict[str, Any]) -> None:
             raise VaultError(f"Metadata key contains invalid characters: {key}")
         # Value size check (serialized)
         import json
+
         val_size = len(json.dumps(value, default=str))
         if val_size > _MAX_METADATA_VALUE_SIZE:
             raise VaultError(f"Metadata value for '{key}' exceeds {_MAX_METADATA_VALUE_SIZE} bytes")
@@ -183,6 +187,7 @@ class AsyncVault:
         else:
             try:
                 from qp_vault.audit.capsule_auditor import HAS_CAPSULE, CapsuleAuditor
+
                 if HAS_CAPSULE:
                     self._auditor = CapsuleAuditor()
                 else:
@@ -211,6 +216,7 @@ class AsyncVault:
 
         # Lifecycle engine
         from qp_vault.core.lifecycle_engine import LifecycleEngine
+
         self._lifecycle = LifecycleEngine(
             storage=self._storage,
             auditor=self._auditor,
@@ -218,6 +224,7 @@ class AsyncVault:
 
         # Layer manager
         from qp_vault.core.layer_manager import LayerManager
+
         self._layer_manager = LayerManager(config=self.config)
 
         # Membrane pipeline (with optional LLM-based adaptive scan)
@@ -225,10 +232,17 @@ class AsyncVault:
         from qp_vault.membrane.correlate import CorrelateConfig
         from qp_vault.membrane.pipeline import MembranePipeline
         from qp_vault.membrane.remember import get_attack_registry
+
         adaptive_config = AdaptiveScanConfig(screener=llm_screener) if llm_screener else None
-        correlate_config = CorrelateConfig(
-            screener=llm_screener, vault=self, tenant_id=tenant_id,
-        ) if llm_screener else None
+        correlate_config = (
+            CorrelateConfig(
+                screener=llm_screener,
+                vault=self,
+                tenant_id=tenant_id,
+            )
+            if llm_screener
+            else None
+        )
         self._membrane_pipeline: MembranePipeline | None = MembranePipeline(
             adaptive_config=adaptive_config,
             correlate_config=correlate_config,
@@ -243,6 +257,7 @@ class AsyncVault:
 
         # Telemetry: operation tracking
         from qp_vault.telemetry import VaultTelemetry
+
         self._telemetry = VaultTelemetry()
 
         # TTL cache for expensive operations (health, status)
@@ -251,6 +266,7 @@ class AsyncVault:
         # Knowledge graph engine (available when storage implements GraphStorageBackend)
         if isinstance(self._storage, GraphStorageBackend):
             from qp_vault.graph.service import GraphEngine
+
             self._graph_engine: Any | None = GraphEngine(storage=self._storage, vault=self)
         else:
             self._graph_engine = None
@@ -275,6 +291,7 @@ class AsyncVault:
     def _check_permission(self, operation: str) -> None:
         """Check RBAC permission for an operation."""
         from qp_vault.rbac import check_permission
+
         check_permission(self._role, operation)
 
     @staticmethod
@@ -309,6 +326,7 @@ class AsyncVault:
     def _cache_get(self, key: str) -> Any | None:
         """Get a cached value if TTL has not expired."""
         import time
+
         entry = self._cache.get(key)
         if entry is None:
             return None
@@ -321,6 +339,7 @@ class AsyncVault:
     def _cache_set(self, key: str, value: Any) -> None:
         """Cache a value with current timestamp."""
         import time
+
         self._cache[key] = (time.monotonic(), value)
 
     def _cache_invalidate(self) -> None:
@@ -348,12 +367,14 @@ class AsyncVault:
         if len(self._subscribers) >= _MAX_SUBSCRIBERS:
             raise VaultError(f"Maximum subscriber limit reached ({_MAX_SUBSCRIBERS})")
         import inspect
+
         is_async = inspect.iscoroutinefunction(callback)
         entry = (callback, is_async)
         self._subscribers.append(entry)
 
         def unsubscribe() -> None:
             import contextlib
+
             with contextlib.suppress(ValueError):
                 self._subscribers.remove(entry)
 
@@ -368,6 +389,7 @@ class AsyncVault:
         iteration so callbacks can safely subscribe/unsubscribe.
         """
         import logging
+
         logger = logging.getLogger("qp_vault.subscribe")
         # Snapshot: safe against subscribe/unsubscribe during iteration
         snapshot = list(self._subscribers)
@@ -395,6 +417,7 @@ class AsyncVault:
         except TimeoutError:
             task.cancel()
             import contextlib
+
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
             raise VaultError(
@@ -453,6 +476,7 @@ class AsyncVault:
     async def _tracked(self, operation: str, coro: Any) -> Any:
         """Run a coroutine with telemetry tracking."""
         import time as _time
+
         start = _time.monotonic()
         error = False
         try:
@@ -601,30 +625,35 @@ class AsyncVault:
         _quarantine = False
         if self._membrane_pipeline:
             from qp_vault.enums import MembraneResult
+
             membrane_result = await self._membrane_pipeline.screen(text)
             if membrane_result.overall_result == MembraneResult.FAIL:
                 raise VaultError("Content rejected by Membrane screening")
             if membrane_result.recommended_status.value == "quarantined":
                 _quarantine = True
 
-        resource: Resource = await self._tracked("add", self._resource_manager.add(
-            text,
-            name=name,
-            trust_tier=trust_tier,
-            classification=classification,
-            layer=layer,
-            collection=collection,
-            tags=tags,
-            metadata=metadata,
-            lifecycle=lifecycle,
-            valid_from=valid_from,
-            valid_until=valid_until,
-            tenant_id=tenant_id,
-        ))
+        resource: Resource = await self._tracked(
+            "add",
+            self._resource_manager.add(
+                text,
+                name=name,
+                trust_tier=trust_tier,
+                classification=classification,
+                layer=layer,
+                collection=collection,
+                tags=tags,
+                metadata=metadata,
+                lifecycle=lifecycle,
+                valid_from=valid_from,
+                valid_until=valid_until,
+                tenant_id=tenant_id,
+            ),
+        )
 
         # If Membrane flagged content, mark as quarantined + suspicious
         if _quarantine:
             from qp_vault.protocols import ResourceUpdate
+
             await self._storage.update_resource(
                 resource.id,
                 ResourceUpdate(adversarial_status="suspicious"),
@@ -635,18 +664,21 @@ class AsyncVault:
 
         self._cache_invalidate()
         await self._fire_hook("post_add", resource=resource)
-        await self._notify_subscribers(VaultEvent(
-            event_type=EventType.CREATE,
-            resource_id=resource.id,
-            resource_name=resource.name,
-            resource_hash=resource.content_hash,
-            details={"trust_tier": resource.trust_tier.value},
-        ))
+        await self._notify_subscribers(
+            VaultEvent(
+                event_type=EventType.CREATE,
+                resource_id=resource.id,
+                resource_name=resource.name,
+                resource_hash=resource.content_hash,
+                details={"trust_tier": resource.trust_tier.value},
+            )
+        )
         return resource
 
     async def _fire_hook(self, event: str, **kwargs: Any) -> None:
         """Fire plugin hooks (silent on failure)."""
         from qp_vault.plugins.registry import get_registry
+
         await get_registry().fire_hooks(event, **kwargs)
 
     async def get(self, resource_id: str) -> Resource:
@@ -658,13 +690,16 @@ class AsyncVault:
         if resource.data_classification == DataClassification.RESTRICTED:
             from qp_vault.enums import EventType
             from qp_vault.models import VaultEvent
-            await self._auditor.record(VaultEvent(
-                event_type=EventType.SEARCH,
-                resource_id=resource_id,
-                resource_name=resource.name,
-                resource_hash=resource.content_hash,
-                details={"classification": "restricted", "operation": "get"},
-            ))
+
+            await self._auditor.record(
+                VaultEvent(
+                    event_type=EventType.SEARCH,
+                    resource_id=resource_id,
+                    resource_name=resource.name,
+                    resource_hash=resource.content_hash,
+                    details={"classification": "restricted", "operation": "get"},
+                )
+            )
 
         return resource
 
@@ -740,6 +775,7 @@ class AsyncVault:
         tenant_id = self._resolve_tenant(tenant_id)
 
         from qp_vault.protocols import ResourceFilter
+
         resources = await self._storage.list_resources(
             ResourceFilter(
                 tenant_id=tenant_id,
@@ -779,12 +815,14 @@ class AsyncVault:
         )
         self._cache_invalidate()
         await self._fire_hook("post_update", resource=result)
-        await self._notify_subscribers(VaultEvent(
-            event_type=EventType.UPDATE,
-            resource_id=result.id,
-            resource_name=result.name,
-            resource_hash=result.content_hash,
-        ))
+        await self._notify_subscribers(
+            VaultEvent(
+                event_type=EventType.UPDATE,
+                resource_id=result.id,
+                resource_name=result.name,
+                resource_hash=result.content_hash,
+            )
+        )
         return result
 
     async def delete(self, resource_id: str, *, hard: bool = False) -> None:
@@ -796,13 +834,15 @@ class AsyncVault:
         await self._resource_manager.delete(resource_id, hard=hard)
         self._cache_invalidate()
         await self._fire_hook("post_delete", resource_id=resource_id)
-        await self._notify_subscribers(VaultEvent(
-            event_type=EventType.DELETE,
-            resource_id=resource_id,
-            resource_name=resource.name,
-            resource_hash=resource.content_hash,
-            details={"hard": hard},
-        ))
+        await self._notify_subscribers(
+            VaultEvent(
+                event_type=EventType.DELETE,
+                resource_id=resource_id,
+                resource_name=resource.name,
+                resource_hash=resource.content_hash,
+                details={"hard": hard},
+            )
+        )
 
     async def get_content(self, resource_id: str) -> str:
         """Retrieve the full text content of a resource.
@@ -821,9 +861,7 @@ class AsyncVault:
         # Block content retrieval for quarantined resources
         resource = self._enforce_tenant_scope(await self._resource_manager.get(resource_id))
         if resource.status == ResourceStatus.QUARANTINED:
-            raise VaultError(
-                f"Resource {resource_id} is quarantined by Membrane screening"
-            )
+            raise VaultError(f"Resource {resource_id} is quarantined by Membrane screening")
 
         chunks = await self._storage.get_chunks_for_resource(resource_id)
         if not chunks:
@@ -860,6 +898,7 @@ class AsyncVault:
 
         from qp_vault.core.chunker import chunk_text
         from qp_vault.core.hasher import compute_cid
+
         chunk_results = chunk_text(text, self._resource_manager._chunker_config)
 
         new_chunks: list[Chunk] = []
@@ -891,13 +930,15 @@ class AsyncVault:
 
         self._cache_invalidate()
         updated = await self._resource_manager.get(resource_id)
-        await self._notify_subscribers(VaultEvent(
-            event_type=EventType.UPDATE,
-            resource_id=resource_id,
-            resource_name=updated.name,
-            resource_hash=updated.content_hash,
-            details={"reprocessed": True, "chunk_count": len(new_chunks)},
-        ))
+        await self._notify_subscribers(
+            VaultEvent(
+                event_type=EventType.UPDATE,
+                resource_id=resource_id,
+                resource_name=updated.name,
+                resource_hash=updated.content_hash,
+                details={"reprocessed": True, "chunk_count": len(new_chunks)},
+            )
+        )
         return updated
 
     async def upsert(
@@ -942,14 +983,19 @@ class AsyncVault:
         # Find existing resource with same name + tenant
         if name:
             from qp_vault.protocols import ResourceFilter
+
             existing = await self._storage.list_resources(
                 ResourceFilter(tenant_id=tenant_id, limit=1)
             )
             for r in existing:
                 if r.name == name:
-                    return (await self.replace(r.id, source if isinstance(source, str) else str(source)))[1]
+                    return (
+                        await self.replace(r.id, source if isinstance(source, str) else str(source))
+                    )[1]
 
-        return await self.add(source, name=name, trust_tier=trust_tier, tenant_id=tenant_id, **kwargs)
+        return await self.add(
+            source, name=name, trust_tier=trust_tier, tenant_id=tenant_id, **kwargs
+        )
 
     async def replace(
         self,
@@ -1046,6 +1092,7 @@ class AsyncVault:
         self._check_permission("set_adversarial_status")
         self._enforce_tenant_scope(await self._resource_manager.get(resource_id))
         from qp_vault.protocols import ResourceUpdate
+
         return await self._storage.update_resource(
             resource_id, ResourceUpdate(adversarial_status=status)
         )
@@ -1074,18 +1121,18 @@ class AsyncVault:
         self._enforce_tenant_scope(await self._resource_manager.get(resource_id))
         result = await self._lifecycle.transition(resource_id, target, reason=reason)
         await self._fire_hook("post_transition", resource=result, target=target)
-        await self._notify_subscribers(VaultEvent(
-            event_type=EventType.LIFECYCLE_TRANSITION,
-            resource_id=result.id,
-            resource_name=result.name,
-            resource_hash=result.content_hash,
-            details={"target": target, "reason": reason or ""},
-        ))
+        await self._notify_subscribers(
+            VaultEvent(
+                event_type=EventType.LIFECYCLE_TRANSITION,
+                resource_id=result.id,
+                resource_name=result.name,
+                resource_hash=result.content_hash,
+                details={"target": target, "reason": reason or ""},
+            )
+        )
         return result
 
-    async def supersede(
-        self, old_id: str, new_id: str
-    ) -> tuple[Resource, Resource]:
+    async def supersede(self, old_id: str, new_id: str) -> tuple[Resource, Resource]:
         """Mark old resource as superseded by new resource."""
         await self._ensure_initialized()
         self._check_permission("supersede")
@@ -1124,20 +1171,26 @@ class AsyncVault:
         old_resource = await self.get(old_id)
         new_resource = await self.get(new_id)
 
-        diff_lines = list(difflib.unified_diff(
-            old_content.splitlines(keepends=True),
-            new_content.splitlines(keepends=True),
-            fromfile=old_resource.name,
-            tofile=new_resource.name,
-        ))
+        diff_lines = list(
+            difflib.unified_diff(
+                old_content.splitlines(keepends=True),
+                new_content.splitlines(keepends=True),
+                fromfile=old_resource.name,
+                tofile=new_resource.name,
+            )
+        )
 
         return {
             "old_id": old_id,
             "new_id": new_id,
             "old_name": old_resource.name,
             "new_name": new_resource.name,
-            "additions": sum(1 for line in diff_lines if line.startswith("+") and not line.startswith("+++")),
-            "deletions": sum(1 for line in diff_lines if line.startswith("-") and not line.startswith("---")),
+            "additions": sum(
+                1 for line in diff_lines if line.startswith("+") and not line.startswith("+++")
+            ),
+            "deletions": sum(
+                1 for line in diff_lines if line.startswith("-") and not line.startswith("---")
+            ),
             "diff": "".join(diff_lines),
         }
 
@@ -1182,6 +1235,7 @@ class AsyncVault:
         self._search_count += 1
         if self.config.auto_expire and self._search_count % 100 == 0:
             import contextlib
+
             with contextlib.suppress(Exception):
                 await self._lifecycle.check_expirations()
 
@@ -1210,15 +1264,21 @@ class AsyncVault:
             text_weight=t_weight,
             filters=ResourceFilter(
                 tenant_id=tenant_id,
-                trust_tier=min_trust_tier.value if min_trust_tier is not None and hasattr(min_trust_tier, "value") else min_trust_tier,
+                trust_tier=min_trust_tier.value
+                if min_trust_tier is not None and hasattr(min_trust_tier, "value")
+                else min_trust_tier,
                 layer=layer.value if layer is not None and hasattr(layer, "value") else layer,
                 collection_id=collection,
-            ) if any([tenant_id, min_trust_tier, layer, collection]) else None,
+            )
+            if any([tenant_id, min_trust_tier, layer, collection])
+            else None,
             as_of=str(as_of) if as_of else None,
         )
 
         # Get raw results from storage (with timeout protection)
-        raw_results = await self._tracked("search", self._with_timeout(self._storage.search(search_query)))
+        raw_results = await self._tracked(
+            "search", self._with_timeout(self._storage.search(search_query))
+        )
 
         # Apply trust weighting with optional layer boost
         weighted = apply_trust_weighting(raw_results, self.config, layer_boost=_layer_boost)
@@ -1255,6 +1315,7 @@ class AsyncVault:
         if graph_boost and self._graph_engine is not None:
             try:
                 from qp_vault.graph.detection import EntityDetector
+
                 detector = EntityDetector(self._graph_engine)
                 detected = await detector.detect(query, space_id=None)
                 if detected:
@@ -1274,6 +1335,7 @@ class AsyncVault:
 
         # SURVEIL: query-time re-evaluation
         from qp_vault.membrane.surveil import apply_surveil
+
         paginated = apply_surveil(paginated)
 
         await self._fire_hook("post_search", query=query, results=paginated)
@@ -1355,29 +1417,31 @@ class AsyncVault:
 
             snippet = generate_snippet(match.content, match.matched_keywords)
 
-            scored.append(SearchResult(
-                chunk_id=match.chunk_id,
-                resource_id=match.resource_id,
-                resource_name=match.resource_name,
-                content=match.content,
-                page_number=match.page_number,
-                section_title=match.section_title,
-                text_rank=text_rank,
-                trust_tier=TrustTier(match.trust_tier),
-                cid=match.cid,
-                lifecycle=match.lifecycle,
-                updated_at=match.updated_at,
-                resource_type=match.resource_type,
-                data_classification=match.data_classification,
-                relevance=blended,
-                explain_metadata={
-                    "matched_keywords": match.matched_keywords,
-                    "hit_density": match.hit_density,
-                    "text_rank": text_rank,
-                    "proximity": proximity,
-                    "snippet": snippet,
-                },
-            ))
+            scored.append(
+                SearchResult(
+                    chunk_id=match.chunk_id,
+                    resource_id=match.resource_id,
+                    resource_name=match.resource_name,
+                    content=match.content,
+                    page_number=match.page_number,
+                    section_title=match.section_title,
+                    text_rank=text_rank,
+                    trust_tier=TrustTier(match.trust_tier),
+                    cid=match.cid,
+                    lifecycle=match.lifecycle,
+                    updated_at=match.updated_at,
+                    resource_type=match.resource_type,
+                    data_classification=match.data_classification,
+                    relevance=blended,
+                    explain_metadata={
+                        "matched_keywords": match.matched_keywords,
+                        "hit_density": match.hit_density,
+                        "text_rank": text_rank,
+                        "proximity": proximity,
+                        "snippet": snippet,
+                    },
+                )
+            )
 
         # Apply trust weighting (same as search)
         weighted = apply_trust_weighting(scored, self.config)
@@ -1393,6 +1457,7 @@ class AsyncVault:
 
         # SURVEIL: query-time adversarial re-evaluation (same as search)
         from qp_vault.membrane.surveil import apply_surveil
+
         final = apply_surveil(final)
 
         await self._fire_hook("post_grep", keywords=clean_keywords, results=final)
@@ -1419,9 +1484,13 @@ class AsyncVault:
             tier = r.trust_tier.value if hasattr(r.trust_tier, "value") else str(r.trust_tier)
             facets["trust_tier"][tier] = facets["trust_tier"].get(tier, 0) + 1
             if r.resource_type:
-                facets["resource_type"][r.resource_type] = facets["resource_type"].get(r.resource_type, 0) + 1
+                facets["resource_type"][r.resource_type] = (
+                    facets["resource_type"].get(r.resource_type, 0) + 1
+                )
             if r.data_classification:
-                facets["data_classification"][r.data_classification] = facets["data_classification"].get(r.data_classification, 0) + 1
+                facets["data_classification"][r.data_classification] = (
+                    facets["data_classification"].get(r.data_classification, 0) + 1
+                )
 
         return {
             "results": results,
@@ -1431,7 +1500,9 @@ class AsyncVault:
 
     # --- Verification ---
 
-    async def verify(self, resource_id: str | None = None) -> VerificationResult | VaultVerificationResult:
+    async def verify(
+        self, resource_id: str | None = None
+    ) -> VerificationResult | VaultVerificationResult:
         """Verify integrity of a resource or the entire vault.
 
         Args:
@@ -1556,6 +1627,7 @@ class AsyncVault:
             ops.search("deploy")   # Scoped to operational layer
         """
         from qp_vault.core.layer_manager import LayerView
+
         layer_enum = MemoryLayer(name) if isinstance(name, str) else name
         return LayerView(layer_enum, self, self._layer_manager)
 
@@ -1574,6 +1646,7 @@ class AsyncVault:
         tenant_id = self._resolve_tenant(tenant_id)
         import uuid
         from datetime import UTC, datetime
+
         collection_id = str(uuid.uuid4())
         now = datetime.now(tz=UTC).isoformat()
         await self._storage.store_collection(collection_id, name, description, now)
@@ -1615,7 +1688,9 @@ class AsyncVault:
         self._cache_set(cache_key, result)
         return result
 
-    async def export_vault(self, path: str | Path, *, base_dir: str | Path | None = None) -> dict[str, Any]:
+    async def export_vault(
+        self, path: str | Path, *, base_dir: str | Path | None = None
+    ) -> dict[str, Any]:
         """Export the vault to a JSON file for portability.
 
         Args:
@@ -1629,15 +1704,14 @@ class AsyncVault:
             Summary with resource count and export path.
         """
         import json as _json
+
         await self._ensure_initialized()
         self._check_permission("export_vault")
         if base_dir is not None:
             path = self._confine_path(path, base_dir)
         # Scope the export to the locked tenant so a tenant-locked operator
         # cannot exfiltrate every tenant's content + chunks in one call.
-        resources: list[Resource] = await self._list_all_bounded(
-            tenant_id=self._locked_tenant_id
-        )
+        resources: list[Resource] = await self._list_all_bounded(tenant_id=self._locked_tenant_id)
         export_resources = []
         for r in resources:
             r_dict = r.model_dump(mode="json")
@@ -1656,7 +1730,9 @@ class AsyncVault:
         out.write_text(_json.dumps(data, default=str, indent=2))
         return {"path": str(out), "resource_count": len(resources)}
 
-    async def import_vault(self, path: str | Path, *, base_dir: str | Path | None = None) -> list[Resource]:
+    async def import_vault(
+        self, path: str | Path, *, base_dir: str | Path | None = None
+    ) -> list[Resource]:
         """Import resources from an exported vault JSON file.
 
         Args:
@@ -1669,6 +1745,7 @@ class AsyncVault:
             List of imported resources.
         """
         import json as _json
+
         await self._ensure_initialized()
         self._check_permission("import_vault")
         safe_path = self._confine_path(path, base_dir) if base_dir is not None else Path(path)
@@ -1786,10 +1863,12 @@ class AsyncVault:
 
         Call this once after initialization for long-running services.
         """
+
         async def _monitor() -> None:
             while True:
                 await asyncio.sleep(interval_seconds)
                 import contextlib
+
                 with contextlib.suppress(Exception):
                     await self._lifecycle.check_expirations()
 
@@ -1811,6 +1890,7 @@ def _run_async(coro: Any) -> Any:
     if loop and loop.is_running():
         # We're inside an existing event loop; create a new thread
         import concurrent.futures
+
         with concurrent.futures.ThreadPoolExecutor() as pool:
             return pool.submit(asyncio.run, coro).result()
     else:
@@ -1902,9 +1982,13 @@ class Vault:
         result: str = _run_async(self._async.get_content(resource_id))
         return result
 
-    def replace(self, resource_id: str, new_content: str, *, reason: str | None = None) -> tuple[Resource, Resource]:
+    def replace(
+        self, resource_id: str, new_content: str, *, reason: str | None = None
+    ) -> tuple[Resource, Resource]:
         """Replace a resource's content atomically. Returns (old, new)."""
-        result: tuple[Resource, Resource] = _run_async(self._async.replace(resource_id, new_content, reason=reason))
+        result: tuple[Resource, Resource] = _run_async(
+            self._async.replace(resource_id, new_content, reason=reason)
+        )
         return result
 
     def upsert(self, source: str | Path | bytes, **kwargs: Any) -> Resource:
@@ -1921,9 +2005,13 @@ class Vault:
         result: Resource = _run_async(self._async.set_adversarial_status(resource_id, status))
         return result
 
-    def transition(self, resource_id: str, target: Lifecycle | str, *, reason: str | None = None) -> Resource:
+    def transition(
+        self, resource_id: str, target: Lifecycle | str, *, reason: str | None = None
+    ) -> Resource:
         """Transition lifecycle state."""
-        return cast("Resource", _run_async(self._async.transition(resource_id, target, reason=reason)))
+        return cast(
+            "Resource", _run_async(self._async.transition(resource_id, target, reason=reason))
+        )
 
     def supersede(self, old_id: str, new_id: str) -> tuple[Resource, Resource]:
         """Supersede a resource with a newer version."""
@@ -1952,9 +2040,13 @@ class Vault:
         result: list[SearchResult] = _run_async(self._async.search(query, **kwargs))
         return result
 
-    def verify(self, resource_id: str | None = None) -> VerificationResult | VaultVerificationResult:
+    def verify(
+        self, resource_id: str | None = None
+    ) -> VerificationResult | VaultVerificationResult:
         """Verify integrity."""
-        result: VerificationResult | VaultVerificationResult = _run_async(self._async.verify(resource_id))
+        result: VerificationResult | VaultVerificationResult = _run_async(
+            self._async.verify(resource_id)
+        )
         return result
 
     def layer(self, name: MemoryLayer | str) -> LayerView:

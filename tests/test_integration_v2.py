@@ -54,9 +54,7 @@ def client(tmp_path):
     app = FastAPI()
     # Embedding app handles auth itself in these endpoint-behavior tests; confine
     # import/export to a base dir so those endpoints are enabled and contained.
-    router = create_vault_router(
-        vault, require_auth=False, io_base_dir=str(tmp_path / "api-vault")
-    )
+    router = create_vault_router(vault, require_auth=False, io_base_dir=str(tmp_path / "api-vault"))
     app.include_router(router, prefix="/v1/vault")
     return TestClient(app)
 
@@ -64,16 +62,22 @@ def client(tmp_path):
 @pytest.fixture
 def populated_client(client):
     """Client with two resources."""
-    client.post("/v1/vault/resources", json={
-        "content": "Python is a versatile programming language for data science.",
-        "name": "python-guide.md",
-        "trust_tier": "canonical",
-    })
-    client.post("/v1/vault/resources", json={
-        "content": "Rust provides memory safety without garbage collection.",
-        "name": "rust-overview.md",
-        "trust_tier": "working",
-    })
+    client.post(
+        "/v1/vault/resources",
+        json={
+            "content": "Python is a versatile programming language for data science.",
+            "name": "python-guide.md",
+            "trust_tier": "canonical",
+        },
+    )
+    client.post(
+        "/v1/vault/resources",
+        json={
+            "content": "Rust provides memory safety without garbage collection.",
+            "name": "rust-overview.md",
+            "trust_tier": "working",
+        },
+    )
     return client
 
 
@@ -84,7 +88,6 @@ def populated_client(client):
 
 @pytest.mark.skipif(not HAS_FASTAPI, reason="fastapi not installed")
 class TestReprocessEndpoint:
-
     def test_reprocess_returns_resource(self, populated_client):
         """POST /resources/{id}/reprocess returns the reprocessed resource."""
         resources = populated_client.get("/v1/vault/resources").json()["data"]
@@ -110,12 +113,14 @@ class TestReprocessEndpoint:
 
 @pytest.mark.skipif(not HAS_FASTAPI, reason="fastapi not installed")
 class TestGrepEndpoint:
-
     def test_grep_returns_results(self, populated_client):
         """POST /grep returns matching resources."""
-        resp = populated_client.post("/v1/vault/grep", json={
-            "keywords": ["python"],
-        })
+        resp = populated_client.post(
+            "/v1/vault/grep",
+            json={
+                "keywords": ["python"],
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["meta"]["total"] >= 1
@@ -123,17 +128,23 @@ class TestGrepEndpoint:
 
     def test_grep_empty_keywords(self, populated_client):
         """POST /grep with empty keywords returns empty."""
-        resp = populated_client.post("/v1/vault/grep", json={
-            "keywords": [],
-        })
+        resp = populated_client.post(
+            "/v1/vault/grep",
+            json={
+                "keywords": [],
+            },
+        )
         assert resp.status_code == 200
         assert resp.json()["meta"]["total"] == 0
 
     def test_grep_multiple_keywords(self, populated_client):
         """POST /grep with multiple keywords uses OR matching."""
-        resp = populated_client.post("/v1/vault/grep", json={
-            "keywords": ["python", "rust"],
-        })
+        resp = populated_client.post(
+            "/v1/vault/grep",
+            json={
+                "keywords": ["python", "rust"],
+            },
+        )
         assert resp.status_code == 200
         assert resp.json()["meta"]["total"] >= 2
 
@@ -145,21 +156,26 @@ class TestGrepEndpoint:
 
 @pytest.mark.skipif(not HAS_FASTAPI, reason="fastapi not installed")
 class TestFindByNameEndpoint:
-
     def test_find_by_name_exact(self, populated_client):
         """GET /resources/by-name returns exact match."""
-        resp = populated_client.get("/v1/vault/resources/by-name", params={"name": "python-guide.md"})
+        resp = populated_client.get(
+            "/v1/vault/resources/by-name", params={"name": "python-guide.md"}
+        )
         assert resp.status_code == 200
         assert resp.json()["data"]["name"] == "python-guide.md"
 
     def test_find_by_name_case_insensitive(self, populated_client):
         """GET /resources/by-name is case-insensitive."""
-        resp = populated_client.get("/v1/vault/resources/by-name", params={"name": "PYTHON-GUIDE.MD"})
+        resp = populated_client.get(
+            "/v1/vault/resources/by-name", params={"name": "PYTHON-GUIDE.MD"}
+        )
         assert resp.status_code == 200
 
     def test_find_by_name_not_found(self, populated_client):
         """GET /resources/by-name returns 404 for missing name."""
-        resp = populated_client.get("/v1/vault/resources/by-name", params={"name": "nonexistent.md"})
+        resp = populated_client.get(
+            "/v1/vault/resources/by-name", params={"name": "nonexistent.md"}
+        )
         assert resp.status_code == 404
 
 
@@ -170,7 +186,6 @@ class TestFindByNameEndpoint:
 
 @pytest.mark.skipif(not HAS_FASTAPI, reason="fastapi not installed")
 class TestDiffEndpoint:
-
     def test_diff_two_resources(self, populated_client):
         """GET /resources/{old}/diff/{new} returns unified diff."""
         resources = populated_client.get("/v1/vault/resources").json()["data"]
@@ -195,15 +210,17 @@ class TestDiffEndpoint:
 
 @pytest.mark.skipif(not HAS_FASTAPI, reason="fastapi not installed")
 class TestGetMultipleEndpoint:
-
     def test_get_multiple_resources(self, populated_client):
         """POST /resources/multiple returns matching resources."""
         resources = populated_client.get("/v1/vault/resources").json()["data"]
         ids = [r["id"] for r in resources]
 
-        resp = populated_client.post("/v1/vault/resources/multiple", json={
-            "resource_ids": ids,
-        })
+        resp = populated_client.post(
+            "/v1/vault/resources/multiple",
+            json={
+                "resource_ids": ids,
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["meta"]["count"] == len(ids)
@@ -216,23 +233,28 @@ class TestGetMultipleEndpoint:
 
     def test_get_multiple_too_many(self, client):
         """POST /resources/multiple with >100 ids returns 400."""
-        resp = client.post("/v1/vault/resources/multiple", json={
-            "resource_ids": [f"id-{i}" for i in range(101)],
-        })
+        resp = client.post(
+            "/v1/vault/resources/multiple",
+            json={
+                "resource_ids": [f"id-{i}" for i in range(101)],
+            },
+        )
         assert resp.status_code == 400
 
 
 @pytest.mark.skipif(not HAS_FASTAPI, reason="fastapi not installed")
 class TestAdversarialEndpoint:
-
     def test_set_adversarial_status(self, populated_client):
         """PATCH /resources/{id}/adversarial updates status."""
         resources = populated_client.get("/v1/vault/resources").json()["data"]
         rid = resources[0]["id"]
 
-        resp = populated_client.patch(f"/v1/vault/resources/{rid}/adversarial", json={
-            "status": "verified",
-        })
+        resp = populated_client.patch(
+            f"/v1/vault/resources/{rid}/adversarial",
+            json={
+                "status": "verified",
+            },
+        )
         assert resp.status_code == 200
         assert resp.json()["data"]["adversarial_status"] == "verified"
 
@@ -285,6 +307,7 @@ class TestSecurityBoundaries:
     async def test_subscriber_cap_enforced(self, vault: AsyncVault):
         """Cannot register more than _MAX_SUBSCRIBERS callbacks."""
         from qp_vault.vault import _MAX_SUBSCRIBERS
+
         unsubs = []
         for _ in range(_MAX_SUBSCRIBERS):
             unsubs.append(vault.subscribe(lambda e: None))
@@ -300,6 +323,7 @@ class TestSecurityBoundaries:
     async def test_slow_async_callback_times_out(self, vault: AsyncVault):
         """Async callbacks that hang are killed after timeout."""
         import asyncio
+
         timed_out = False
 
         async def slow_callback(event: VaultEvent) -> None:
@@ -340,25 +364,34 @@ class TestSecurityEndpoints:
         resources = populated_client.get("/v1/vault/resources").json()["data"]
         rid = resources[0]["id"]
 
-        resp = populated_client.patch(f"/v1/vault/resources/{rid}/adversarial", json={
-            "status": "hacked",
-        })
+        resp = populated_client.patch(
+            f"/v1/vault/resources/{rid}/adversarial",
+            json={
+                "status": "hacked",
+            },
+        )
         assert resp.status_code == 400
         assert "Invalid status" in resp.json()["detail"]
 
     def test_import_path_traversal_blocked(self, client):
         """Import endpoint blocks path traversal."""
-        resp = client.post("/v1/vault/import", json={
-            "path": "../../../etc/passwd",
-        })
+        resp = client.post(
+            "/v1/vault/import",
+            json={
+                "path": "../../../etc/passwd",
+            },
+        )
         assert resp.status_code == 400
         assert "traversal" in resp.json()["detail"].lower()
 
     def test_get_multiple_non_string_ids_coerced(self, client):
         """Non-string resource IDs are coerced to strings."""
-        resp = client.post("/v1/vault/resources/multiple", json={
-            "resource_ids": [123, 456],
-        })
+        resp = client.post(
+            "/v1/vault/resources/multiple",
+            json={
+                "resource_ids": [123, 456],
+            },
+        )
         assert resp.status_code == 200
         # Should not crash; IDs coerced to "123", "456"
         assert resp.json()["meta"]["count"] == 0  # No matches, but no error
@@ -370,7 +403,6 @@ class TestSecurityEndpoints:
 
 
 class TestSubscribeEdgeCases:
-
     @pytest.mark.asyncio
     async def test_subscribe_sees_reprocess_events(self, vault: AsyncVault):
         """Subscribers receive UPDATE events from reprocess()."""
@@ -439,7 +471,6 @@ class TestSubscribeEdgeCases:
 
 
 class TestGrepEdgeCases:
-
     @pytest.mark.asyncio
     async def test_grep_special_characters(self, vault: AsyncVault):
         """Keywords with special characters don't crash search."""
@@ -480,7 +511,6 @@ class TestGrepEdgeCases:
 
 
 class TestReprocessEdgeCases:
-
     @pytest.mark.asyncio
     async def test_reprocess_content_unchanged(self, vault: AsyncVault):
         """Reprocess produces same content when reassembled."""
@@ -516,7 +546,6 @@ class TestReprocessEdgeCases:
 
 
 class TestFindByNameEdgeCases:
-
     @pytest.mark.asyncio
     async def test_find_by_name_with_spaces(self, vault: AsyncVault):
         """Names with spaces match correctly."""
@@ -553,7 +582,6 @@ class TestFindByNameEdgeCases:
 
 
 class TestTextFallbackEdgeCases:
-
     @pytest.mark.asyncio
     async def test_search_deduplicates_in_text_mode(self, vault: AsyncVault):
         """Text-only search deduplicates by resource_id."""
@@ -581,7 +609,6 @@ class TestTextFallbackEdgeCases:
 
 
 class TestCrossFeatureInteractions:
-
     @pytest.mark.asyncio
     async def test_grep_works_without_embedder(self, vault: AsyncVault):
         """Grep works in text-only mode (no embedder)."""

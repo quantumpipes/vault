@@ -84,6 +84,7 @@ class MembranePipeline:
 
         # Stage 1: REMEMBER (fast pre-check against known attack patterns)
         from qp_vault.membrane.remember import run_remember
+
         remember_result = await run_remember(content, self._attack_registry)
         stages.append(remember_result)
 
@@ -93,11 +94,13 @@ class MembranePipeline:
 
         # Stage 3: Adaptive scan (LLM-based, optional)
         from qp_vault.membrane.adaptive_scan import run_adaptive_scan
+
         adaptive_result = await run_adaptive_scan(content, self._adaptive_config)
         stages.append(adaptive_result)
 
         # Stage 4: Correlate (cross-document contradiction, optional)
         from qp_vault.membrane.correlate import run_correlate
+
         correlate_result = await run_correlate(content, self._correlate_config)
         stages.append(correlate_result)
 

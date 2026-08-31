@@ -4,7 +4,6 @@ Tests the complete flow: add -> search -> verify -> update -> delete.
 Uses SQLite backend (default, zero config).
 """
 
-
 import pytest
 
 from qp_vault import (
@@ -248,6 +247,7 @@ class TestVaultAuditTrail:
         assert log_path.exists()
 
         import json
+
         with open(log_path) as f:
             lines = f.readlines()
         assert len(lines) >= 1

@@ -118,10 +118,7 @@ def filter_searchable(
     """
     if include_quarantined or resource_statuses is None:
         return results
-    return [
-        r for r in results
-        if is_searchable(resource_statuses.get(r.resource_id, "indexed"))
-    ]
+    return [r for r in results if is_searchable(resource_statuses.get(r.resource_id, "indexed"))]
 
 
 def compute_freshness(
@@ -175,12 +172,20 @@ def apply_trust_weighting(
     weighted: list[SearchResult] = []
 
     for result in results:
-        tier = result.trust_tier.value if hasattr(result.trust_tier, "value") else str(result.trust_tier)
+        tier = (
+            result.trust_tier.value
+            if hasattr(result.trust_tier, "value")
+            else str(result.trust_tier)
+        )
         tw = compute_trust_weight(tier, config)
 
         # Membrane 2D trust: multiply by adversarial verification status
         adv_status = getattr(result, "adversarial_status", None)
-        adv_str = adv_status.value if adv_status is not None and hasattr(adv_status, "value") else str(adv_status or "unverified")
+        adv_str = (
+            adv_status.value
+            if adv_status is not None and hasattr(adv_status, "value")
+            else str(adv_status or "unverified")
+        )
         adv_mult = compute_adversarial_multiplier(adv_str)
 
         # Freshness: compute from resource updated_at timestamp

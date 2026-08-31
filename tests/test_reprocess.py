@@ -76,6 +76,7 @@ class TestReprocess:
     async def test_reprocess_missing_resource_raises(self, vault: AsyncVault):
         """Reprocessing a nonexistent resource raises VaultError."""
         from qp_vault.exceptions import VaultError
+
         with pytest.raises(VaultError):
             await vault.reprocess("nonexistent-id")
 
@@ -84,6 +85,7 @@ class TestReprocess:
         """Reprocessing a resource with no chunks raises VaultError."""
         # Create resource without content (edge case)
         from qp_vault.exceptions import VaultError
+
         resource = await vault.add("x", name="empty.md")
 
         # Manually delete chunks to simulate edge case

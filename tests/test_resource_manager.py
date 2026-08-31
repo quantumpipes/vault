@@ -24,10 +24,7 @@ class MockEmbedder:
         return 4
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        return [
-            [float(b) / 255 for b in hashlib.sha256(t.encode()).digest()[:4]]
-            for t in texts
-        ]
+        return [[float(b) / 255 for b in hashlib.sha256(t.encode()).digest()[:4]] for t in texts]
 
 
 class MockAuditor:
@@ -104,6 +101,7 @@ class TestResourceManagerCRUD:
     @pytest.mark.asyncio
     async def test_get_nonexistent(self, manager):
         from qp_vault.exceptions import VaultError
+
         with pytest.raises(VaultError):
             await manager.get("nonexistent")
 
@@ -136,6 +134,7 @@ class TestResourceManagerCRUD:
         r = await manager.add("Test", name="test.md")
         await manager.delete(r.id, hard=True)
         from qp_vault.exceptions import VaultError
+
         with pytest.raises(VaultError):
             await manager.get(r.id)
 

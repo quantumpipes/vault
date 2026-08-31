@@ -147,7 +147,9 @@ class EntityResolver:
     ) -> GraphNode | None:
         """Case-insensitive exact match on name + entity_type."""
         nodes, _ = await self._graph.list_nodes(
-            entity_type=entity_type, space_id=space_id, limit=10000,
+            entity_type=entity_type,
+            space_id=space_id,
+            limit=10000,
         )
         for node in nodes:
             if node.name.lower() == name.lower():
@@ -162,7 +164,9 @@ class EntityResolver:
     ) -> GraphNode | None:
         """Search-based similarity match filtered by entity_type."""
         results = await self._graph.search_nodes(
-            name, space_id=space_id, limit=5,
+            name,
+            space_id=space_id,
+            limit=5,
         )
         for node in results:
             if node.entity_type == entity_type:

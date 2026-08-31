@@ -36,8 +36,13 @@ class TestEnumValidation:
             vault.add("content", layer="marketing")
 
     def test_valid_string_enums_accepted(self, vault):
-        r = vault.add("content", trust_tier="canonical", lifecycle="draft",
-                       classification="confidential", layer="compliance")
+        r = vault.add(
+            "content",
+            trust_tier="canonical",
+            lifecycle="draft",
+            classification="confidential",
+            layer="compliance",
+        )
         assert r.trust_tier == TrustTier.CANONICAL
         assert r.lifecycle == Lifecycle.DRAFT
 
@@ -150,8 +155,8 @@ class TestContentValidation:
 
     def test_max_file_size_enforced(self, vault):
         from qp_vault.config import VaultConfig
-        small = Vault(vault._async.path.parent / "small",
-                      config=VaultConfig(max_file_size_mb=0))
+
+        small = Vault(vault._async.path.parent / "small", config=VaultConfig(max_file_size_mb=0))
         with pytest.raises(VaultError, match="exceeds max size"):
             small.add("x" * 1024 * 1024, name="big.txt")
 
@@ -176,7 +181,7 @@ class TestFTSSanitization:
     def test_fts_special_chars_in_search(self, vault):
         vault.add("Test document with searchable content", name="doc.md")
         # These would crash FTS5 without sanitization
-        results = vault.search('hello* OR (world)')
+        results = vault.search("hello* OR (world)")
         assert isinstance(results, list)
 
     def test_fts_quotes_in_search(self, vault):

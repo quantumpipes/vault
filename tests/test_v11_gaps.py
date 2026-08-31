@@ -97,6 +97,7 @@ class TestClassificationEnforcement:
         vault.get(r.id)
 
         import json
+
         lines = log_path.read_text().strip().split("\n")
         # Find the read audit event
         read_events = [json.loads(line) for line in lines if "restricted" in line]
@@ -125,7 +126,9 @@ class TestImportExportRoundtrip:
     def test_import_preserves_content(self, tmp_path: Path) -> None:
         """Import reconstructs content from chunks."""
         vault1 = Vault(tmp_path / "v1")
-        vault1.add("Critical policy: all incidents must be reported within 15 minutes", name="policy.md")
+        vault1.add(
+            "Critical policy: all incidents must be reported within 15 minutes", name="policy.md"
+        )
         vault1.export_vault(str(tmp_path / "backup.json"))
 
         vault2 = Vault(tmp_path / "v2")

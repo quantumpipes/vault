@@ -52,7 +52,9 @@ def _get_vault(path: str | None = None) -> Vault:
     """Get a Vault instance for the given or default path."""
     vault_dir = Path(path or _vault_path)
     if not (vault_dir / "vault.db").exists() and path is None:
-        console.print("[red]No vault found in current directory. Run 'vault init <path>' first.[/red]")
+        console.print(
+            "[red]No vault found in current directory. Run 'vault init <path>' first.[/red]"
+        )
         raise typer.Exit(1)
     return Vault(vault_dir)
 
@@ -76,10 +78,16 @@ def init(
 @app.command()
 def add(
     file: str = typer.Argument(..., help="File path or text content to add"),
-    trust: str = typer.Option("working", "--trust", "-t", help="Trust tier: canonical, working, ephemeral, archived"),
-    layer: str | None = typer.Option(None, "--layer", "-l", help="Memory layer: operational, strategic, compliance"),
+    trust: str = typer.Option(
+        "working", "--trust", "-t", help="Trust tier: canonical, working, ephemeral, archived"
+    ),
+    layer: str | None = typer.Option(
+        None, "--layer", "-l", help="Memory layer: operational, strategic, compliance"
+    ),
     tags: str | None = typer.Option(None, "--tags", help="Comma-separated tags"),
-    name: str | None = typer.Option(None, "--name", "-n", help="Display name (auto-detected from file)"),
+    name: str | None = typer.Option(
+        None, "--name", "-n", help="Display name (auto-detected from file)"
+    ),
     path: str | None = typer.Option(None, "--path", "-p", help="Vault path"),
 ) -> None:
     """Add a resource to the vault."""
@@ -105,7 +113,9 @@ def add(
 
     console.print(f"[green]Added:[/green] {resource.name}")
     console.print(f"  ID: {resource.id}")
-    console.print(f"  Trust: {resource.trust_tier.value if hasattr(resource.trust_tier, 'value') else resource.trust_tier}")
+    console.print(
+        f"  Trust: {resource.trust_tier.value if hasattr(resource.trust_tier, 'value') else resource.trust_tier}"
+    )
     console.print(f"  Chunks: {resource.chunk_count}")
     console.print(f"  CID: {resource.cid}")
 
@@ -124,7 +134,7 @@ def search(
         console.print("[yellow]No results found.[/yellow]")
         return
 
-    table = Table(title=f"Search: \"{query}\" ({len(results)} results)")
+    table = Table(title=f'Search: "{query}" ({len(results)} results)')
     table.add_column("#", style="dim", width=3)
     table.add_column("Trust", width=10)
     table.add_column("Resource", width=30)
@@ -177,9 +187,17 @@ def inspect(
     table.add_column("Key", style="dim", width=20)
     table.add_column("Value")
 
-    trust = resource.trust_tier.value if hasattr(resource.trust_tier, "value") else str(resource.trust_tier)
+    trust = (
+        resource.trust_tier.value
+        if hasattr(resource.trust_tier, "value")
+        else str(resource.trust_tier)
+    )
     status = resource.status.value if hasattr(resource.status, "value") else str(resource.status)
-    lifecycle = resource.lifecycle.value if hasattr(resource.lifecycle, "value") else str(resource.lifecycle)
+    lifecycle = (
+        resource.lifecycle.value
+        if hasattr(resource.lifecycle, "value")
+        else str(resource.lifecycle)
+    )
 
     table.add_row("ID", resource.id)
     table.add_row("CID", resource.cid)
@@ -243,6 +261,7 @@ def verify(
 
     if resource_id:
         from qp_vault.models import VerificationResult
+
         r = vault.verify(resource_id)
         if not isinstance(r, VerificationResult):
             console.print("[red]Unexpected verification result type[/red]")
@@ -260,6 +279,7 @@ def verify(
             raise typer.Exit(1)
     else:
         from qp_vault.models import VaultVerificationResult
+
         vr = vault.verify()
         if not isinstance(vr, VaultVerificationResult):
             console.print("[red]Unexpected verification result type[/red]")
@@ -437,7 +457,9 @@ def provenance(
         console.print("[yellow]No provenance records.[/yellow]")
         return
     for r in records:
-        console.print(f"  {r.get('created_at', '?')}  by {r.get('uploader_id', 'unknown')}  via {r.get('upload_method', '?')}")
+        console.print(
+            f"  {r.get('created_at', '?')}  by {r.get('uploader_id', 'unknown')}  via {r.get('upload_method', '?')}"
+        )
 
 
 @app.command(name="export")
@@ -448,8 +470,11 @@ def export_vault(
     """Export vault to a JSON file."""
     vault = _get_vault(path)
     import asyncio
+
     result = asyncio.run(vault._async.export_vault(output))
-    console.print(f"[green]Exported[/green]  {result['resource_count']} resources to {result['path']}")
+    console.print(
+        f"[green]Exported[/green]  {result['resource_count']} resources to {result['path']}"
+    )
 
 
 if __name__ == "__main__":

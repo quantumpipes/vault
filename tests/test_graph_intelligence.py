@@ -34,6 +34,7 @@ def tenant_id():
 
 # --- Membrane Sanitization (TI-2.0) ---
 
+
 class TestMembraneSanitize:
     def test_sanitize_normalizes_unicode(self):
         result = sanitize_for_extraction("\ufb01")  # fi ligature
@@ -64,17 +65,25 @@ class TestMembraneSanitize:
 
 # --- KnowledgeExtractor (TI-2.1 through TI-2.6) ---
 
+
 class TestKnowledgeExtractor:
     async def test_extract_parses_llm_response(self):
-        llm_response = json.dumps({
-            "entities": [
-                {"name": "Alice", "type": "person", "properties": {"role": "engineer"}},
-                {"name": "Acme Corp", "type": "company", "properties": {}},
-            ],
-            "relationships": [
-                {"source": "Alice", "target": "Acme Corp", "type": "works_at", "description": "Senior role"},
-            ],
-        })
+        llm_response = json.dumps(
+            {
+                "entities": [
+                    {"name": "Alice", "type": "person", "properties": {"role": "engineer"}},
+                    {"name": "Acme Corp", "type": "company", "properties": {}},
+                ],
+                "relationships": [
+                    {
+                        "source": "Alice",
+                        "target": "Acme Corp",
+                        "type": "works_at",
+                        "description": "Senior role",
+                    },
+                ],
+            }
+        )
 
         async def mock_chat(messages, temp):
             return llm_response
@@ -168,7 +177,8 @@ class TestKnowledgeExtractor:
 
         resource = await vault.add("Jane is affiliated with MIT", name="doc.md")
         node_ids, edge_ids = await extractor.persist_to_graph(
-            graph, resource_id=resource.id,
+            graph,
+            resource_id=resource.id,
         )
         assert len(node_ids) == 2
         assert len(edge_ids) == 1
@@ -176,10 +186,13 @@ class TestKnowledgeExtractor:
 
 # --- EntityResolver (TI-2.7 through TI-2.9) ---
 
+
 class TestEntityResolver:
     async def test_resolve_exact_match(self, vault, tenant_id):
         await vault.graph.create_node(
-            name="OpenAI", entity_type="company", tenant_id=tenant_id,
+            name="OpenAI",
+            entity_type="company",
+            tenant_id=tenant_id,
         )
         resolver = EntityResolver(vault.graph)
         node = await resolver.resolve("OpenAI", "company")
@@ -188,7 +201,9 @@ class TestEntityResolver:
 
     async def test_resolve_case_insensitive(self, vault, tenant_id):
         await vault.graph.create_node(
-            name="OpenAI", entity_type="company", tenant_id=tenant_id,
+            name="OpenAI",
+            entity_type="company",
+            tenant_id=tenant_id,
         )
         resolver = EntityResolver(vault.graph)
         node = await resolver.resolve("openai", "company")
@@ -198,7 +213,8 @@ class TestEntityResolver:
     async def test_resolve_or_create_new(self, vault, tenant_id):
         resolver = EntityResolver(vault.graph)
         node = await resolver.resolve_or_create(
-            "NewCorp", "company",
+            "NewCorp",
+            "company",
         )
         assert node is not None
         assert node.name == "NewCorp"
@@ -208,7 +224,9 @@ class TestEntityResolver:
 
     async def test_resolve_or_create_returns_existing(self, vault, tenant_id):
         existing = await vault.graph.create_node(
-            name="ExistingCo", entity_type="company", tenant_id=tenant_id,
+            name="ExistingCo",
+            entity_type="company",
+            tenant_id=tenant_id,
         )
         resolver = EntityResolver(vault.graph)
         node = await resolver.resolve_or_create("ExistingCo", "company")
@@ -216,7 +234,9 @@ class TestEntityResolver:
 
     async def test_resolve_by_name_any_type(self, vault, tenant_id):
         await vault.graph.create_node(
-            name="Turing", entity_type="person", tenant_id=tenant_id,
+            name="Turing",
+            entity_type="person",
+            tenant_id=tenant_id,
         )
         resolver = EntityResolver(vault.graph)
         node = await resolver.resolve_by_name("Turing")
@@ -226,10 +246,13 @@ class TestEntityResolver:
 
 # --- EntityDetector (TI-2.10 through TI-2.13) ---
 
+
 class TestEntityDetector:
     async def test_detect_exact_match(self, vault, tenant_id):
         await vault.graph.create_node(
-            name="Quantum Computing", entity_type="concept", tenant_id=tenant_id,
+            name="Quantum Computing",
+            entity_type="concept",
+            tenant_id=tenant_id,
         )
         detector = EntityDetector(vault.graph)
         results = await detector.detect(
@@ -268,6 +291,7 @@ class TestEntityDetector:
 
 # --- WikilinkResolver (TI-2.15) ---
 
+
 class TestWikilinks:
     def test_parse_simple_wikilink(self):
         refs = parse_wikilinks("See [[Alice]] for details")
@@ -305,7 +329,9 @@ class TestWikilinks:
 
     async def test_resolve_wikilinks(self, vault, tenant_id):
         await vault.graph.create_node(
-            name="Alice", entity_type="person", tenant_id=tenant_id,
+            name="Alice",
+            entity_type="person",
+            tenant_id=tenant_id,
         )
         resolver = EntityResolver(vault.graph)
         refs = [WikilinkRef(name="Alice", display_text=None, start=0, end=9)]
@@ -324,6 +350,7 @@ class TestWikilinks:
 
 # --- Graph-Augmented Search (TI-2.16, TI-2.17) ---
 
+
 class TestGraphAugmentedSearch:
     async def test_search_default_no_graph_boost(self, vault):
         await vault.add("Document about machine learning models", name="ml.md")
@@ -333,7 +360,9 @@ class TestGraphAugmentedSearch:
     async def test_search_with_graph_boost_no_crash(self, vault, tenant_id):
         await vault.add("Document about quantum physics", name="physics.md")
         await vault.graph.create_node(
-            name="quantum physics", entity_type="concept", tenant_id=tenant_id,
+            name="quantum physics",
+            entity_type="concept",
+            tenant_id=tenant_id,
         )
         results = await vault.search("quantum physics", graph_boost=True)
         assert isinstance(results, list)

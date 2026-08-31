@@ -30,6 +30,7 @@ except ImportError:
 
 # --- check_permission strict mode ---------------------------------------------
 
+
 def test_strict_none_role_denied() -> None:
     from qp_vault.exceptions import VaultError
 
@@ -61,6 +62,7 @@ def test_reader_denied_write_operation() -> None:
 
 # --- router contract ----------------------------------------------------------
 
+
 @pytest.mark.skipif(not HAS_FASTAPI, reason="fastapi not installed")
 def test_router_refuses_unauthenticated(tmp_path) -> None:
     vault = AsyncVault(tmp_path / "v")
@@ -76,9 +78,7 @@ def test_boundary_rbac_reader_blocked_from_write(tmp_path) -> None:
         return Role.READER
 
     app = FastAPI()
-    app.include_router(
-        create_vault_router(vault, role_resolver=reader_role), prefix="/v1/vault"
-    )
+    app.include_router(create_vault_router(vault, role_resolver=reader_role), prefix="/v1/vault")
     client = TestClient(app)
 
     # Reader can search.
@@ -92,9 +92,7 @@ def test_boundary_rbac_reader_blocked_from_write(tmp_path) -> None:
 def test_import_export_disabled_without_base_dir(tmp_path) -> None:
     vault = AsyncVault(tmp_path / "v")
     app = FastAPI()
-    app.include_router(
-        create_vault_router(vault, require_auth=False), prefix="/v1/vault"
-    )
+    app.include_router(create_vault_router(vault, require_auth=False), prefix="/v1/vault")
     client = TestClient(app)
 
     assert client.post("/v1/vault/import", json={"path": "x.json"}).status_code == 403

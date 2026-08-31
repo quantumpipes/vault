@@ -182,14 +182,8 @@ class DoclingParser:
         suffix = path.suffix.lower()
         if suffix not in self._capability.extensions:
             alt = ALTERNATE_PARSERS.get(suffix)
-            hint = (
-                f" Use {alt} for this format."
-                if alt
-                else " No parser in this estate reads it."
-            )
-            raise ValueError(
-                f"docling {self._capability.version} does not read {suffix!r}.{hint}"
-            )
+            hint = f" Use {alt} for this format." if alt else " No parser in this estate reads it."
+            raise ValueError(f"docling {self._capability.version} does not read {suffix!r}.{hint}")
 
         if self._converter is None:
             self._converter = self._build_converter()

@@ -105,20 +105,14 @@ class ContentProvenanceService:
 
         if self._signing_fn is not None:
             signature = await self._signing_fn(canonical)
-            provenance = provenance.model_copy(
-                update={"provenance_signature": signature}
-            )
+            provenance = provenance.model_copy(update={"provenance_signature": signature})
             # Verify the signature we just created (Finding 17: never trust without verifying)
             if self._verify_fn is not None:
                 verified = await self._verify_fn(canonical, signature)
-                provenance = provenance.model_copy(
-                    update={"signature_verified": verified}
-                )
+                provenance = provenance.model_copy(update={"signature_verified": verified})
             else:
                 # We signed it ourselves: trust our own signature
-                provenance = provenance.model_copy(
-                    update={"signature_verified": True}
-                )
+                provenance = provenance.model_copy(update={"signature_verified": True})
 
         # Store in memory (production: persisted via storage backend)
         self._records[provenance_id] = provenance
@@ -174,10 +168,7 @@ class ContentProvenanceService:
         Returns:
             List of provenance records.
         """
-        return [
-            r for r in self._records.values()
-            if r.uploader_id == uploader_id
-        ]
+        return [r for r in self._records.values() if r.uploader_id == uploader_id]
 
     async def get_by_method(self, method: UploadMethod) -> list[ContentProvenance]:
         """Get all provenance records with a specific upload method.
@@ -188,10 +179,7 @@ class ContentProvenanceService:
         Returns:
             List of provenance records.
         """
-        return [
-            r for r in self._records.values()
-            if r.upload_method == method
-        ]
+        return [r for r in self._records.values() if r.upload_method == method]
 
     @staticmethod
     def _canonical_bytes(provenance: ContentProvenance) -> bytes:

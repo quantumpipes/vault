@@ -33,30 +33,77 @@ RTF_EXTENSIONS = frozenset({".rtf"})
 
 #: Destinations whose CONTENT is metadata, not document text. Skipping them is the
 #: difference between the rule's words and the rule's words preceded by a font table.
-_SKIP_DESTINATIONS = frozenset({
-    "fonttbl", "colortbl", "stylesheet", "listtable", "listoverridetable",
-    "info", "pict", "object", "themedata", "colorschememapping", "datastore",
-    "latentstyles", "rsidtbl", "generator", "xmlnstbl", "filetbl", "revtbl",
-    "mmathPr", "wgrffmtfilter", "listtext", "pntext", "header", "footer",
-    "headerl", "headerr", "headerf", "footerl", "footerr", "footerf",
-    "footnote", "annotation", "bkmkstart", "bkmkend", "shppict", "nonshppict",
-})
+_SKIP_DESTINATIONS = frozenset(
+    {
+        "fonttbl",
+        "colortbl",
+        "stylesheet",
+        "listtable",
+        "listoverridetable",
+        "info",
+        "pict",
+        "object",
+        "themedata",
+        "colorschememapping",
+        "datastore",
+        "latentstyles",
+        "rsidtbl",
+        "generator",
+        "xmlnstbl",
+        "filetbl",
+        "revtbl",
+        "mmathPr",
+        "wgrffmtfilter",
+        "listtext",
+        "pntext",
+        "header",
+        "footer",
+        "headerl",
+        "headerr",
+        "headerf",
+        "footerl",
+        "footerr",
+        "footerf",
+        "footnote",
+        "annotation",
+        "bkmkstart",
+        "bkmkend",
+        "shppict",
+        "nonshppict",
+    }
+)
 
 #: Control words that emit a character rather than set state.
 _EMIT = {
-    "par": "\n", "line": "\n", "sect": "\n\n", "page": "\n\n",
-    "tab": "\t", "cell": "\t", "row": "\n", "nestcell": "\t", "nestrow": "\n",
-    "emdash": "\u2014", "endash": "\u2013", "lquote": "\u2018", "rquote": "\u2019",
-    "ldblquote": "\u201c", "rdblquote": "\u201d", "bullet": "\u2022",
-    "enspace": " ", "emspace": " ", "~": "\u00a0", "-": "", "_": "\u2011",
+    "par": "\n",
+    "line": "\n",
+    "sect": "\n\n",
+    "page": "\n\n",
+    "tab": "\t",
+    "cell": "\t",
+    "row": "\n",
+    "nestcell": "\t",
+    "nestrow": "\n",
+    "emdash": "\u2014",
+    "endash": "\u2013",
+    "lquote": "\u2018",
+    "rquote": "\u2019",
+    "ldblquote": "\u201c",
+    "rdblquote": "\u201d",
+    "bullet": "\u2022",
+    "enspace": " ",
+    "emspace": " ",
+    "~": "\u00a0",
+    "-": "",
+    "_": "\u2011",
 }
 
 _TOKEN = re.compile(
-    r"\\([a-zA-Z]{1,32})(-?\d{1,10})?[ ]?"   # control word, optional numeric arg
-    r"|\\'([0-9a-fA-F]{2})"                   # hex-escaped byte
-    r"|\\([\\{}*])"                           # escaped literal, or the \* ignorable mark
-    r"|([{}])"                                # group open/close
-    r"|([^\\{}]+)"                            # plain run
+    r"\\([a-zA-Z]{1,32})(-?\d{1,10})?[ ]?"  # control word, optional numeric arg
+    r"|\\'([0-9a-fA-F]{2})"  # hex-escaped byte
+    r"|\\([\\{}*])"  # escaped literal, or the \* ignorable mark
+    r"|([{}])"  # group open/close
+    r"|([^\\{}]+)"  # plain run
 )
 
 
@@ -175,8 +222,7 @@ class RtfParser:
         raw = path.read_bytes()
         if not raw.lstrip()[:5].startswith(b"{\\rtf"):
             raise ValueError(
-                f"{path.name} does not begin with an RTF header; refusing to guess "
-                f"at its encoding."
+                f"{path.name} does not begin with an RTF header; refusing to guess at its encoding."
             )
         text = rtf_to_text(raw.decode("cp1252", errors="replace"))
         return ParseResult(

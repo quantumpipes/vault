@@ -62,7 +62,11 @@ class LifecycleEngine:
             raise VaultError(f"Resource {resource_id} not found")
 
         target_lc = Lifecycle(target) if isinstance(target, str) else target
-        current_lc = Lifecycle(resource.lifecycle) if isinstance(resource.lifecycle, str) else resource.lifecycle
+        current_lc = (
+            Lifecycle(resource.lifecycle)
+            if isinstance(resource.lifecycle, str)
+            else resource.lifecycle
+        )
 
         # Validate transition
         allowed = VALID_TRANSITIONS.get(current_lc, set())
@@ -120,7 +124,9 @@ class LifecycleEngine:
             raise VaultError(f"Resource {new_id} not found")
 
         # Transition old to SUPERSEDED
-        old_updated = await self.transition(old_id, Lifecycle.SUPERSEDED, reason=f"Superseded by {new_id}")
+        old_updated = await self.transition(
+            old_id, Lifecycle.SUPERSEDED, reason=f"Superseded by {new_id}"
+        )
 
         # Set pointers
         await self._storage.update_resource(old_id, ResourceUpdate(superseded_by=new_id))

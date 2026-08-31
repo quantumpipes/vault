@@ -114,7 +114,11 @@ class ResourceManager:
 
         # Normalize enums
         trust_tier = TrustTier(trust_tier) if isinstance(trust_tier, str) else trust_tier
-        data_class = DataClassification(classification) if isinstance(classification, str) else classification
+        data_class = (
+            DataClassification(classification)
+            if isinstance(classification, str)
+            else classification
+        )
         lc = Lifecycle(lifecycle) if isinstance(lifecycle, str) else lifecycle
         mem_layer = MemoryLayer(layer) if isinstance(layer, str) else layer
 
@@ -147,6 +151,7 @@ class ResourceManager:
             is_local = getattr(self._embedder, "is_local", True)
             if not is_local:
                 from qp_vault.exceptions import VaultError
+
                 raise VaultError(
                     f"Cannot use cloud embedder for {data_class.value} content. "
                     "Use a local embedder (SentenceTransformerEmbedder) or NoopEmbedder."
@@ -161,7 +166,9 @@ class ResourceManager:
 
         # Compute resource-level hash from chunk CIDs
         chunk_cids = [c.cid for c in chunks]
-        content_hash = compute_resource_hash(chunk_cids) if chunk_cids else compute_cid(text).split("/")[-1]
+        content_hash = (
+            compute_resource_hash(chunk_cids) if chunk_cids else compute_cid(text).split("/")[-1]
+        )
         resource_cid = f"vault://sha3-256/{content_hash}"
 
         # Content deduplication: return existing resource if same CID + tenant
@@ -238,11 +245,17 @@ class ResourceManager:
         """List resources with filters."""
         filters = ResourceFilter(
             tenant_id=tenant_id,
-            trust_tier=trust_tier.value if trust_tier is not None and hasattr(trust_tier, "value") else trust_tier,
-            data_classification=classification.value if classification is not None and hasattr(classification, "value") else classification,
+            trust_tier=trust_tier.value
+            if trust_tier is not None and hasattr(trust_tier, "value")
+            else trust_tier,
+            data_classification=classification.value
+            if classification is not None and hasattr(classification, "value")
+            else classification,
             layer=layer.value if layer is not None and hasattr(layer, "value") else layer,
             collection_id=collection,
-            lifecycle=lifecycle.value if lifecycle is not None and hasattr(lifecycle, "value") else lifecycle,
+            lifecycle=lifecycle.value
+            if lifecycle is not None and hasattr(lifecycle, "value")
+            else lifecycle,
             status=status.value if status is not None and hasattr(status, "value") else status,
             tags=tags,
             limit=limit,
@@ -263,8 +276,12 @@ class ResourceManager:
         """Update resource metadata."""
         updates = ResourceUpdate(
             name=name,
-            trust_tier=trust_tier.value if trust_tier is not None and hasattr(trust_tier, "value") else trust_tier,
-            data_classification=classification.value if classification is not None and hasattr(classification, "value") else classification,
+            trust_tier=trust_tier.value
+            if trust_tier is not None and hasattr(trust_tier, "value")
+            else trust_tier,
+            data_classification=classification.value
+            if classification is not None and hasattr(classification, "value")
+            else classification,
             tags=tags,
             metadata=metadata,
         )
@@ -278,7 +295,11 @@ class ResourceManager:
                 resource_id=resource_id,
                 resource_name=resource.name,
                 resource_hash=resource.content_hash,
-                details={"new_trust_tier": trust_tier.value if trust_tier is not None and hasattr(trust_tier, "value") else trust_tier},
+                details={
+                    "new_trust_tier": trust_tier.value
+                    if trust_tier is not None and hasattr(trust_tier, "value")
+                    else trust_tier
+                },
             )
             await self._auditor.record(event)
 

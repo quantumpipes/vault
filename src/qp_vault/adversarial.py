@@ -165,14 +165,8 @@ class AdversarialVerifier:
 
     async def get_verified_count(self) -> int:
         """Count resources with VERIFIED status."""
-        return sum(
-            1 for s in self._status_store.values()
-            if s == AdversarialStatus.VERIFIED
-        )
+        return sum(1 for s in self._status_store.values() if s == AdversarialStatus.VERIFIED)
 
     async def get_suspicious_count(self) -> int:
         """Count resources with SUSPICIOUS status."""
-        return sum(
-            1 for s in self._status_store.values()
-            if s == AdversarialStatus.SUSPICIOUS
-        )
+        return sum(1 for s in self._status_store.values() if s == AdversarialStatus.SUSPICIOUS)

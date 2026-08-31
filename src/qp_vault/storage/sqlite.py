@@ -239,6 +239,7 @@ def _sanitize_fts_query(query: str) -> str:
     have special meaning. We strip them to prevent OperationalError.
     """
     import re
+
     # Remove FTS5 special operators and syntax characters
     cleaned = re.sub(r'[*"()\-{}[\]^~:+]', " ", query)
     # Collapse whitespace
@@ -295,6 +296,7 @@ class SQLiteBackend:
         """Set file to owner-only read/write (0600)."""
         import os
         import stat
+
         if path.exists():
             os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
 
@@ -345,11 +347,19 @@ class SQLiteBackend:
                     resource.content_hash,
                     resource.cid,
                     resource.merkle_root,
-                    resource.trust_tier.value if hasattr(resource.trust_tier, "value") else resource.trust_tier,
-                    resource.data_classification.value if hasattr(resource.data_classification, "value") else resource.data_classification,
-                    resource.resource_type.value if hasattr(resource.resource_type, "value") else resource.resource_type,
+                    resource.trust_tier.value
+                    if hasattr(resource.trust_tier, "value")
+                    else resource.trust_tier,
+                    resource.data_classification.value
+                    if hasattr(resource.data_classification, "value")
+                    else resource.data_classification,
+                    resource.resource_type.value
+                    if hasattr(resource.resource_type, "value")
+                    else resource.resource_type,
                     resource.status.value if hasattr(resource.status, "value") else resource.status,
-                    resource.lifecycle.value if hasattr(resource.lifecycle, "value") else resource.lifecycle,
+                    resource.lifecycle.value
+                    if hasattr(resource.lifecycle, "value")
+                    else resource.lifecycle,
                     _enum_val(getattr(resource, "adversarial_status", "unverified")),
                     str(resource.valid_from) if resource.valid_from else None,
                     str(resource.valid_until) if resource.valid_until else None,
@@ -357,7 +367,9 @@ class SQLiteBackend:
                     resource.superseded_by,
                     resource.tenant_id,
                     resource.collection_id,
-                    resource.layer.value if resource.layer and hasattr(resource.layer, "value") else resource.layer,
+                    resource.layer.value
+                    if resource.layer and hasattr(resource.layer, "value")
+                    else resource.layer,
                     json.dumps(resource.tags),
                     json.dumps(resource.metadata),
                     resource.mime_type,
@@ -442,8 +454,15 @@ class SQLiteBackend:
         params: list[Any] = []
 
         for field_name in (
-            "name", "trust_tier", "data_classification", "lifecycle",
-            "adversarial_status", "valid_from", "valid_until", "supersedes", "superseded_by",
+            "name",
+            "trust_tier",
+            "data_classification",
+            "lifecycle",
+            "adversarial_status",
+            "valid_from",
+            "valid_until",
+            "supersedes",
+            "superseded_by",
         ):
             val = getattr(updates, field_name, None)
             if val is not None:
@@ -517,7 +536,13 @@ class SQLiteBackend:
         # Update resource chunk count and status
         conn.execute(
             "UPDATE resources SET chunk_count = ?, status = ?, indexed_at = ?, updated_at = ? WHERE id = ?",
-            (len(chunks), ResourceStatus.INDEXED.value, datetime.now(tz=UTC).isoformat(), datetime.now(tz=UTC).isoformat(), resource_id),
+            (
+                len(chunks),
+                ResourceStatus.INDEXED.value,
+                datetime.now(tz=UTC).isoformat(),
+                datetime.now(tz=UTC).isoformat(),
+                resource_id,
+            ),
         )
         conn.commit()
 
@@ -730,24 +755,26 @@ class SQLiteBackend:
             if not matched:
                 continue
 
-            results.append(GrepMatch(
-                chunk_id=row_dict["chunk_id"],
-                resource_id=row_dict["resource_id"],
-                resource_name=row_dict["resource_name"],
-                content=content,
-                matched_keywords=matched,
-                hit_density=len(matched) / total_kw,
-                text_rank=fts_ranks.get(row_dict["chunk_rowid"], 0.0),
-                trust_tier=row_dict["trust_tier"],
-                adversarial_status=row_dict.get("adversarial_status", "unverified"),
-                lifecycle=row_dict.get("lifecycle", "active"),
-                updated_at=row_dict.get("updated_at"),
-                page_number=row_dict["page_number"],
-                section_title=row_dict["section_title"],
-                resource_type=row_dict.get("resource_type"),
-                data_classification=row_dict.get("data_classification"),
-                cid=row_dict.get("cid"),
-            ))
+            results.append(
+                GrepMatch(
+                    chunk_id=row_dict["chunk_id"],
+                    resource_id=row_dict["resource_id"],
+                    resource_name=row_dict["resource_name"],
+                    content=content,
+                    matched_keywords=matched,
+                    hit_density=len(matched) / total_kw,
+                    text_rank=fts_ranks.get(row_dict["chunk_rowid"], 0.0),
+                    trust_tier=row_dict["trust_tier"],
+                    adversarial_status=row_dict.get("adversarial_status", "unverified"),
+                    lifecycle=row_dict.get("lifecycle", "active"),
+                    updated_at=row_dict.get("updated_at"),
+                    page_number=row_dict["page_number"],
+                    section_title=row_dict["section_title"],
+                    resource_type=row_dict.get("resource_type"),
+                    data_classification=row_dict.get("data_classification"),
+                    cid=row_dict.get("cid"),
+                )
+            )
 
         # Sort by density first, then text_rank
         results.sort(key=lambda r: (r.hit_density, r.text_rank), reverse=True)
@@ -810,9 +837,15 @@ class SQLiteBackend:
                 signature_verified, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                provenance_id, resource_id, uploader_id, upload_method,
-                source_description, original_hash, signature,
-                1 if verified else 0, created_at,
+                provenance_id,
+                resource_id,
+                uploader_id,
+                upload_method,
+                source_description,
+                original_hash,
+                signature,
+                1 if verified else 0,
+                created_at,
             ),
         )
         conn.commit()
@@ -875,6 +908,7 @@ class SQLiteBackend:
         ).fetchone()
         if row and row["embedding"]:
             import json
+
             emb = json.loads(row["embedding"])
             return len(emb) if isinstance(emb, list) else None
         return None
@@ -894,8 +928,11 @@ class SQLiteBackend:
                 created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                str(node["id"]), str(node["tenant_id"]), node["name"],
-                node["slug"], node["entity_type"],
+                str(node["id"]),
+                str(node["tenant_id"]),
+                node["name"],
+                node["slug"],
+                node["entity_type"],
                 json.dumps(node.get("properties", {})),
                 json.dumps(node.get("tags", [])),
                 str(node["primary_space_id"]) if node.get("primary_space_id") else None,
@@ -903,8 +940,12 @@ class SQLiteBackend:
                 str(node["manifest_resource_id"]) if node.get("manifest_resource_id") else None,
                 node.get("mention_count", 0),
                 node["last_mentioned_at"].isoformat() if node.get("last_mentioned_at") else None,
-                node.get("created_at", now) if isinstance(node.get("created_at"), str) else (node["created_at"].isoformat() if node.get("created_at") else now),
-                node.get("updated_at", now) if isinstance(node.get("updated_at"), str) else (node["updated_at"].isoformat() if node.get("updated_at") else now),
+                node.get("created_at", now)
+                if isinstance(node.get("created_at"), str)
+                else (node["created_at"].isoformat() if node.get("created_at") else now),
+                node.get("updated_at", now)
+                if isinstance(node.get("updated_at"), str)
+                else (node["updated_at"].isoformat() if node.get("updated_at") else now),
             ),
         )
         conn.commit()
@@ -914,7 +955,8 @@ class SQLiteBackend:
         """Retrieve a graph node by ID."""
         conn = self._get_conn()
         row = conn.execute(
-            "SELECT * FROM graph_nodes WHERE id = ?", (str(node_id),),
+            "SELECT * FROM graph_nodes WHERE id = ?",
+            (str(node_id),),
         ).fetchone()
         if row is None:
             return None
@@ -929,7 +971,8 @@ class SQLiteBackend:
         return d
 
     async def list_nodes(
-        self, filters: dict[str, Any],
+        self,
+        filters: dict[str, Any],
     ) -> tuple[list[dict[str, Any]], int]:
         """List graph nodes with optional filtering."""
         conn = self._get_conn()
@@ -969,7 +1012,10 @@ class SQLiteBackend:
         return [self._graph_node_from_row(dict(r)) for r in rows], total
 
     async def search_nodes(
-        self, query: str, space_id: str | None, limit: int,
+        self,
+        query: str,
+        space_id: str | None,
+        limit: int,
     ) -> list[dict[str, Any]]:
         """Search graph nodes using FTS5 on name."""
         conn = self._get_conn()
@@ -1015,20 +1061,32 @@ class SQLiteBackend:
         return results
 
     async def update_node(
-        self, node_id: str, updates: dict[str, Any],
+        self,
+        node_id: str,
+        updates: dict[str, Any],
     ) -> dict[str, Any]:
         """Apply partial updates to a graph node."""
         conn = self._get_conn()
         sets: list[str] = []
         params: list[Any] = []
 
-        for field in ("name", "slug", "entity_type", "primary_space_id",
-                       "resource_id", "manifest_resource_id",
-                       "mention_count", "last_mentioned_at"):
+        for field in (
+            "name",
+            "slug",
+            "entity_type",
+            "primary_space_id",
+            "resource_id",
+            "manifest_resource_id",
+            "mention_count",
+            "last_mentioned_at",
+        ):
             if field in updates:
                 sets.append(f"{field} = ?")
                 val = updates[field]
-                if field in ("primary_space_id", "resource_id", "manifest_resource_id") and val is not None:
+                if (
+                    field in ("primary_space_id", "resource_id", "manifest_resource_id")
+                    and val is not None
+                ):
                     val = str(val)
                 elif field == "last_mentioned_at" and val is not None and not isinstance(val, str):
                     val = val.isoformat()
@@ -1072,31 +1130,43 @@ class SQLiteBackend:
                 source_resource_id, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                str(edge["id"]), str(edge["tenant_id"]),
-                str(edge["source_node_id"]), str(edge["target_node_id"]),
-                edge["relation_type"], json.dumps(edge.get("properties", {})),
-                edge.get("weight", 0.5), 1 if edge.get("bidirectional") else 0,
+                str(edge["id"]),
+                str(edge["tenant_id"]),
+                str(edge["source_node_id"]),
+                str(edge["target_node_id"]),
+                edge["relation_type"],
+                json.dumps(edge.get("properties", {})),
+                edge.get("weight", 0.5),
+                1 if edge.get("bidirectional") else 0,
                 str(edge["source_resource_id"]) if edge.get("source_resource_id") else None,
-                edge.get("created_at", now) if isinstance(edge.get("created_at"), str) else (edge["created_at"].isoformat() if edge.get("created_at") else now),
-                edge.get("updated_at", now) if isinstance(edge.get("updated_at"), str) else (edge["updated_at"].isoformat() if edge.get("updated_at") else now),
+                edge.get("created_at", now)
+                if isinstance(edge.get("created_at"), str)
+                else (edge["created_at"].isoformat() if edge.get("created_at") else now),
+                edge.get("updated_at", now)
+                if isinstance(edge.get("updated_at"), str)
+                else (edge["updated_at"].isoformat() if edge.get("updated_at") else now),
             ),
         )
         conn.commit()
         return str(edge["id"])
 
     async def get_edges(
-        self, node_id: str, direction: str,
+        self,
+        node_id: str,
+        direction: str,
     ) -> list[dict[str, Any]]:
         """Get edges connected to a node."""
         conn = self._get_conn()
         nid = str(node_id)
         if direction == "outgoing":
             rows = conn.execute(
-                "SELECT * FROM graph_edges WHERE source_node_id = ?", (nid,),
+                "SELECT * FROM graph_edges WHERE source_node_id = ?",
+                (nid,),
             ).fetchall()
         elif direction == "incoming":
             rows = conn.execute(
-                "SELECT * FROM graph_edges WHERE target_node_id = ?", (nid,),
+                "SELECT * FROM graph_edges WHERE target_node_id = ?",
+                (nid,),
             ).fetchall()
         else:
             rows = conn.execute(
@@ -1114,7 +1184,9 @@ class SQLiteBackend:
         return results
 
     async def update_edge(
-        self, edge_id: str, updates: dict[str, Any],
+        self,
+        edge_id: str,
+        updates: dict[str, Any],
     ) -> dict[str, Any]:
         """Apply partial updates to a graph edge."""
         conn = self._get_conn()
@@ -1145,7 +1217,8 @@ class SQLiteBackend:
         conn.commit()
 
         row = conn.execute(
-            "SELECT * FROM graph_edges WHERE id = ?", (str(edge_id),),
+            "SELECT * FROM graph_edges WHERE id = ?",
+            (str(edge_id),),
         ).fetchone()
         if row is None:
             raise StorageError(f"Graph edge {edge_id} not found after update")
@@ -1162,8 +1235,11 @@ class SQLiteBackend:
         conn.commit()
 
     async def neighbors(
-        self, node_id: str, depth: int,
-        relation_types: list[str] | None, space_id: str | None,
+        self,
+        node_id: str,
+        depth: int,
+        relation_types: list[str] | None,
+        space_id: str | None,
     ) -> list[dict[str, Any]]:
         """N-hop neighbor traversal via Python BFS."""
         conn = self._get_conn()
@@ -1194,7 +1270,8 @@ class SQLiteBackend:
                         continue
 
                     node_row = conn.execute(
-                        "SELECT * FROM graph_nodes WHERE id = ?", (target,),
+                        "SELECT * FROM graph_nodes WHERE id = ?",
+                        (target,),
                     ).fetchone()
                     if node_row is None:
                         continue
@@ -1205,32 +1282,39 @@ class SQLiteBackend:
                             or conn.execute(
                                 "SELECT 1 FROM graph_node_spaces WHERE node_id = ? AND space_id = ?",
                                 (target, str(space_id)),
-                            ).fetchone() is not None
+                            ).fetchone()
+                            is not None
                         )
                         if not in_space:
                             continue
 
                     visited.add(target)
                     next_frontier.append(target)
-                    results.append({
-                        "node_id": target,
-                        "node_name": node_row["name"],
-                        "entity_type": node_row["entity_type"],
-                        "depth": current_depth,
-                        "path": [],
-                        "relation_type": edge["relation_type"],
-                        "edge_weight": edge["weight"],
-                    })
+                    results.append(
+                        {
+                            "node_id": target,
+                            "node_name": node_row["name"],
+                            "entity_type": node_row["entity_type"],
+                            "depth": current_depth,
+                            "path": [],
+                            "relation_type": edge["relation_type"],
+                            "edge_weight": edge["weight"],
+                        }
+                    )
             frontier = next_frontier
 
         return results
 
     async def upsert_mention(
-        self, node_id: str, resource_id: str,
-        space_id: str | None, context_snippet: str,
+        self,
+        node_id: str,
+        resource_id: str,
+        space_id: str | None,
+        context_snippet: str,
     ) -> None:
         """Track entity mention in a resource (upsert)."""
         import uuid
+
         conn = self._get_conn()
         nid = str(node_id)
         rid = str(resource_id)
@@ -1249,7 +1333,11 @@ class SQLiteBackend:
                VALUES (?, ?, ?, ?, ?, ?)""",
             (
                 existing["id"] if existing else str(uuid.uuid4()),
-                nid, rid, str(space_id) if space_id else None, snippet, now,
+                nid,
+                rid,
+                str(space_id) if space_id else None,
+                snippet,
+                now,
             ),
         )
 
@@ -1267,7 +1355,10 @@ class SQLiteBackend:
         conn.commit()
 
     async def get_backlinks(
-        self, node_id: str, limit: int, offset: int,
+        self,
+        node_id: str,
+        limit: int,
+        offset: int,
     ) -> list[dict[str, Any]]:
         """Get all resources that mention an entity."""
         conn = self._get_conn()
@@ -1279,7 +1370,8 @@ class SQLiteBackend:
         return [dict(r) for r in rows]
 
     async def get_entities_for_resource(
-        self, resource_id: str,
+        self,
+        resource_id: str,
     ) -> list[dict[str, Any]]:
         """Get all entities mentioned in a vault resource."""
         conn = self._get_conn()
@@ -1313,7 +1405,9 @@ class SQLiteBackend:
         conn.commit()
 
     async def merge_nodes(
-        self, keep_id: str, merge_id: str,
+        self,
+        keep_id: str,
+        merge_id: str,
     ) -> dict[str, Any]:
         """Merge two nodes: re-point edges, mentions, spaces; delete merge_id."""
         conn = self._get_conn()
@@ -1326,7 +1420,8 @@ class SQLiteBackend:
             raise StorageError("Both nodes must exist for merge")
 
         edges_to_repoint = conn.execute(
-            "SELECT * FROM graph_edges WHERE source_node_id = ?", (mid,),
+            "SELECT * FROM graph_edges WHERE source_node_id = ?",
+            (mid,),
         ).fetchall()
         for e in edges_to_repoint:
             conflict = conn.execute(
@@ -1340,7 +1435,8 @@ class SQLiteBackend:
                 )
 
         edges_to_repoint = conn.execute(
-            "SELECT * FROM graph_edges WHERE target_node_id = ?", (mid,),
+            "SELECT * FROM graph_edges WHERE target_node_id = ?",
+            (mid,),
         ).fetchall()
         for e in edges_to_repoint:
             conflict = conn.execute(
@@ -1354,7 +1450,8 @@ class SQLiteBackend:
                 )
 
         mentions_to_repoint = conn.execute(
-            "SELECT * FROM graph_mentions WHERE node_id = ?", (mid,),
+            "SELECT * FROM graph_mentions WHERE node_id = ?",
+            (mid,),
         ).fetchall()
         for m in mentions_to_repoint:
             conflict = conn.execute(
@@ -1368,7 +1465,8 @@ class SQLiteBackend:
                 )
 
         spaces = conn.execute(
-            "SELECT space_id FROM graph_node_spaces WHERE node_id = ?", (mid,),
+            "SELECT space_id FROM graph_node_spaces WHERE node_id = ?",
+            (mid,),
         ).fetchall()
         for s in spaces:
             with contextlib.suppress(sqlite3.IntegrityError):
@@ -1377,19 +1475,36 @@ class SQLiteBackend:
                     (kid, s["space_id"]),
                 )
 
-        keep_props = json.loads(keep["properties"]) if isinstance(keep["properties"], str) else (keep["properties"] or {})
-        merge_props = json.loads(merge["properties"]) if isinstance(merge["properties"], str) else (merge["properties"] or {})
+        keep_props = (
+            json.loads(keep["properties"])
+            if isinstance(keep["properties"], str)
+            else (keep["properties"] or {})
+        )
+        merge_props = (
+            json.loads(merge["properties"])
+            if isinstance(merge["properties"], str)
+            else (merge["properties"] or {})
+        )
         merged_props = {**merge_props, **keep_props}
-        keep_tags = json.loads(keep["tags"]) if isinstance(keep["tags"], str) else (keep["tags"] or [])
-        merge_tags = json.loads(merge["tags"]) if isinstance(merge["tags"], str) else (merge["tags"] or [])
+        keep_tags = (
+            json.loads(keep["tags"]) if isinstance(keep["tags"], str) else (keep["tags"] or [])
+        )
+        merge_tags = (
+            json.loads(merge["tags"]) if isinstance(merge["tags"], str) else (merge["tags"] or [])
+        )
         merged_tags = list(set(keep_tags + merge_tags))
         merged_count = (keep["mention_count"] or 0) + (merge["mention_count"] or 0)
 
         conn.execute(
             "UPDATE graph_nodes SET properties = ?, tags = ?, "
             "mention_count = ?, updated_at = ? WHERE id = ?",
-            (json.dumps(merged_props), json.dumps(merged_tags),
-             merged_count, datetime.now(tz=UTC).isoformat(), kid),
+            (
+                json.dumps(merged_props),
+                json.dumps(merged_tags),
+                merged_count,
+                datetime.now(tz=UTC).isoformat(),
+                kid,
+            ),
         )
         conn.execute("DELETE FROM graph_nodes WHERE id = ?", (mid,))
         conn.commit()
@@ -1415,8 +1530,12 @@ class SQLiteBackend:
                    (id, tenant_id, space_id, status, started_at, finished_at, summary_json, error)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                str(job["id"]), str(job["tenant_id"]), str(job["space_id"]),
-                job.get("status", "running"), started, finished,
+                str(job["id"]),
+                str(job["tenant_id"]),
+                str(job["space_id"]),
+                job.get("status", "running"),
+                started,
+                finished,
                 json.dumps(job["summary"]) if job.get("summary") else None,
                 job.get("error"),
             ),
@@ -1428,7 +1547,8 @@ class SQLiteBackend:
         """Retrieve a scan job by ID."""
         conn = self._get_conn()
         row = conn.execute(
-            "SELECT * FROM graph_scan_jobs WHERE id = ?", (str(job_id),),
+            "SELECT * FROM graph_scan_jobs WHERE id = ?",
+            (str(job_id),),
         ).fetchone()
         if row is None:
             return None
@@ -1440,7 +1560,8 @@ class SQLiteBackend:
         return d
 
     async def list_scan_jobs(
-        self, filters: dict[str, Any],
+        self,
+        filters: dict[str, Any],
     ) -> tuple[list[dict[str, Any]], int]:
         """List scan jobs with optional filtering."""
         conn = self._get_conn()
@@ -1481,7 +1602,9 @@ class SQLiteBackend:
         return results, total
 
     async def update_scan_job(
-        self, job_id: str, updates: dict[str, Any],
+        self,
+        job_id: str,
+        updates: dict[str, Any],
     ) -> None:
         """Update a scan job's fields."""
         conn = self._get_conn()

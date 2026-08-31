@@ -31,7 +31,15 @@ def compute_staleness_score(
     - Trust tier (ephemeral decays faster)
     - Presence of volatile topic keywords
     """
-    default_volatile = {"policy", "procedure", "sop", "guideline", "regulation", "deadline", "schedule"}
+    default_volatile = {
+        "policy",
+        "procedure",
+        "sop",
+        "guideline",
+        "regulation",
+        "deadline",
+        "schedule",
+    }
     volatile = volatile_keywords or default_volatile
 
     # Age in days
@@ -41,7 +49,11 @@ def compute_staleness_score(
     age_days = max(0, (datetime.now(tz=UTC) - updated).total_seconds() / 86400)
 
     # Half-life based on trust tier
-    tier = resource.trust_tier.value if hasattr(resource.trust_tier, "value") else str(resource.trust_tier)
+    tier = (
+        resource.trust_tier.value
+        if hasattr(resource.trust_tier, "value")
+        else str(resource.trust_tier)
+    )
     half_lives = {
         "canonical": 365,
         "working": 180,
@@ -95,12 +107,7 @@ def find_orphans(
         if age_days < min_age_days:
             continue
 
-        is_orphan = (
-            not r.collection_id
-            and not r.tags
-            and not r.supersedes
-            and not r.superseded_by
-        )
+        is_orphan = not r.collection_id and not r.tags and not r.supersedes and not r.superseded_by
         if is_orphan:
             orphans.append(r)
 
@@ -181,9 +188,7 @@ def detect_contradictions(
     contradictions: list[dict[str, Any]] = []
 
     # Find resources that are semantically similar but have different trust tiers
-    near_dupes = find_near_duplicates(
-        resources, chunks_by_resource, similarity_threshold=0.75
-    )
+    near_dupes = find_near_duplicates(resources, chunks_by_resource, similarity_threshold=0.75)
 
     for r_a, r_b, similarity in near_dupes:
         tier_a = r_a.trust_tier.value if hasattr(r_a.trust_tier, "value") else str(r_a.trust_tier)
@@ -191,25 +196,29 @@ def detect_contradictions(
 
         # Flag if semantically similar but different trust tiers
         if tier_a != tier_b:
-            contradictions.append({
-                "type": "trust_conflict",
-                "resource_a": {"id": r_a.id, "name": r_a.name, "trust_tier": tier_a},
-                "resource_b": {"id": r_b.id, "name": r_b.name, "trust_tier": tier_b},
-                "similarity": similarity,
-                "reason": f"Similar content ({similarity:.0%}) with different trust tiers ({tier_a} vs {tier_b})",
-            })
+            contradictions.append(
+                {
+                    "type": "trust_conflict",
+                    "resource_a": {"id": r_a.id, "name": r_a.name, "trust_tier": tier_a},
+                    "resource_b": {"id": r_b.id, "name": r_b.name, "trust_tier": tier_b},
+                    "similarity": similarity,
+                    "reason": f"Similar content ({similarity:.0%}) with different trust tiers ({tier_a} vs {tier_b})",
+                }
+            )
 
         # Flag if one is active and one is superseded (potential stale reference)
         lc_a = r_a.lifecycle.value if hasattr(r_a.lifecycle, "value") else str(r_a.lifecycle)
         lc_b = r_b.lifecycle.value if hasattr(r_b.lifecycle, "value") else str(r_b.lifecycle)
         if lc_a == "active" and lc_b == "superseded" or lc_a == "superseded" and lc_b == "active":
-            contradictions.append({
-                "type": "lifecycle_conflict",
-                "resource_a": {"id": r_a.id, "name": r_a.name, "lifecycle": lc_a},
-                "resource_b": {"id": r_b.id, "name": r_b.name, "lifecycle": lc_b},
-                "similarity": similarity,
-                "reason": f"Similar content ({similarity:.0%}) but conflicting lifecycle ({lc_a} vs {lc_b})",
-            })
+            contradictions.append(
+                {
+                    "type": "lifecycle_conflict",
+                    "resource_a": {"id": r_a.id, "name": r_a.name, "lifecycle": lc_a},
+                    "resource_b": {"id": r_b.id, "name": r_b.name, "lifecycle": lc_b},
+                    "similarity": similarity,
+                    "reason": f"Similar content ({similarity:.0%}) but conflicting lifecycle ({lc_a} vs {lc_b})",
+                }
+            )
 
     return contradictions
 

@@ -65,7 +65,9 @@ async def test_legacy_meets_baseline():
     finally:
         await b.close()
     for key, floor in _BASELINE["legacy"].items():
-        assert metrics[key] >= floor - _TOLERANCE, f"legacy {key}: {metrics[key]} < {floor - _TOLERANCE}"
+        assert metrics[key] >= floor - _TOLERANCE, (
+            f"legacy {key}: {metrics[key]} < {floor - _TOLERANCE}"
+        )
 
 
 @pytest.mark.asyncio
@@ -78,7 +80,9 @@ async def test_rrf_meets_baseline():
     finally:
         await b.close()
     for key, floor in _BASELINE["rrf"].items():
-        assert metrics[key] >= floor - _TOLERANCE, f"rrf {key}: {metrics[key]} < {floor - _TOLERANCE}"
+        assert metrics[key] >= floor - _TOLERANCE, (
+            f"rrf {key}: {metrics[key]} < {floor - _TOLERANCE}"
+        )
 
 
 @pytest.mark.asyncio

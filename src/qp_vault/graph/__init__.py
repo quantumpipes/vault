@@ -27,5 +27,6 @@ def __getattr__(name: str) -> type:
     """Lazy import for GraphEngine to avoid circular imports."""
     if name == "GraphEngine":
         from qp_vault.graph.service import GraphEngine
+
         return GraphEngine
     raise AttributeError(f"module 'qp_vault.graph' has no attribute {name!r}")

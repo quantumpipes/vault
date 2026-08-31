@@ -242,7 +242,10 @@ class KnowledgeExtractor:
             except Exception as e:
                 logger.warning(
                     "Failed to create edge '%s' -[%s]-> '%s': %s",
-                    rel.source, rel.relation_type, rel.target, e,
+                    rel.source,
+                    rel.relation_type,
+                    rel.target,
+                    e,
                 )
 
         return node_ids, edge_ids
@@ -322,11 +325,13 @@ class KnowledgeExtractor:
                 pk_str = str(pk)[:100]
                 pv_str = str(pv)[:500] if pv is not None else ""
                 capped_props[pk_str] = pv_str
-            valid_entities.append({
-                "name": name[:500].strip(),
-                "type": etype[:50].strip().lower(),
-                "properties": capped_props,
-            })
+            valid_entities.append(
+                {
+                    "name": name[:500].strip(),
+                    "type": etype[:50].strip().lower(),
+                    "properties": capped_props,
+                }
+            )
 
         valid_rels: list[dict[str, Any]] = []
         for r in parsed.get("relationships", [])[:_MAX_RELATIONSHIPS]:
@@ -339,11 +344,13 @@ class KnowledgeExtractor:
                 continue
             if not isinstance(rtype, str):
                 rtype = "related_to"
-            valid_rels.append({
-                "source": source[:500].strip(),
-                "target": target[:500].strip(),
-                "type": rtype[:100].strip().lower(),
-                "description": str(r.get("description", ""))[:500],
-            })
+            valid_rels.append(
+                {
+                    "source": source[:500].strip(),
+                    "target": target[:500].strip(),
+                    "type": rtype[:100].strip().lower(),
+                    "description": str(r.get("description", ""))[:500],
+                }
+            )
 
         return {"entities": valid_entities, "relationships": valid_rels}

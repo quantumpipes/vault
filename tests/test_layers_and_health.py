@@ -48,6 +48,7 @@ def vault(tmp_path):
 
 # --- Layer Manager ---
 
+
 class TestLayerManager:
     def test_default_configs_exist(self):
         mgr = LayerManager()
@@ -90,10 +91,12 @@ class TestLayerManager:
 
 # --- Layer View Integration ---
 
+
 class TestLayerView:
     @pytest.mark.asyncio
     async def test_layer_add_applies_defaults(self, tmp_path):
         from qp_vault import AsyncVault
+
         vault = AsyncVault(tmp_path / "layer-test")
 
         ops = vault.layer(MemoryLayer.OPERATIONAL)
@@ -103,6 +106,7 @@ class TestLayerView:
     @pytest.mark.asyncio
     async def test_layer_search_scoped(self, tmp_path):
         from qp_vault import AsyncVault
+
         vault = AsyncVault(tmp_path / "layer-search")
 
         await vault.add("Operational content about deploys", name="deploy.md", layer="operational")
@@ -117,6 +121,7 @@ class TestLayerView:
 
 
 # --- Staleness ---
+
 
 class TestStaleness:
     def test_fresh_document(self):
@@ -142,6 +147,7 @@ class TestStaleness:
 
 # --- Duplicates ---
 
+
 class TestDuplicates:
     def test_finds_duplicate_hashes(self):
         resources = [
@@ -163,6 +169,7 @@ class TestDuplicates:
 
 
 # --- Orphans ---
+
 
 class TestOrphans:
     def test_finds_orphans(self):
@@ -187,6 +194,7 @@ class TestOrphans:
 
 # --- Health Score ---
 
+
 class TestHealthScore:
     def test_empty_vault_perfect_health(self):
         score = compute_health_score([])
@@ -195,8 +203,12 @@ class TestHealthScore:
 
     def test_fresh_unique_vault_high_health(self):
         resources = [
-            _make_resource("a.md", age_days=0, collection_id="c-1", tags=["tagged"], trust_tier="canonical"),
-            _make_resource("b.md", age_days=0, collection_id="c-1", tags=["tagged"], trust_tier="working"),
+            _make_resource(
+                "a.md", age_days=0, collection_id="c-1", tags=["tagged"], trust_tier="canonical"
+            ),
+            _make_resource(
+                "b.md", age_days=0, collection_id="c-1", tags=["tagged"], trust_tier="working"
+            ),
         ]
         score = compute_health_score(resources)
         assert score.overall > 70
@@ -219,6 +231,7 @@ class TestHealthScore:
 
 
 # --- Vault.health() Integration ---
+
 
 class TestVaultHealth:
     def test_vault_health(self, vault):

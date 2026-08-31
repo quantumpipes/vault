@@ -23,7 +23,9 @@ if TYPE_CHECKING:
 class MockCorrelateScreener:
     async def screen(self, content: str) -> ScreeningResult:
         if "contradiction" in content.lower():
-            return ScreeningResult(risk_score=0.9, reasoning="Contradiction detected", flags=["contradiction"])
+            return ScreeningResult(
+                risk_score=0.9, reasoning="Contradiction detected", flags=["contradiction"]
+            )
         return ScreeningResult(risk_score=0.1, reasoning="No contradiction")
 
 
@@ -152,10 +154,16 @@ class TestSurveil:
     def test_surveil_passes_verified(self) -> None:
         from qp_vault.membrane.surveil import apply_surveil
 
-        results = [SearchResult(
-            chunk_id="c1", resource_id="r1", resource_name="test.md",
-            content="test", relevance=0.8, adversarial_status=AdversarialStatus.VERIFIED,
-        )]
+        results = [
+            SearchResult(
+                chunk_id="c1",
+                resource_id="r1",
+                resource_name="test.md",
+                content="test",
+                relevance=0.8,
+                adversarial_status=AdversarialStatus.VERIFIED,
+            )
+        ]
         filtered = apply_surveil(results)
         assert len(filtered) == 1
         assert filtered[0].explain_metadata is not None
@@ -164,10 +172,16 @@ class TestSurveil:
     def test_surveil_penalizes_suspicious(self) -> None:
         from qp_vault.membrane.surveil import apply_surveil
 
-        results = [SearchResult(
-            chunk_id="c1", resource_id="r1", resource_name="test.md",
-            content="test", relevance=0.8, adversarial_status=AdversarialStatus.SUSPICIOUS,
-        )]
+        results = [
+            SearchResult(
+                chunk_id="c1",
+                resource_id="r1",
+                resource_name="test.md",
+                content="test",
+                relevance=0.8,
+                adversarial_status=AdversarialStatus.SUSPICIOUS,
+            )
+        ]
         filtered = apply_surveil(results)
         assert len(filtered) == 1
         assert filtered[0].relevance == pytest.approx(0.24, abs=0.01)  # 0.8 * 0.3
@@ -175,10 +189,16 @@ class TestSurveil:
     def test_surveil_passes_unverified(self) -> None:
         from qp_vault.membrane.surveil import apply_surveil
 
-        results = [SearchResult(
-            chunk_id="c1", resource_id="r1", resource_name="test.md",
-            content="test", relevance=0.5, adversarial_status=AdversarialStatus.UNVERIFIED,
-        )]
+        results = [
+            SearchResult(
+                chunk_id="c1",
+                resource_id="r1",
+                resource_name="test.md",
+                content="test",
+                relevance=0.5,
+                adversarial_status=AdversarialStatus.UNVERIFIED,
+            )
+        ]
         filtered = apply_surveil(results)
         assert len(filtered) == 1
         assert filtered[0].relevance == 0.5  # Unchanged

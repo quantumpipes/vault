@@ -209,9 +209,7 @@ class TestOllamaScreenerParsing:
     def test_parse_handles_wrong_types(self):
         from qp_vault.membrane.screeners.ollama import OllamaScreener
 
-        result = OllamaScreener._parse_response(
-            '{"risk_score": "high", "flags": "bad"}'
-        )
+        result = OllamaScreener._parse_response('{"risk_score": "high", "flags": "bad"}')
         assert result.risk_score == 0.0
         assert result.flags == []
 

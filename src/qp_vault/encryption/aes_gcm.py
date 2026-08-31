@@ -15,6 +15,7 @@ import os
 
 try:
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
     HAS_CRYPTO = True
 except ImportError:
     HAS_CRYPTO = False

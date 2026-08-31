@@ -19,7 +19,6 @@ async def vault(tmp_vault_path):
 
 
 class TestAdversarialPersistence:
-
     @pytest.mark.asyncio
     async def test_set_adversarial_persists_to_storage(self, vault: AsyncVault):
         """Setting adversarial status persists in the storage backend."""

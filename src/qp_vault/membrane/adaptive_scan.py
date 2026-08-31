@@ -35,14 +35,16 @@ class AdaptiveScanConfig:
     screener: LLMScreener | None = None
     max_content_length: int = _DEFAULT_MAX_CONTENT_LENGTH
     risk_threshold: float = _DEFAULT_RISK_THRESHOLD
-    flag_categories: list[str] = field(default_factory=lambda: [
-        "prompt_injection",
-        "jailbreak",
-        "encoded_payload",
-        "social_engineering",
-        "data_exfiltration",
-        "instruction_override",
-    ])
+    flag_categories: list[str] = field(
+        default_factory=lambda: [
+            "prompt_injection",
+            "jailbreak",
+            "encoded_payload",
+            "social_engineering",
+            "data_exfiltration",
+            "instruction_override",
+        ]
+    )
 
 
 async def run_adaptive_scan(
@@ -66,7 +68,7 @@ async def run_adaptive_scan(
         )
 
     # Truncate content for cost/latency
-    scan_content = content[:config.max_content_length]
+    scan_content = content[: config.max_content_length]
 
     start = time.monotonic()
     try:

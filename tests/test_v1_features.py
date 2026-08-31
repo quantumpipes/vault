@@ -404,6 +404,7 @@ class TestPostgresBackendSSL:
     def test_default_ssl_mode_is_prefer(self) -> None:
         """PostgresBackend defaults to ssl='prefer' (try SSL, fall back)."""
         from qp_vault.storage.postgres import HAS_ASYNCPG, PostgresBackend
+
         if not HAS_ASYNCPG:
             pytest.skip("asyncpg not installed")
         backend = PostgresBackend("postgresql://localhost/test")
@@ -412,6 +413,7 @@ class TestPostgresBackendSSL:
     def test_ssl_true_normalizes_to_prefer(self) -> None:
         """ssl=True normalizes to 'prefer' for backward compat."""
         from qp_vault.storage.postgres import HAS_ASYNCPG, PostgresBackend
+
         if not HAS_ASYNCPG:
             pytest.skip("asyncpg not installed")
         backend = PostgresBackend("postgresql://localhost/test", ssl=True)
@@ -420,6 +422,7 @@ class TestPostgresBackendSSL:
     def test_ssl_false_normalizes_to_disable(self) -> None:
         """ssl=False normalizes to 'disable'."""
         from qp_vault.storage.postgres import HAS_ASYNCPG, PostgresBackend
+
         if not HAS_ASYNCPG:
             pytest.skip("asyncpg not installed")
         backend = PostgresBackend("postgresql://localhost/test", ssl=False)
@@ -428,6 +431,7 @@ class TestPostgresBackendSSL:
     def test_ssl_require_string(self) -> None:
         """ssl='require' is accepted as-is."""
         from qp_vault.storage.postgres import HAS_ASYNCPG, PostgresBackend
+
         if not HAS_ASYNCPG:
             pytest.skip("asyncpg not installed")
         backend = PostgresBackend("postgresql://localhost/test", ssl="require")
@@ -436,6 +440,7 @@ class TestPostgresBackendSSL:
     def test_ssl_disable_string(self) -> None:
         """ssl='disable' is accepted as-is."""
         from qp_vault.storage.postgres import HAS_ASYNCPG, PostgresBackend
+
         if not HAS_ASYNCPG:
             pytest.skip("asyncpg not installed")
         backend = PostgresBackend("postgresql://localhost/test", ssl="disable")
@@ -449,6 +454,7 @@ class TestPostgresBackendSSL:
 
 try:
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: F401
+
     HAS_CRYPTO = True
 except ImportError:
     HAS_CRYPTO = False
@@ -458,19 +464,23 @@ except ImportError:
 class TestFIPSKAT:
     def test_sha3_kat_passes(self) -> None:
         from qp_vault.encryption.fips_kat import run_sha3_256_kat
+
         assert run_sha3_256_kat() is True
 
     def test_aes_gcm_kat_passes(self) -> None:
         from qp_vault.encryption.fips_kat import run_aes_256_gcm_kat
+
         assert run_aes_256_gcm_kat() is True
 
     def test_ml_kem_kat_passes(self) -> None:
         """ML-KEM KAT passes (or returns True if liboqs not installed)."""
         from qp_vault.encryption.fips_kat import run_ml_kem_768_kat
+
         assert run_ml_kem_768_kat() is True
 
     def test_run_all_kat(self) -> None:
         from qp_vault.encryption.fips_kat import run_all_kat
+
         results = run_all_kat()
         assert results["sha3_256"] is True
         assert results["aes_256_gcm"] is True

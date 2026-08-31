@@ -48,9 +48,7 @@ def test_allowlist_is_derived_not_declared():
     from docling.datamodel.base_models import FormatToExtensions
 
     real = {f".{e.lower()}" for exts in FormatToExtensions.values() for e in exts}
-    assert cap.extensions <= real, (
-        f"claimed but unreadable: {sorted(cap.extensions - real)}"
-    )
+    assert cap.extensions <= real, f"claimed but unreadable: {sorted(cap.extensions - real)}"
 
 
 def test_formats_docling_cannot_read_are_not_claimed():

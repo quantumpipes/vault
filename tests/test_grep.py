@@ -204,7 +204,7 @@ class TestGrepEdgeCases:
     @pytest.mark.asyncio
     async def test_special_characters_in_keywords(self, vault_with_docs: AsyncVault):
         """FTS5 special chars don't crash the query."""
-        results = await vault_with_docs.grep(['"hello"', 'test*', 'foo(bar)'])
+        results = await vault_with_docs.grep(['"hello"', "test*", "foo(bar)"])
         assert isinstance(results, list)  # No exception
 
     @pytest.mark.asyncio
@@ -257,6 +257,7 @@ class TestGrepTrustWeighting:
         r2 = await v.add("Python programming reference", name="canonical-doc.md")
         # Promote r2 to canonical
         from qp_vault.protocols import ResourceUpdate
+
         await v._storage.update_resource(r2.id, ResourceUpdate(trust_tier="canonical"))
 
         results = await v.grep(["python", "programming"])

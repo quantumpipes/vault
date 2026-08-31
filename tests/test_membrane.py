@@ -102,9 +102,7 @@ class TestCISModels:
         assert not p.signature_verified
 
     def test_cis_stage_record_defaults(self):
-        s = MembraneStageRecord(
-            id="s1", resource_id="r1", stage=MembraneStage.INNATE_SCAN
-        )
+        s = MembraneStageRecord(id="s1", resource_id="r1", stage=MembraneStage.INNATE_SCAN)
         assert s.result == MembraneResult.PASS
         assert s.risk_score == 0.0
         assert s.matched_patterns == []
@@ -264,6 +262,7 @@ class TestContentProvenanceService:
     @pytest.mark.asyncio
     async def test_create_attestation_with_signing_and_verify(self):
         """Creates signed and verified provenance when both fns are provided."""
+
         async def mock_sign(data: bytes) -> str:
             return "signed_" + data[:8].hex()
 
@@ -283,6 +282,7 @@ class TestContentProvenanceService:
     @pytest.mark.asyncio
     async def test_create_attestation_signed_but_no_verify_fn(self):
         """Signed without verify_fn: self-signed attestations are trusted."""
+
         async def mock_sign(data: bytes) -> str:
             return "signed_" + data[:8].hex()
 

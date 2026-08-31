@@ -38,7 +38,9 @@ class TestChunkText:
     def test_respects_max_tokens(self):
         config = ChunkerConfig(target_tokens=50, max_tokens=100, min_tokens=10, overlap_tokens=10)
         # Create text that definitely exceeds max
-        paragraphs = [f"Paragraph {i} with some filler text to increase token count." for i in range(50)]
+        paragraphs = [
+            f"Paragraph {i} with some filler text to increase token count." for i in range(50)
+        ]
         text = "\n\n".join(paragraphs)
         chunks = chunk_text(text, config)
         assert len(chunks) > 1

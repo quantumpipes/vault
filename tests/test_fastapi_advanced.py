@@ -10,6 +10,7 @@ try:
 
     from qp_vault import AsyncVault
     from qp_vault.integrations.fastapi_routes import create_vault_router
+
     HAS_FASTAPI = True
 except ImportError:
     HAS_FASTAPI = False
@@ -22,9 +23,7 @@ def client(tmp_path):
     vault = AsyncVault(tmp_path / "api-adv")
     app = FastAPI()
     # require_auth=False: embedding app owns auth in these endpoint-behavior tests.
-    router = create_vault_router(
-        vault, require_auth=False, io_base_dir=str(tmp_path / "api-adv")
-    )
+    router = create_vault_router(vault, require_auth=False, io_base_dir=str(tmp_path / "api-adv"))
     app.include_router(router, prefix="/v1/vault")
     return TestClient(app)
 
@@ -89,9 +88,14 @@ class TestExpiringEndpoint:
 
 class TestLifecycleTransitionChain:
     def test_full_lifecycle(self, client):
-        r = client.post("/v1/vault/resources", json={
-            "content": "Full lifecycle doc", "name": "full.md", "lifecycle": "draft",
-        })
+        r = client.post(
+            "/v1/vault/resources",
+            json={
+                "content": "Full lifecycle doc",
+                "name": "full.md",
+                "lifecycle": "draft",
+            },
+        )
         rid = r.json()["data"]["id"]
 
         # DRAFT -> REVIEW

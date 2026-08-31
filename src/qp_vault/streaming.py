@@ -42,11 +42,13 @@ class VaultEventStream:
         Implements AuditProvider protocol so it can be used as auditor.
         """
         import uuid
+
         event_id = str(uuid.uuid4())
         self._history.append(event)
 
         # Broadcast to all subscribers (drop if slow)
         import contextlib
+
         for queue in self._subscribers:
             with contextlib.suppress(asyncio.QueueFull):
                 queue.put_nowait(event)

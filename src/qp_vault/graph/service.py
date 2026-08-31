@@ -77,6 +77,7 @@ def _validate_properties(properties: dict[str, Any] | None) -> dict[str, Any]:
     Returns a (possibly truncated) copy. Never mutates the caller's dict.
     """
     import json as _json
+
     if properties is None:
         return {}
     cleaned = {}
@@ -88,8 +89,7 @@ def _validate_properties(properties: dict[str, Any] | None) -> dict[str, Any]:
     serialized = _json.dumps(cleaned, default=str)
     if len(serialized) > _MAX_PROPERTIES_SIZE:
         raise ValueError(
-            f"Properties exceed {_MAX_PROPERTIES_SIZE} bytes "
-            f"({len(serialized)} bytes serialized)"
+            f"Properties exceed {_MAX_PROPERTIES_SIZE} bytes ({len(serialized)} bytes serialized)"
         )
     return cleaned
 
@@ -215,11 +215,7 @@ class GraphEngine:
         base = slugify(name)
 
         all_nodes, _ = await self._storage.list_nodes({"limit": 10000})
-        taken_slugs = {
-            r.get("slug")
-            for r in all_nodes
-            if str(r.get("id")) != str(exclude_id)
-        }
+        taken_slugs = {r.get("slug") for r in all_nodes if str(r.get("id")) != str(exclude_id)}
 
         candidate = base
         if candidate not in taken_slugs:
@@ -366,7 +362,9 @@ class GraphEngine:
             return []
         limit = _cap_limit(limit)
         rows = await self._storage.search_nodes(
-            query, str(space_id) if space_id else None, limit,
+            query,
+            str(space_id) if space_id else None,
+            limit,
         )
         return [self._dict_to_node(r) for r in rows]
 
@@ -513,7 +511,9 @@ class GraphEngine:
             List of connected edges.
         """
         if direction not in _VALID_DIRECTIONS:
-            raise ValueError(f"direction must be one of {sorted(_VALID_DIRECTIONS)}, got {direction!r}")
+            raise ValueError(
+                f"direction must be one of {sorted(_VALID_DIRECTIONS)}, got {direction!r}"
+            )
         rows = await self._storage.get_edges(str(node_id), direction)
         return [self._dict_to_edge(r) for r in rows]
 
@@ -577,7 +577,9 @@ class GraphEngine:
         """
         depth = min(depth, 3)
         rows = await self._storage.neighbors(
-            str(node_id), depth, relation_types,
+            str(node_id),
+            depth,
+            relation_types,
             str(space_id) if space_id else None,
         )
         return [
@@ -616,9 +618,7 @@ class GraphEngine:
             section = f"### {node.name} ({node.entity_type})\n"
 
             if node.properties:
-                props = ", ".join(
-                    f"{k}: {v}" for k, v in list(node.properties.items())[:8]
-                )
+                props = ", ".join(f"{k}: {v}" for k, v in list(node.properties.items())[:8])
                 section += f"Properties: {props}\n"
 
             if node.tags:
@@ -662,7 +662,8 @@ class GraphEngine:
             context_snippet: Surrounding text for preview.
         """
         await self._storage.upsert_mention(
-            str(node_id), str(resource_id),
+            str(node_id),
+            str(resource_id),
             str(space_id) if space_id else None,
             context_snippet,
         )
@@ -779,7 +780,8 @@ class GraphEngine:
         if self._detector is None:
             return []
         return await self._detector.detect(  # type: ignore[no-any-return]
-            text, fuzzy=fuzzy,
+            text,
+            fuzzy=fuzzy,
             space_id=str(space_id) if space_id else None,
         )
 
@@ -862,9 +864,13 @@ class GraphEngine:
             entity_type=d["entity_type"],
             properties=d.get("properties") or {},
             tags=d.get("tags") or [],
-            primary_space_id=UUID(str(d["primary_space_id"])) if d.get("primary_space_id") else None,
+            primary_space_id=UUID(str(d["primary_space_id"]))
+            if d.get("primary_space_id")
+            else None,
             resource_id=UUID(str(d["resource_id"])) if d.get("resource_id") else None,
-            manifest_resource_id=UUID(str(d["manifest_resource_id"])) if d.get("manifest_resource_id") else None,
+            manifest_resource_id=UUID(str(d["manifest_resource_id"]))
+            if d.get("manifest_resource_id")
+            else None,
             mention_count=d.get("mention_count", 0) or 0,
             last_mentioned_at=d.get("last_mentioned_at"),
             created_at=d.get("created_at") or datetime.now(UTC),
@@ -876,14 +882,18 @@ class GraphEngine:
         """Convert a storage dict to a GraphEdge."""
         return GraphEdge(
             id=UUID(str(d["id"])),
-            tenant_id=UUID(str(d["tenant_id"])) if d.get("tenant_id") else UUID(str(d.get("id", uuid4()))),
+            tenant_id=UUID(str(d["tenant_id"]))
+            if d.get("tenant_id")
+            else UUID(str(d.get("id", uuid4()))),
             source_node_id=UUID(str(d["source_node_id"])),
             target_node_id=UUID(str(d["target_node_id"])),
             relation_type=d["relation_type"],
             properties=d.get("properties") or {},
             weight=float(d.get("weight", 0.5)),
             bidirectional=bool(d.get("bidirectional", False)),
-            source_resource_id=UUID(str(d["source_resource_id"])) if d.get("source_resource_id") else None,
+            source_resource_id=UUID(str(d["source_resource_id"]))
+            if d.get("source_resource_id")
+            else None,
             created_at=d.get("created_at") or datetime.now(UTC),
             updated_at=d.get("updated_at") or datetime.now(UTC),
         )

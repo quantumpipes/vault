@@ -41,7 +41,10 @@ class TestSanitizeGrepKeyword:
         assert sanitize_grep_keyword("") == ""
 
     def test_unicode_preserved(self) -> None:
-        assert sanitize_grep_keyword("cafe\u0301") == "caf\u00e9" or sanitize_grep_keyword("cafe\u0301") == "cafe\u0301"
+        assert (
+            sanitize_grep_keyword("cafe\u0301") == "caf\u00e9"
+            or sanitize_grep_keyword("cafe\u0301") == "cafe\u0301"
+        )
 
 
 class TestNormalizeKeywords:

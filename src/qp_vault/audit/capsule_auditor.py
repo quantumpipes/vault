@@ -26,6 +26,7 @@ try:
         Seal,
         TriggerSection,
     )
+
     HAS_CAPSULE = True
 except ImportError:
     HAS_CAPSULE = False
@@ -63,9 +64,7 @@ class CapsuleAuditor:
             Capsule ID string.
         """
         event_type_val = (
-            event.event_type.value
-            if hasattr(event.event_type, "value")
-            else str(event.event_type)
+            event.event_type.value if hasattr(event.event_type, "value") else str(event.event_type)
         )
 
         capsule_type = getattr(CapsuleType, "VAULT", None) or getattr(CapsuleType, "GENERAL", None)

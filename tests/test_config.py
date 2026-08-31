@@ -65,17 +65,21 @@ class TestVaultConfigCustom:
         assert c.chunk_overlap_tokens == 25
 
     def test_custom_trust_weights(self):
-        c = VaultConfig(trust_weights={"canonical": 2.0, "working": 1.0, "ephemeral": 0.5, "archived": 0.1})
+        c = VaultConfig(
+            trust_weights={"canonical": 2.0, "working": 1.0, "ephemeral": 0.5, "archived": 0.1}
+        )
         assert c.trust_weights["canonical"] == 2.0
 
 
 class TestVaultConfigToml:
     def test_load_from_toml(self, tmp_path: Path):
         import sys
+
         has_toml = sys.version_info >= (3, 11)
         if not has_toml:
             try:
                 import tomli  # noqa: F401
+
                 has_toml = True
             except ImportError:
                 pass

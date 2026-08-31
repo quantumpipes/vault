@@ -15,10 +15,7 @@ class MockEmbedder:
         return 4
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        return [
-            [float(b) / 255 for b in hashlib.sha256(t.encode()).digest()[:4]]
-            for t in texts
-        ]
+        return [[float(b) / 255 for b in hashlib.sha256(t.encode()).digest()[:4]] for t in texts]
 
 
 @pytest.fixture
@@ -112,6 +109,7 @@ class TestVaultAutoExpiration:
     @pytest.mark.asyncio
     async def test_check_expirations(self, tmp_path):
         from datetime import date, timedelta
+
         vault = AsyncVault(tmp_path / "expire-vault")
         # Add a resource that expired yesterday
         yesterday = date.today() - timedelta(days=1)
@@ -130,6 +128,7 @@ class TestVaultAutoExpiration:
     @pytest.mark.asyncio
     async def test_future_not_expired(self, tmp_path):
         from datetime import date, timedelta
+
         vault = AsyncVault(tmp_path / "future-vault")
         future = date.today() + timedelta(days=365)
         await vault.add("Future policy", name="future.md", valid_until=future)

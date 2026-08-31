@@ -55,7 +55,8 @@ class EntityDetector:
             Number of entities loaded.
         """
         nodes, _ = await self._graph.list_nodes(
-            space_id=space_id, limit=_MAX_INDEX_SIZE,
+            space_id=space_id,
+            limit=_MAX_INDEX_SIZE,
         )
         self._name_index = {node.name.lower(): node for node in nodes}
         self._loaded = True
@@ -100,38 +101,44 @@ class EntityDetector:
             pattern = re.compile(r"\b" + re.escape(name_lower) + r"\b", re.IGNORECASE)
             for match in pattern.finditer(text):
                 if node.id not in seen_ids:
-                    results.append(DetectedEntity(
-                        name=node.name,
-                        entity_type=node.entity_type,
-                        node_id=node.id,
-                        confidence=1.0,
-                        start=match.start(),
-                        end=match.end(),
-                    ))
+                    results.append(
+                        DetectedEntity(
+                            name=node.name,
+                            entity_type=node.entity_type,
+                            node_id=node.id,
+                            confidence=1.0,
+                            start=match.start(),
+                            end=match.end(),
+                        )
+                    )
                     seen_ids.add(node.id)
 
         if fuzzy and self._resolver:
             candidates = re.findall(
-                r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b", text,
+                r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b",
+                text,
             )[:_MAX_FUZZY_CANDIDATES]
             for candidate in candidates:
                 if candidate.lower() in self._name_index:
                     continue
 
                 node = await self._resolver.resolve_by_name(  # type: ignore[assignment]
-                    candidate, space_id=space_id,
+                    candidate,
+                    space_id=space_id,
                 )
                 if node and node.id not in seen_ids:
                     idx = text.find(candidate)
                     if idx >= 0:
-                        results.append(DetectedEntity(
-                            name=node.name,
-                            entity_type=node.entity_type,
-                            node_id=node.id,
-                            confidence=0.7,
-                            start=idx,
-                            end=idx + len(candidate),
-                        ))
+                        results.append(
+                            DetectedEntity(
+                                name=node.name,
+                                entity_type=node.entity_type,
+                                node_id=node.id,
+                                confidence=0.7,
+                                start=idx,
+                                end=idx + len(candidate),
+                            )
+                        )
                         seen_ids.add(node.id)
 
         results.sort(key=lambda d: d.start or 0)

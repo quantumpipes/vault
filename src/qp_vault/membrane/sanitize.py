@@ -33,6 +33,7 @@ def sanitize_for_extraction(
         return ""
 
     import re
+
     if not re.match(r"^[A-Za-z_]+$", source_label):
         source_label = "DOCUMENT"
 

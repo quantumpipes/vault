@@ -47,7 +47,9 @@ class TestEntityCreateEvent:
     async def test_entity_create_fires_event(self, vault_with_auditor, tenant_id):
         vault, auditor = vault_with_auditor
         await vault.graph.create_node(
-            name="Test Entity", entity_type="person", tenant_id=tenant_id,
+            name="Test Entity",
+            entity_type="person",
+            tenant_id=tenant_id,
         )
         graph_events = [e for e in auditor.events if e.event_type == EventType.ENTITY_CREATE]
         assert len(graph_events) == 1
@@ -59,7 +61,9 @@ class TestEntityUpdateEvent:
     async def test_entity_update_fires_event(self, vault_with_auditor, tenant_id):
         vault, auditor = vault_with_auditor
         node = await vault.graph.create_node(
-            name="UpdateMe", entity_type="concept", tenant_id=tenant_id,
+            name="UpdateMe",
+            entity_type="concept",
+            tenant_id=tenant_id,
         )
         await vault.graph.update_node(node.id, name="Updated")
         update_events = [e for e in auditor.events if e.event_type == EventType.ENTITY_UPDATE]
@@ -70,7 +74,9 @@ class TestEntityDeleteEvent:
     async def test_entity_delete_fires_event(self, vault_with_auditor, tenant_id):
         vault, auditor = vault_with_auditor
         node = await vault.graph.create_node(
-            name="DeleteMe", entity_type="temp", tenant_id=tenant_id,
+            name="DeleteMe",
+            entity_type="temp",
+            tenant_id=tenant_id,
         )
         await vault.graph.delete_node(node.id)
         delete_events = [e for e in auditor.events if e.event_type == EventType.ENTITY_DELETE]
@@ -83,8 +89,10 @@ class TestEdgeCreateEvent:
         n1 = await vault.graph.create_node(name="A", entity_type="t", tenant_id=tenant_id)
         n2 = await vault.graph.create_node(name="B", entity_type="t", tenant_id=tenant_id)
         await vault.graph.create_edge(
-            source_id=n1.id, target_id=n2.id,
-            relation_type="knows", tenant_id=tenant_id,
+            source_id=n1.id,
+            target_id=n2.id,
+            relation_type="knows",
+            tenant_id=tenant_id,
         )
         edge_events = [e for e in auditor.events if e.event_type == EventType.EDGE_CREATE]
         assert len(edge_events) == 1
@@ -97,8 +105,10 @@ class TestEdgeDeleteEvent:
         n1 = await vault.graph.create_node(name="X", entity_type="t", tenant_id=tenant_id)
         n2 = await vault.graph.create_node(name="Y", entity_type="t", tenant_id=tenant_id)
         edge = await vault.graph.create_edge(
-            source_id=n1.id, target_id=n2.id,
-            relation_type="linked", tenant_id=tenant_id,
+            source_id=n1.id,
+            target_id=n2.id,
+            relation_type="linked",
+            tenant_id=tenant_id,
         )
         await vault.graph.delete_edge(edge.id)
         delete_events = [e for e in auditor.events if e.event_type == EventType.EDGE_DELETE]
@@ -142,7 +152,9 @@ class TestNoAuditProvider:
         await vault._ensure_initialized()
         # Should not raise even with auditor=None (LogAuditor is auto-created)
         node = await vault.graph.create_node(
-            name="NoAudit", entity_type="t", tenant_id=tenant_id,
+            name="NoAudit",
+            entity_type="t",
+            tenant_id=tenant_id,
         )
         assert node.name == "NoAudit"
 

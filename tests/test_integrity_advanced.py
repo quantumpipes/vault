@@ -11,14 +11,28 @@ from qp_vault.models import Chunk, Resource
 def _resource(name: str, trust_tier: str = "working", lifecycle: str = "active") -> Resource:
     now = datetime.now(tz=UTC)
     return Resource(
-        id=f"r-{name}", name=name, content_hash=f"h-{name}", cid=f"v://h-{name}",
-        trust_tier=trust_tier, lifecycle=lifecycle, created_at=now, updated_at=now,
+        id=f"r-{name}",
+        name=name,
+        content_hash=f"h-{name}",
+        cid=f"v://h-{name}",
+        trust_tier=trust_tier,
+        lifecycle=lifecycle,
+        created_at=now,
+        updated_at=now,
     )
 
 
 def _chunks(resource_id: str, embedding: list[float]) -> list[Chunk]:
-    return [Chunk(id=f"c-{resource_id}", resource_id=resource_id,
-                  content="test", cid="v://c", embedding=embedding, chunk_index=0)]
+    return [
+        Chunk(
+            id=f"c-{resource_id}",
+            resource_id=resource_id,
+            content="test",
+            cid="v://c",
+            embedding=embedding,
+            chunk_index=0,
+        )
+    ]
 
 
 class TestNearDuplicates:

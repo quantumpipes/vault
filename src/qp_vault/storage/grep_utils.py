@@ -75,7 +75,7 @@ def normalize_keywords(keywords: list[str], max_keywords: int = 20) -> list[str]
     """
     seen: set[str] = set()
     result: list[str] = []
-    for kw in keywords[:max_keywords * 2]:  # Allow extra for dedup headroom
+    for kw in keywords[: max_keywords * 2]:  # Allow extra for dedup headroom
         clean = sanitize_grep_keyword(kw)
         if clean and clean not in seen:
             seen.add(clean)

@@ -129,8 +129,14 @@ _CEDED: dict[str, str] = {
     ".json": "structured input, not a document to extract",
     # Audio and video: docling transcribes them, which is a different capability with
     # a different cost profile and a different accuracy question. Out of scope here.
-    ".aac": "audio", ".avi": "audio", ".flac": "audio", ".m4a": "audio",
-    ".mov": "audio", ".mp3": "audio", ".mp4": "audio", ".ogg": "audio",
+    ".aac": "audio",
+    ".avi": "audio",
+    ".flac": "audio",
+    ".m4a": "audio",
+    ".mov": "audio",
+    ".mp3": "audio",
+    ".mp4": "audio",
+    ".ogg": "audio",
     ".wav": "audio",
 }
 
@@ -146,11 +152,7 @@ def _derive_extensions() -> tuple[frozenset[str], str | None]:
     except ImportError as exc:
         return frozenset(), f"docling is not importable: {exc}"
 
-    exts = {
-        f".{ext.lower()}"
-        for extensions in FormatToExtensions.values()
-        for ext in extensions
-    }
+    exts = {f".{ext.lower()}" for extensions in FormatToExtensions.values() for ext in extensions}
     return frozenset(exts - set(_CEDED)), None
 
 

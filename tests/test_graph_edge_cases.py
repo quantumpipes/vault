@@ -35,6 +35,7 @@ def tenant_id():
 
 # --- slugify() ---
 
+
 class TestSlugify:
     def test_basic_name(self):
         assert slugify("Jane Doe") == "jane-doe"
@@ -71,11 +72,14 @@ class TestSlugify:
 
 # --- Node Update Edge Cases ---
 
+
 class TestNodeUpdateEdgeCases:
     async def test_update_ignores_disallowed_fields(self, vault, tenant_id):
         node = await vault.graph.create_node(name="Orig", entity_type="t", tenant_id=tenant_id)
         updated = await vault.graph.update_node(
-            node.id, name="New", disallowed_field="ignored",
+            node.id,
+            name="New",
+            disallowed_field="ignored",
         )
         assert updated.name == "New"
 
@@ -86,11 +90,14 @@ class TestNodeUpdateEdgeCases:
 
     async def test_update_properties_preserves_other_fields(self, vault, tenant_id):
         node = await vault.graph.create_node(
-            name="Stable", entity_type="person", tags=["keep"],
+            name="Stable",
+            entity_type="person",
+            tags=["keep"],
             tenant_id=tenant_id,
         )
         updated = await vault.graph.update_node(
-            node.id, properties={"key": "val"},
+            node.id,
+            properties={"key": "val"},
         )
         assert updated.name == "Stable"
         assert updated.entity_type == "person"
@@ -99,13 +106,16 @@ class TestNodeUpdateEdgeCases:
 
 # --- Edge Direction Filtering ---
 
+
 class TestEdgeDirectionFiltering:
     async def test_get_edges_incoming_only(self, vault, tenant_id):
         n1 = await vault.graph.create_node(name="Src", entity_type="t", tenant_id=tenant_id)
         n2 = await vault.graph.create_node(name="Tgt", entity_type="t", tenant_id=tenant_id)
         await vault.graph.create_edge(
-            source_id=n1.id, target_id=n2.id,
-            relation_type="points_to", tenant_id=tenant_id,
+            source_id=n1.id,
+            target_id=n2.id,
+            relation_type="points_to",
+            tenant_id=tenant_id,
         )
         incoming = await vault.graph.get_edges(n2.id, direction="incoming")
         assert len(incoming) == 1
@@ -118,20 +128,26 @@ class TestEdgeDirectionFiltering:
         n1 = await vault.graph.create_node(name="A", entity_type="t", tenant_id=tenant_id)
         n2 = await vault.graph.create_node(name="B", entity_type="t", tenant_id=tenant_id)
         n3 = await vault.graph.create_node(name="C", entity_type="t", tenant_id=tenant_id)
-        await vault.graph.create_edge(source_id=n1.id, target_id=n2.id, relation_type="r", tenant_id=tenant_id)
-        await vault.graph.create_edge(source_id=n3.id, target_id=n2.id, relation_type="r", tenant_id=tenant_id)
+        await vault.graph.create_edge(
+            source_id=n1.id, target_id=n2.id, relation_type="r", tenant_id=tenant_id
+        )
+        await vault.graph.create_edge(
+            source_id=n3.id, target_id=n2.id, relation_type="r", tenant_id=tenant_id
+        )
         both = await vault.graph.get_edges(n2.id, direction="both")
         assert len(both) == 2
 
 
 # --- Edge with Properties ---
 
+
 class TestEdgeWithProperties:
     async def test_create_edge_custom_weight_and_bidirectional(self, vault, tenant_id):
         n1 = await vault.graph.create_node(name="P", entity_type="t", tenant_id=tenant_id)
         n2 = await vault.graph.create_node(name="Q", entity_type="t", tenant_id=tenant_id)
         edge = await vault.graph.create_edge(
-            source_id=n1.id, target_id=n2.id,
+            source_id=n1.id,
+            target_id=n2.id,
             relation_type="linked",
             weight=0.9,
             bidirectional=True,
@@ -147,7 +163,8 @@ class TestEdgeWithProperties:
         n2 = await vault.graph.create_node(name="Y", entity_type="t", tenant_id=tenant_id)
         resource = await vault.add("content", name="src.md")
         edge = await vault.graph.create_edge(
-            source_id=n1.id, target_id=n2.id,
+            source_id=n1.id,
+            target_id=n2.id,
             relation_type="extracted_from",
             source_resource_id=resource.id,
             tenant_id=tenant_id,
@@ -157,13 +174,16 @@ class TestEdgeWithProperties:
 
 # --- Cascade Deletion ---
 
+
 class TestCascadeDeletion:
     async def test_delete_node_cascades_edges(self, vault, tenant_id):
         n1 = await vault.graph.create_node(name="Hub", entity_type="t", tenant_id=tenant_id)
         n2 = await vault.graph.create_node(name="Spoke", entity_type="t", tenant_id=tenant_id)
         await vault.graph.create_edge(
-            source_id=n1.id, target_id=n2.id,
-            relation_type="connected", tenant_id=tenant_id,
+            source_id=n1.id,
+            target_id=n2.id,
+            relation_type="connected",
+            tenant_id=tenant_id,
         )
         await vault.graph.delete_node(n1.id)
         edges = await vault.graph.get_edges(n2.id)
@@ -174,6 +194,7 @@ class TestCascadeDeletion:
 
 
 # --- Merge Edge Cases ---
+
 
 class TestMergeEdgeCases:
     async def test_merge_sums_mention_counts(self, vault, tenant_id):
@@ -189,12 +210,14 @@ class TestMergeEdgeCases:
 
     async def test_merge_properties_keep_wins_on_conflict(self, vault, tenant_id):
         n1 = await vault.graph.create_node(
-            name="K", entity_type="t",
+            name="K",
+            entity_type="t",
             properties={"role": "admin", "shared": "from_keep"},
             tenant_id=tenant_id,
         )
         n2 = await vault.graph.create_node(
-            name="M", entity_type="t",
+            name="M",
+            entity_type="t",
             properties={"dept": "eng", "shared": "from_merge"},
             tenant_id=tenant_id,
         )
@@ -223,6 +246,7 @@ class TestMergeEdgeCases:
 
 # --- Neighbors Edge Cases ---
 
+
 class TestNeighborEdgeCases:
     async def test_neighbors_no_edges_returns_empty(self, vault, tenant_id):
         node = await vault.graph.create_node(name="Isolated", entity_type="t", tenant_id=tenant_id)
@@ -233,8 +257,12 @@ class TestNeighborEdgeCases:
         n1 = await vault.graph.create_node(name="Start", entity_type="t", tenant_id=tenant_id)
         n2 = await vault.graph.create_node(name="Friend", entity_type="t", tenant_id=tenant_id)
         n3 = await vault.graph.create_node(name="Colleague", entity_type="t", tenant_id=tenant_id)
-        await vault.graph.create_edge(source_id=n1.id, target_id=n2.id, relation_type="friend_of", tenant_id=tenant_id)
-        await vault.graph.create_edge(source_id=n1.id, target_id=n3.id, relation_type="works_with", tenant_id=tenant_id)
+        await vault.graph.create_edge(
+            source_id=n1.id, target_id=n2.id, relation_type="friend_of", tenant_id=tenant_id
+        )
+        await vault.graph.create_edge(
+            source_id=n1.id, target_id=n3.id, relation_type="works_with", tenant_id=tenant_id
+        )
 
         friends = await vault.graph.neighbors(n1.id, relation_types=["friend_of"])
         names = {n.node_name for n in friends}
@@ -244,14 +272,19 @@ class TestNeighborEdgeCases:
     async def test_neighbors_avoids_cycles(self, vault, tenant_id):
         n1 = await vault.graph.create_node(name="CycA", entity_type="t", tenant_id=tenant_id)
         n2 = await vault.graph.create_node(name="CycB", entity_type="t", tenant_id=tenant_id)
-        await vault.graph.create_edge(source_id=n1.id, target_id=n2.id, relation_type="r", tenant_id=tenant_id)
-        await vault.graph.create_edge(source_id=n2.id, target_id=n1.id, relation_type="r", tenant_id=tenant_id)
+        await vault.graph.create_edge(
+            source_id=n1.id, target_id=n2.id, relation_type="r", tenant_id=tenant_id
+        )
+        await vault.graph.create_edge(
+            source_id=n2.id, target_id=n1.id, relation_type="r", tenant_id=tenant_id
+        )
         neighbors = await vault.graph.neighbors(n1.id, depth=3)
         node_ids = [n.node_id for n in neighbors]
         assert len(node_ids) == len(set(node_ids))
 
 
 # --- Context For Edge Cases ---
+
 
 class TestContextForEdgeCases:
     async def test_context_for_nonexistent_entity_skipped(self, vault, tenant_id):
@@ -261,8 +294,10 @@ class TestContextForEdgeCases:
 
     async def test_context_for_with_tags(self, vault, tenant_id):
         node = await vault.graph.create_node(
-            name="Tagged", entity_type="concept",
-            tags=["ai", "ml"], tenant_id=tenant_id,
+            name="Tagged",
+            entity_type="concept",
+            tags=["ai", "ml"],
+            tenant_id=tenant_id,
         )
         ctx = await vault.graph.context_for([node.id])
         assert "ai" in ctx
@@ -272,8 +307,10 @@ class TestContextForEdgeCases:
         n1 = await vault.graph.create_node(name="Child", entity_type="t", tenant_id=tenant_id)
         n2 = await vault.graph.create_node(name="Parent", entity_type="t", tenant_id=tenant_id)
         await vault.graph.create_edge(
-            source_id=n2.id, target_id=n1.id,
-            relation_type="parent_of", tenant_id=tenant_id,
+            source_id=n2.id,
+            target_id=n1.id,
+            relation_type="parent_of",
+            tenant_id=tenant_id,
         )
         ctx = await vault.graph.context_for([n1.id])
         assert "Parent" in ctx
@@ -281,13 +318,16 @@ class TestContextForEdgeCases:
 
 # --- Mention Snippet Truncation ---
 
+
 class TestMentionSnippetTruncation:
     async def test_long_snippet_truncated_to_500(self, vault, tenant_id):
         node = await vault.graph.create_node(name="Ent", entity_type="t", tenant_id=tenant_id)
         resource = await vault.add("content", name="doc.md")
         long_snippet = "x" * 1000
         await vault.graph.track_mention(
-            node.id, resource.id, context_snippet=long_snippet,
+            node.id,
+            resource.id,
+            context_snippet=long_snippet,
         )
         backlinks = await vault.graph.get_backlinks(node.id)
         assert len(backlinks) == 1
@@ -295,6 +335,7 @@ class TestMentionSnippetTruncation:
 
 
 # --- Detect Returns Empty Without Detector ---
+
 
 class TestDetectWithoutDetector:
     async def test_detect_returns_empty_when_no_detector(self, vault):
@@ -304,6 +345,7 @@ class TestDetectWithoutDetector:
 
 # --- Scan Get Nonexistent ---
 
+
 class TestScanGetNonexistent:
     async def test_get_scan_nonexistent_returns_none(self, vault):
         result = await vault.graph.get_scan(uuid.uuid4())
@@ -311,6 +353,7 @@ class TestScanGetNonexistent:
 
 
 # --- Tenant Resolution ---
+
 
 class TestTenantResolution:
     async def test_locked_tenant_used_when_no_tenant_provided(self, tmp_vault_path):
@@ -322,6 +365,7 @@ class TestTenantResolution:
 
 
 # --- Subscriber Notification ---
+
 
 class TestSubscriberNotification:
     async def test_graph_mutation_reaches_subscriber(self, vault, tenant_id):
@@ -338,35 +382,76 @@ class TestSubscriberNotification:
 
 # --- Graph Property on Custom Backend ---
 
+
 class TestGraphPropertyUnavailable:
     async def test_graph_none_when_storage_lacks_graph(self, tmp_vault_path):
         class MinimalBackend:
-            async def initialize(self): pass
-            async def store_resource(self, r): return ""
-            async def get_resource(self, rid): return None
-            async def get_resources(self, rids): return []
-            async def list_resources(self, f): return []
-            async def update_resource(self, rid, u): return None
-            async def delete_resource(self, rid, *, hard=False): pass
-            async def store_chunks(self, rid, c): pass
-            async def search(self, q): return []
-            async def get_all_hashes(self): return []
-            async def get_chunks_for_resource(self, rid): return []
-            async def restore_resource(self, rid): return None
-            async def get_provenance(self, rid): return []
-            async def store_provenance(self, *a, **k): pass
-            async def store_collection(self, *a): pass
-            async def list_collections(self): return []
-            async def count_resources(self, tid): return 0
-            async def find_by_cid(self, cid, tid=None): return None
-            async def grep(self, kw, **k): return []
-            async def get_embedding_dimension(self): return None
+            async def initialize(self):
+                pass
+
+            async def store_resource(self, r):
+                return ""
+
+            async def get_resource(self, rid):
+                return None
+
+            async def get_resources(self, rids):
+                return []
+
+            async def list_resources(self, f):
+                return []
+
+            async def update_resource(self, rid, u):
+                return None
+
+            async def delete_resource(self, rid, *, hard=False):
+                pass
+
+            async def store_chunks(self, rid, c):
+                pass
+
+            async def search(self, q):
+                return []
+
+            async def get_all_hashes(self):
+                return []
+
+            async def get_chunks_for_resource(self, rid):
+                return []
+
+            async def restore_resource(self, rid):
+                return None
+
+            async def get_provenance(self, rid):
+                return []
+
+            async def store_provenance(self, *a, **k):
+                pass
+
+            async def store_collection(self, *a):
+                pass
+
+            async def list_collections(self):
+                return []
+
+            async def count_resources(self, tid):
+                return 0
+
+            async def find_by_cid(self, cid, tid=None):
+                return None
+
+            async def grep(self, kw, **k):
+                return []
+
+            async def get_embedding_dimension(self):
+                return None
 
         vault = AsyncVault(tmp_vault_path, storage=MinimalBackend())
         assert vault.graph is None
 
 
 # --- List Nodes Pagination ---
+
 
 class TestListNodesPagination:
     async def test_list_nodes_with_offset(self, vault, tenant_id):

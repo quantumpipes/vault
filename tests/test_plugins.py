@@ -13,6 +13,7 @@ class TestDecorators:
         @embedder("test-embed")
         class TestEmbedder:
             dimensions = 4
+
             async def embed(self, texts):
                 return [[0.0] * 4] * len(texts)
 
@@ -23,6 +24,7 @@ class TestDecorators:
         @parser("test-format")
         class TestParser:
             supported_extensions = {".test"}
+
             async def parse(self, path):
                 return None
 
@@ -96,6 +98,7 @@ def _write_manifest(directory: Path) -> None:
     """Generate a SHA3-256 manifest for all .py files in a directory."""
     import hashlib
     import json
+
     manifest = {}
     for py_file in sorted(directory.glob("*.py")):
         if not py_file.name.startswith("_"):
@@ -171,6 +174,7 @@ class P1:
     def test_discover_rejects_file_not_in_manifest(self, tmp_path: Path):
         """Files not listed in manifest are rejected."""
         import json
+
         (tmp_path / "legit.py").write_text("x = 1")
         (tmp_path / "manifest.json").write_text(json.dumps({}))  # Empty manifest
         reg = PluginRegistry()

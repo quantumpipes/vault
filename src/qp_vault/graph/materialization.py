@@ -143,15 +143,17 @@ class EntityMaterializer:
             is_outgoing = str(edge.source_node_id) == str(node.id)
             other_id = edge.target_node_id if is_outgoing else edge.source_node_id
             other = await self._graph.get_node(other_id)
-            relationships.append({
-                "relation_type": edge.relation_type,
-                "direction": "outgoing" if is_outgoing else "incoming",
-                "target_id": str(other_id),
-                "target_name": other.name if other else None,
-                "target_type": other.entity_type if other else None,
-                "weight": edge.weight,
-                "bidirectional": edge.bidirectional,
-            })
+            relationships.append(
+                {
+                    "relation_type": edge.relation_type,
+                    "direction": "outgoing" if is_outgoing else "incoming",
+                    "target_id": str(other_id),
+                    "target_name": other.name if other else None,
+                    "target_type": other.entity_type if other else None,
+                    "weight": edge.weight,
+                    "bidirectional": edge.bidirectional,
+                }
+            )
 
         manifest = {
             "schema_version": "1.0",
@@ -190,6 +192,8 @@ class EntityMaterializer:
         except Exception as exc:
             logger.warning(
                 "Failed to upsert resource %s for entity %s: %s",
-                filename, node.name, exc,
+                filename,
+                node.name,
+                exc,
             )
             return None

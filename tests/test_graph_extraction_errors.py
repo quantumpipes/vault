@@ -40,6 +40,7 @@ def tenant_id():
 
 # --- Extraction Parse Failures ---
 
+
 class TestExtractionParseFailures:
     def test_parse_response_garbage_returns_empty(self):
         result = KnowledgeExtractor._parse_response("not json at all")
@@ -65,6 +66,7 @@ class TestExtractionParseFailures:
 
 
 # --- Validation Edge Cases ---
+
 
 class TestValidationEdgeCases:
     def test_validate_non_string_entity_type_coerced(self):
@@ -144,6 +146,7 @@ class TestValidationEdgeCases:
 
 # --- Persist Without Services ---
 
+
 class TestPersistWithoutServices:
     async def test_persist_without_graph_services_raises(self):
         async def mock_chat(messages, temp):
@@ -160,6 +163,7 @@ class TestPersistWithoutServices:
 
 
 # --- Persist Skips Self-Edges ---
+
 
 class TestPersistSkipsSelfEdges:
     async def test_persist_skips_self_referencing_relationship(self, vault, tenant_id):
@@ -180,13 +184,15 @@ class TestPersistSkipsSelfEdges:
 
         resource = await vault.add("content", name="doc.md")
         node_ids, edge_ids = await extractor.persist_to_graph(
-            graph, resource_id=resource.id,
+            graph,
+            resource_id=resource.id,
         )
         assert len(node_ids) == 1
         assert len(edge_ids) == 0
 
 
 # --- Persist Handles Partial Entity Failures ---
+
 
 class TestPersistPartialFailures:
     async def test_persist_continues_after_entity_error(self, vault, tenant_id):
@@ -208,12 +214,14 @@ class TestPersistPartialFailures:
 
         resource = await vault.add("content", name="doc.md")
         node_ids, edge_ids = await extractor.persist_to_graph(
-            graph, resource_id=resource.id,
+            graph,
+            resource_id=resource.id,
         )
         assert len(node_ids) == 2
 
 
 # --- Extractor set_chat_fn ---
+
 
 class TestExtractorSetChatFn:
     async def test_set_chat_fn_updates_callback(self):
@@ -221,10 +229,12 @@ class TestExtractorSetChatFn:
             return '{"entities": [], "relationships": []}'
 
         async def replacement(m, t):
-            return json.dumps({
-                "entities": [{"name": "New", "type": "t", "properties": {}}],
-                "relationships": [],
-            })
+            return json.dumps(
+                {
+                    "entities": [{"name": "New", "type": "t", "properties": {}}],
+                    "relationships": [],
+                }
+            )
 
         extractor = KnowledgeExtractor(chat_fn=original)
         extractor.set_chat_fn(replacement)
@@ -234,6 +244,7 @@ class TestExtractorSetChatFn:
 
 
 # --- Extractor to_wikilink_markdown Edge Cases ---
+
 
 class TestWikilinkMarkdownEdgeCases:
     def test_empty_graph(self):
@@ -257,6 +268,7 @@ class TestWikilinkMarkdownEdgeCases:
 
 
 # --- Resolver Empty/Whitespace Inputs ---
+
 
 class TestResolverEmptyInputs:
     async def test_resolve_empty_name_returns_none(self, vault):
@@ -288,11 +300,13 @@ class TestResolverEmptyInputs:
 
 # --- Resolver resolve_or_create with extras ---
 
+
 class TestResolverCreateWithExtras:
     async def test_resolve_or_create_passes_properties_and_tags(self, vault):
         resolver = EntityResolver(vault.graph)
         node = await resolver.resolve_or_create(
-            "PropNode", "thing",
+            "PropNode",
+            "thing",
             properties={"color": "blue"},
             tags=["tagged"],
         )
@@ -301,6 +315,7 @@ class TestResolverCreateWithExtras:
 
 
 # --- Detector Index and Edge Cases ---
+
 
 class TestDetectorEdgeCases:
     async def test_load_index_returns_count(self, vault, tenant_id):
@@ -332,6 +347,7 @@ class TestDetectorEdgeCases:
 
 # --- Sanitize Adversarial Inputs ---
 
+
 class TestSanitizeAdversarialInputs:
     def test_ampersands_escaped(self):
         result = sanitize_for_extraction("A & B")
@@ -358,6 +374,7 @@ class TestSanitizeAdversarialInputs:
 
 
 # --- Wikilink Malformed Syntax ---
+
 
 class TestWikilinkMalformedSyntax:
     def test_empty_brackets(self):

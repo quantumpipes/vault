@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 try:
     import asyncpg
+
     HAS_ASYNCPG = True
 except ImportError:
     HAS_ASYNCPG = False
@@ -607,9 +608,7 @@ class PostgresBackend:
         """Retrieve a resource by ID."""
         pool = await self._get_pool()
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT * FROM qp_vault.resources WHERE id = $1", resource_id
-            )
+            row = await conn.fetchrow("SELECT * FROM qp_vault.resources WHERE id = $1", resource_id)
             if row is None:
                 return None
             return _resource_from_record(dict(row))
@@ -679,8 +678,16 @@ class PostgresBackend:
         params: list[Any] = []
         idx = 1
 
-        for field in ("name", "trust_tier", "data_classification", "lifecycle",
-                       "valid_from", "valid_until", "supersedes", "superseded_by"):
+        for field in (
+            "name",
+            "trust_tier",
+            "data_classification",
+            "lifecycle",
+            "valid_from",
+            "valid_until",
+            "supersedes",
+            "superseded_by",
+        ):
             val = getattr(updates, field, None)
             if val is not None:
                 sets.append(f"{field} = ${idx}")
@@ -723,13 +730,16 @@ class PostgresBackend:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             if hard:
-                await conn.execute("DELETE FROM qp_vault.chunks WHERE resource_id = $1", resource_id)
+                await conn.execute(
+                    "DELETE FROM qp_vault.chunks WHERE resource_id = $1", resource_id
+                )
                 await conn.execute("DELETE FROM qp_vault.resources WHERE id = $1", resource_id)
             else:
                 now = datetime.now(tz=UTC)
                 await conn.execute(
                     "UPDATE qp_vault.resources SET status = 'deleted', deleted_at = $1, updated_at = $1 WHERE id = $2",
-                    now, resource_id,
+                    now,
+                    resource_id,
                 )
 
     async def store_chunks(self, resource_id: str, chunks: list[Chunk]) -> None:
@@ -745,16 +755,25 @@ class PostgresBackend:
                         id, resource_id, content, cid, embedding,
                         chunk_index, page_number, section_title, token_count, speaker
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)""",
-                    chunk.id, chunk.resource_id, chunk.content, chunk.cid,
-                    embedding_str, chunk.chunk_index, chunk.page_number,
-                    chunk.section_title, chunk.token_count, chunk.speaker,
+                    chunk.id,
+                    chunk.resource_id,
+                    chunk.content,
+                    chunk.cid,
+                    embedding_str,
+                    chunk.chunk_index,
+                    chunk.page_number,
+                    chunk.section_title,
+                    chunk.token_count,
+                    chunk.speaker,
                 )
 
             now = datetime.now(tz=UTC)
             await conn.execute(
                 "UPDATE qp_vault.resources SET chunk_count = $1, status = 'indexed', "
                 "indexed_at = $2, updated_at = $2 WHERE id = $3",
-                len(chunks), now, resource_id,
+                len(chunks),
+                now,
+                resource_id,
             )
 
     async def search(self, query: SearchQuery) -> list[SearchResult]:
@@ -812,20 +831,22 @@ class PostgresBackend:
 
         results = []
         for row in rows:
-            results.append(SearchResult(
-                chunk_id=row["chunk_id"],
-                resource_id=row["resource_id"],
-                resource_name=row["resource_name"],
-                content=row["content"],
-                page_number=row["page_number"],
-                section_title=row["section_title"],
-                vector_similarity=float(row["vector_sim"]),
-                text_rank=float(row["text_rank"]),
-                trust_tier=TrustTier(row["trust_tier"]),
-                cid=row["chunk_cid"],
-                lifecycle=row["lifecycle"],
-                relevance=float(row["raw_score"]),
-            ))
+            results.append(
+                SearchResult(
+                    chunk_id=row["chunk_id"],
+                    resource_id=row["resource_id"],
+                    resource_name=row["resource_name"],
+                    content=row["content"],
+                    page_number=row["page_number"],
+                    section_title=row["section_title"],
+                    vector_similarity=float(row["vector_sim"]),
+                    text_rank=float(row["text_rank"]),
+                    trust_tier=TrustTier(row["trust_tier"]),
+                    cid=row["chunk_cid"],
+                    lifecycle=row["lifecycle"],
+                    relevance=float(row["raw_score"]),
+                )
+            )
 
         return results
 
@@ -932,24 +953,26 @@ class PostgresBackend:
             content_lower = content.lower()
             matched = [kw for kw in keywords if kw in content_lower]
 
-            results.append(GrepMatch(
-                chunk_id=row["chunk_id"],
-                resource_id=row["resource_id"],
-                resource_name=row["resource_name"],
-                content=content,
-                matched_keywords=matched,
-                hit_density=float(row["hit_density"]),
-                text_rank=float(row["text_rank"]),
-                trust_tier=row["trust_tier"],
-                adversarial_status=row.get("adversarial_status", "unverified"),
-                lifecycle=row.get("lifecycle", "active"),
-                updated_at=row.get("updated_at"),
-                page_number=row["page_number"],
-                section_title=row["section_title"],
-                resource_type=row.get("resource_type"),
-                data_classification=row.get("data_classification"),
-                cid=row.get("cid"),
-            ))
+            results.append(
+                GrepMatch(
+                    chunk_id=row["chunk_id"],
+                    resource_id=row["resource_id"],
+                    resource_name=row["resource_name"],
+                    content=content,
+                    matched_keywords=matched,
+                    hit_density=float(row["hit_density"]),
+                    text_rank=float(row["text_rank"]),
+                    trust_tier=row["trust_tier"],
+                    adversarial_status=row.get("adversarial_status", "unverified"),
+                    lifecycle=row.get("lifecycle", "active"),
+                    updated_at=row.get("updated_at"),
+                    page_number=row["page_number"],
+                    section_title=row["section_title"],
+                    resource_type=row.get("resource_type"),
+                    data_classification=row.get("data_classification"),
+                    cid=row.get("cid"),
+                )
+            )
 
         return results
 
@@ -969,7 +992,8 @@ class PostgresBackend:
         async with pool.acquire() as conn:
             await conn.execute(
                 "UPDATE qp_vault.resources SET status = 'indexed', deleted_at = NULL, updated_at = $1 WHERE id = $2",
-                now, resource_id,
+                now,
+                resource_id,
             )
         resource = await self.get_resource(resource_id)
         if resource is None:
@@ -1016,9 +1040,15 @@ class PostgresBackend:
                     source_description, original_hash, provenance_signature,
                     signature_verified, created_at
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
-                provenance_id, resource_id, uploader_id, upload_method,
-                source_description, original_hash, signature,
-                verified, datetime.fromisoformat(created_at) if isinstance(created_at, str) else created_at,
+                provenance_id,
+                resource_id,
+                uploader_id,
+                upload_method,
+                source_description,
+                original_hash,
+                signature,
+                verified,
+                datetime.fromisoformat(created_at) if isinstance(created_at, str) else created_at,
             )
 
     async def get_provenance(self, resource_id: str) -> list[dict[str, Any]]:
@@ -1039,7 +1069,9 @@ class PostgresBackend:
         async with pool.acquire() as conn:
             await conn.execute(
                 "INSERT INTO qp_vault.collections (id, name, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)",
-                collection_id, name, description,
+                collection_id,
+                name,
+                description,
                 datetime.fromisoformat(created_at) if isinstance(created_at, str) else created_at,
                 datetime.fromisoformat(created_at) if isinstance(created_at, str) else created_at,
             )
@@ -1048,9 +1080,7 @@ class PostgresBackend:
         """List all collections."""
         pool = await self._get_pool()
         async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT * FROM qp_vault.collections ORDER BY name"
-            )
+            rows = await conn.fetch("SELECT * FROM qp_vault.collections ORDER BY name")
             return [dict(r) for r in rows]
 
     async def count_resources(self, tenant_id: str) -> int:
@@ -1070,7 +1100,8 @@ class PostgresBackend:
             if tenant_id:
                 row = await conn.fetchrow(
                     "SELECT * FROM qp_vault.resources WHERE cid = $1 AND tenant_id = $2 AND status != 'deleted' LIMIT 1",
-                    cid, tenant_id,
+                    cid,
+                    tenant_id,
                 )
             else:
                 row = await conn.fetchrow(
@@ -1102,11 +1133,18 @@ class PostgresBackend:
                     mention_count, last_mentioned_at,
                     created_at, updated_at
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)""",
-                node["id"], node["tenant_id"], node["name"], node["slug"],
-                node["entity_type"], json.dumps(node.get("properties", {})),
-                node.get("tags", []), node.get("primary_space_id"),
-                node.get("resource_id"), node.get("manifest_resource_id"),
-                node.get("mention_count", 0), node.get("last_mentioned_at"),
+                node["id"],
+                node["tenant_id"],
+                node["name"],
+                node["slug"],
+                node["entity_type"],
+                json.dumps(node.get("properties", {})),
+                node.get("tags", []),
+                node.get("primary_space_id"),
+                node.get("resource_id"),
+                node.get("manifest_resource_id"),
+                node.get("mention_count", 0),
+                node.get("last_mentioned_at"),
                 node.get("created_at", datetime.now(tz=UTC)),
                 node.get("updated_at", datetime.now(tz=UTC)),
             )
@@ -1117,7 +1155,8 @@ class PostgresBackend:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT * FROM qp_vault.graph_nodes WHERE id = $1", node_id,
+                "SELECT * FROM qp_vault.graph_nodes WHERE id = $1",
+                node_id,
             )
             if row is None:
                 return None
@@ -1127,7 +1166,8 @@ class PostgresBackend:
             return d
 
     async def list_nodes(
-        self, filters: dict[str, Any],
+        self,
+        filters: dict[str, Any],
     ) -> tuple[list[dict[str, Any]], int]:
         """List graph nodes with optional filtering."""
         pool = await self._get_pool()
@@ -1170,7 +1210,9 @@ class PostgresBackend:
             rows = await conn.fetch(
                 f"SELECT * FROM qp_vault.graph_nodes n WHERE {where} "  # nosec B608
                 f"ORDER BY n.updated_at DESC LIMIT ${idx} OFFSET ${idx + 1}",
-                *params, limit, offset,
+                *params,
+                limit,
+                offset,
             )
             results = []
             for row in rows:
@@ -1181,7 +1223,10 @@ class PostgresBackend:
             return results, total
 
     async def search_nodes(
-        self, query: str, space_id: str | None, limit: int,
+        self,
+        query: str,
+        space_id: str | None,
+        limit: int,
     ) -> list[dict[str, Any]]:
         """Search graph nodes using trigram similarity on name."""
         pool = await self._get_pool()
@@ -1208,7 +1253,9 @@ class PostgresBackend:
             return results
 
     async def update_node(
-        self, node_id: str, updates: dict[str, Any],
+        self,
+        node_id: str,
+        updates: dict[str, Any],
     ) -> dict[str, Any]:
         """Apply partial updates to a graph node."""
         pool = await self._get_pool()
@@ -1216,9 +1263,16 @@ class PostgresBackend:
         params: list[Any] = []
         idx = 1
 
-        for field in ("name", "slug", "entity_type", "primary_space_id",
-                       "resource_id", "manifest_resource_id",
-                       "mention_count", "last_mentioned_at"):
+        for field in (
+            "name",
+            "slug",
+            "entity_type",
+            "primary_space_id",
+            "resource_id",
+            "manifest_resource_id",
+            "mention_count",
+            "last_mentioned_at",
+        ):
             if field in updates:
                 sets.append(f"{field} = ${idx}")
                 params.append(updates[field])
@@ -1253,7 +1307,8 @@ class PostgresBackend:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             await conn.execute(
-                "DELETE FROM qp_vault.graph_nodes WHERE id = $1", node_id,
+                "DELETE FROM qp_vault.graph_nodes WHERE id = $1",
+                node_id,
             )
 
     async def store_edge(self, edge: dict[str, Any]) -> str:
@@ -1276,20 +1331,28 @@ class PostgresBackend:
                     valid_to = EXCLUDED.valid_to,
                     assertion = EXCLUDED.assertion,
                     provenance = EXCLUDED.provenance""",
-                edge["id"], edge["tenant_id"], edge["source_node_id"],
-                edge["target_node_id"], edge["relation_type"],
+                edge["id"],
+                edge["tenant_id"],
+                edge["source_node_id"],
+                edge["target_node_id"],
+                edge["relation_type"],
                 json.dumps(edge.get("properties", {})),
-                edge.get("weight", 0.5), edge.get("bidirectional", False),
+                edge.get("weight", 0.5),
+                edge.get("bidirectional", False),
                 edge.get("source_resource_id"),
                 edge.get("created_at", datetime.now(tz=UTC)),
                 edge.get("updated_at", datetime.now(tz=UTC)),
-                edge.get("valid_from"), edge.get("valid_to"),
-                edge.get("assertion", "asserted"), edge.get("provenance"),
+                edge.get("valid_from"),
+                edge.get("valid_to"),
+                edge.get("assertion", "asserted"),
+                edge.get("provenance"),
             )
         return str(edge["id"])
 
     async def get_edges(
-        self, node_id: str, direction: str,
+        self,
+        node_id: str,
+        direction: str,
     ) -> list[dict[str, Any]]:
         """Get edges connected to a node."""
         pool = await self._get_pool()
@@ -1311,7 +1374,9 @@ class PostgresBackend:
             return results
 
     async def update_edge(
-        self, edge_id: str, updates: dict[str, Any],
+        self,
+        edge_id: str,
+        updates: dict[str, Any],
     ) -> dict[str, Any]:
         """Apply partial updates to a graph edge."""
         pool = await self._get_pool()
@@ -1340,7 +1405,8 @@ class PostgresBackend:
                 *params,
             )
             row = await conn.fetchrow(
-                "SELECT * FROM qp_vault.graph_edges WHERE id = $1", edge_id,
+                "SELECT * FROM qp_vault.graph_edges WHERE id = $1",
+                edge_id,
             )
             if row is None:
                 raise StorageError(f"Graph edge {edge_id} not found after update")
@@ -1354,12 +1420,16 @@ class PostgresBackend:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             await conn.execute(
-                "DELETE FROM qp_vault.graph_edges WHERE id = $1", edge_id,
+                "DELETE FROM qp_vault.graph_edges WHERE id = $1",
+                edge_id,
             )
 
     async def neighbors(
-        self, node_id: str, depth: int,
-        relation_types: list[str] | None, space_id: str | None,
+        self,
+        node_id: str,
+        depth: int,
+        relation_types: list[str] | None,
+        space_id: str | None,
     ) -> list[dict[str, Any]]:
         """N-hop neighbor traversal via recursive CTE function."""
         pool = await self._get_pool()
@@ -1368,13 +1438,19 @@ class PostgresBackend:
                 """SELECT node_id, node_name, entity_type, depth,
                           path, relation_type, edge_weight
                    FROM qp_vault.graph_neighbors($1, $2, $3, $4)""",
-                node_id, depth, relation_types, space_id,
+                node_id,
+                depth,
+                relation_types,
+                space_id,
             )
             return [dict(row) for row in rows]
 
     async def upsert_mention(
-        self, node_id: str, resource_id: str,
-        space_id: str | None, context_snippet: str,
+        self,
+        node_id: str,
+        resource_id: str,
+        space_id: str | None,
+        context_snippet: str,
     ) -> None:
         """Track entity mention in a resource (upsert)."""
         pool = await self._get_pool()
@@ -1385,7 +1461,8 @@ class PostgresBackend:
             existing = await conn.fetchval(
                 "SELECT COUNT(*) FROM qp_vault.graph_mentions "
                 "WHERE node_id = $1 AND resource_id = $2",
-                node_id, resource_id,
+                node_id,
+                resource_id,
             )
             is_new = (existing or 0) == 0
 
@@ -1396,23 +1473,32 @@ class PostgresBackend:
                    ON CONFLICT (node_id, resource_id) DO UPDATE
                    SET context_snippet = EXCLUDED.context_snippet,
                        mentioned_at = EXCLUDED.mentioned_at""",
-                node_id, resource_id, space_id, snippet, now,
+                node_id,
+                resource_id,
+                space_id,
+                snippet,
+                now,
             )
 
             if is_new:
                 await conn.execute(
                     "UPDATE qp_vault.graph_nodes SET mention_count = mention_count + 1, "
                     "last_mentioned_at = $1 WHERE id = $2",
-                    now, node_id,
+                    now,
+                    node_id,
                 )
             else:
                 await conn.execute(
                     "UPDATE qp_vault.graph_nodes SET last_mentioned_at = $1 WHERE id = $2",
-                    now, node_id,
+                    now,
+                    node_id,
                 )
 
     async def get_backlinks(
-        self, node_id: str, limit: int, offset: int,
+        self,
+        node_id: str,
+        limit: int,
+        offset: int,
     ) -> list[dict[str, Any]]:
         """Get all resources that mention an entity."""
         pool = await self._get_pool()
@@ -1420,12 +1506,15 @@ class PostgresBackend:
             rows = await conn.fetch(
                 "SELECT * FROM qp_vault.graph_mentions WHERE node_id = $1 "
                 "ORDER BY mentioned_at DESC LIMIT $2 OFFSET $3",
-                node_id, limit, offset,
+                node_id,
+                limit,
+                offset,
             )
             return [dict(row) for row in rows]
 
     async def get_entities_for_resource(
-        self, resource_id: str,
+        self,
+        resource_id: str,
     ) -> list[dict[str, Any]]:
         """Get all entities mentioned in a vault resource."""
         pool = await self._get_pool()
@@ -1451,7 +1540,8 @@ class PostgresBackend:
             await conn.execute(
                 "INSERT INTO qp_vault.graph_node_spaces (node_id, space_id) "
                 "VALUES ($1, $2) ON CONFLICT DO NOTHING",
-                node_id, space_id,
+                node_id,
+                space_id,
             )
 
     async def remove_node_from_space(self, node_id: str, space_id: str) -> None:
@@ -1460,21 +1550,26 @@ class PostgresBackend:
         async with pool.acquire() as conn:
             await conn.execute(
                 "DELETE FROM qp_vault.graph_node_spaces WHERE node_id = $1 AND space_id = $2",
-                node_id, space_id,
+                node_id,
+                space_id,
             )
 
     async def merge_nodes(
-        self, keep_id: str, merge_id: str,
+        self,
+        keep_id: str,
+        merge_id: str,
     ) -> dict[str, Any]:
         """Merge two nodes: re-point edges, mentions, spaces; delete merge_id."""
         pool = await self._get_pool()
         async with pool.acquire() as conn:  # noqa: SIM117 - transaction() needs conn from this context
             async with conn.transaction():
                 keep = await conn.fetchrow(
-                    "SELECT * FROM qp_vault.graph_nodes WHERE id = $1", keep_id,
+                    "SELECT * FROM qp_vault.graph_nodes WHERE id = $1",
+                    keep_id,
                 )
                 merge = await conn.fetchrow(
-                    "SELECT * FROM qp_vault.graph_nodes WHERE id = $1", merge_id,
+                    "SELECT * FROM qp_vault.graph_nodes WHERE id = $1",
+                    merge_id,
                 )
                 if keep is None or merge is None:
                     raise StorageError("Both nodes must exist for merge")
@@ -1488,7 +1583,8 @@ class PostgresBackend:
                            AND e2.target_node_id = qp_vault.graph_edges.target_node_id
                            AND e2.relation_type = qp_vault.graph_edges.relation_type
                        )""",
-                    keep_id, merge_id,
+                    keep_id,
+                    merge_id,
                 )
                 await conn.execute(
                     """UPDATE qp_vault.graph_edges SET target_node_id = $1
@@ -1499,7 +1595,8 @@ class PostgresBackend:
                            AND e2.target_node_id = $1
                            AND e2.relation_type = qp_vault.graph_edges.relation_type
                        )""",
-                    keep_id, merge_id,
+                    keep_id,
+                    merge_id,
                 )
                 await conn.execute(
                     """UPDATE qp_vault.graph_mentions SET node_id = $1
@@ -1509,18 +1606,28 @@ class PostgresBackend:
                            WHERE m2.node_id = $1
                            AND m2.resource_id = qp_vault.graph_mentions.resource_id
                        )""",
-                    keep_id, merge_id,
+                    keep_id,
+                    merge_id,
                 )
                 await conn.execute(
                     """INSERT INTO qp_vault.graph_node_spaces (node_id, space_id)
                        SELECT $1, space_id FROM qp_vault.graph_node_spaces
                        WHERE node_id = $2
                        ON CONFLICT DO NOTHING""",
-                    keep_id, merge_id,
+                    keep_id,
+                    merge_id,
                 )
 
-                keep_props = json.loads(keep["properties"]) if isinstance(keep["properties"], str) else (keep["properties"] or {})
-                merge_props = json.loads(merge["properties"]) if isinstance(merge["properties"], str) else (merge["properties"] or {})
+                keep_props = (
+                    json.loads(keep["properties"])
+                    if isinstance(keep["properties"], str)
+                    else (keep["properties"] or {})
+                )
+                merge_props = (
+                    json.loads(merge["properties"])
+                    if isinstance(merge["properties"], str)
+                    else (merge["properties"] or {})
+                )
                 merged_props = {**merge_props, **keep_props}
                 keep_tags = list(keep.get("tags") or [])
                 merge_tags = list(merge.get("tags") or [])
@@ -1530,11 +1637,15 @@ class PostgresBackend:
                 await conn.execute(
                     "UPDATE qp_vault.graph_nodes SET properties = $1, tags = $2, "
                     "mention_count = $3, updated_at = $4 WHERE id = $5",
-                    json.dumps(merged_props), merged_tags, merged_count,
-                    datetime.now(tz=UTC), keep_id,
+                    json.dumps(merged_props),
+                    merged_tags,
+                    merged_count,
+                    datetime.now(tz=UTC),
+                    keep_id,
                 )
                 await conn.execute(
-                    "DELETE FROM qp_vault.graph_nodes WHERE id = $1", merge_id,
+                    "DELETE FROM qp_vault.graph_nodes WHERE id = $1",
+                    merge_id,
                 )
 
         result = await self.get_node(keep_id)
@@ -1550,7 +1661,9 @@ class PostgresBackend:
                 """INSERT INTO qp_vault.graph_scan_jobs
                        (id, tenant_id, space_id, status, started_at, finished_at, summary_json, error)
                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
-                job["id"], job["tenant_id"], job["space_id"],
+                job["id"],
+                job["tenant_id"],
+                job["space_id"],
                 job.get("status", "running"),
                 job.get("started_at", datetime.now(tz=UTC)),
                 job.get("finished_at"),
@@ -1564,7 +1677,8 @@ class PostgresBackend:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT * FROM qp_vault.graph_scan_jobs WHERE id = $1", job_id,
+                "SELECT * FROM qp_vault.graph_scan_jobs WHERE id = $1",
+                job_id,
             )
             if row is None:
                 return None
@@ -1578,7 +1692,8 @@ class PostgresBackend:
             return d
 
     async def list_scan_jobs(
-        self, filters: dict[str, Any],
+        self,
+        filters: dict[str, Any],
     ) -> tuple[list[dict[str, Any]], int]:
         """List scan jobs with optional filtering."""
         pool = await self._get_pool()
@@ -1607,7 +1722,9 @@ class PostgresBackend:
             rows = await conn.fetch(
                 f"SELECT * FROM qp_vault.graph_scan_jobs WHERE {where} "  # nosec B608
                 f"ORDER BY started_at DESC LIMIT ${idx} OFFSET ${idx + 1}",
-                *params, limit, offset,
+                *params,
+                limit,
+                offset,
             )
             results = []
             for row in rows:
@@ -1622,7 +1739,9 @@ class PostgresBackend:
             return results, int(total) if total else 0
 
     async def update_scan_job(
-        self, job_id: str, updates: dict[str, Any],
+        self,
+        job_id: str,
+        updates: dict[str, Any],
     ) -> None:
         """Update a scan job's fields."""
         pool = await self._get_pool()

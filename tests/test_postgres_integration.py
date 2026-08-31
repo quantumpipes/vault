@@ -15,7 +15,6 @@ DSN = os.environ.get("VAULT_TEST_POSTGRES_DSN", "")
 pytestmark = pytest.mark.skipif(not DSN, reason="VAULT_TEST_POSTGRES_DSN not set")
 
 
-
 @pytest.fixture
 async def backend():
     """Create a fresh PostgreSQL backend for each test."""

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 try:
     from openai import AsyncOpenAI
+
     HAS_OPENAI = True
 except ImportError:
     HAS_OPENAI = False
@@ -31,9 +32,7 @@ class OpenAIEmbedder:
         api_key: str | None = None,
     ) -> None:
         if not HAS_OPENAI:
-            raise ImportError(
-                "openai is required. Install with: pip install openai"
-            )
+            raise ImportError("openai is required. Install with: pip install openai")
         self._model = model
         self._client = AsyncOpenAI(api_key=api_key) if api_key else AsyncOpenAI()
         self._dimensions = 1536 if "small" in model else 3072

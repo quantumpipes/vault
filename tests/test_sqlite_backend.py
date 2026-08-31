@@ -53,9 +53,7 @@ class TestSQLiteInit:
     async def test_initialize_creates_tables(self, backend):
         await backend.initialize()
         conn = backend._get_conn()
-        tables = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
+        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         table_names = {t["name"] for t in tables}
         assert "resources" in table_names
         assert "chunks" in table_names
@@ -164,9 +162,12 @@ class TestSQLiteSearch:
     async def test_fts_search(self, backend):
         await backend.initialize()
         await backend.store_resource(_make_resource("r-1", "incident.md"))
-        await backend.store_chunks("r-1", [
-            _make_chunk("c-1", "r-1", "Incident response procedure for critical outages"),
-        ])
+        await backend.store_chunks(
+            "r-1",
+            [
+                _make_chunk("c-1", "r-1", "Incident response procedure for critical outages"),
+            ],
+        )
         results = await backend.search(SearchQuery(query_text="incident response"))
         assert len(results) > 0
         assert "incident" in results[0].content.lower()
@@ -175,14 +176,19 @@ class TestSQLiteSearch:
     async def test_vector_search(self, backend):
         await backend.initialize()
         await backend.store_resource(_make_resource("r-1", "doc.md"))
-        await backend.store_chunks("r-1", [
-            _make_chunk("c-1", "r-1", "some content", embedding=[1.0, 0.0, 0.0]),
-        ])
-        results = await backend.search(SearchQuery(
-            query_embedding=[1.0, 0.0, 0.0],
-            query_text="",
-            top_k=10,
-        ))
+        await backend.store_chunks(
+            "r-1",
+            [
+                _make_chunk("c-1", "r-1", "some content", embedding=[1.0, 0.0, 0.0]),
+            ],
+        )
+        results = await backend.search(
+            SearchQuery(
+                query_embedding=[1.0, 0.0, 0.0],
+                query_text="",
+                top_k=10,
+            )
+        )
         assert len(results) > 0
         assert results[0].vector_similarity > 0.99
 

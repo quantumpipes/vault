@@ -57,6 +57,7 @@ class PluginRegistry:
         for callback in self._hooks.get(event, []):
             try:
                 import inspect
+
                 if inspect.iscoroutinefunction(callback):
                     await callback(**kwargs)
                 else:
@@ -73,7 +74,10 @@ class PluginRegistry:
     def get_parser_for_extension(self, ext: str) -> Any | None:
         """Find a parser that supports the given file extension."""
         for parser in self._parsers.values():
-            if hasattr(parser, "supported_extensions") and ext.lower() in parser.supported_extensions:
+            if (
+                hasattr(parser, "supported_extensions")
+                and ext.lower() in parser.supported_extensions
+            ):
                 return parser
         return None
 
@@ -106,6 +110,7 @@ class PluginRegistry:
         """
         try:
             from importlib.metadata import entry_points
+
             eps = entry_points()
         except ImportError:
             return
@@ -153,6 +158,7 @@ class PluginRegistry:
                 )
                 return
             import json
+
             manifest = json.loads(manifest_path.read_text())
 
         for py_file in sorted(plugins_dir.glob("*.py")):
@@ -162,17 +168,21 @@ class PluginRegistry:
             # Hash verification: reject files not in manifest or with wrong hash
             if verify_hashes:
                 import hashlib
+
                 file_hash = hashlib.sha3_256(py_file.read_bytes()).hexdigest()
                 expected = manifest.get(py_file.name)
                 if not expected:
                     logger.warning(
-                        "Plugin %s not in manifest. Skipping.", py_file.name,
+                        "Plugin %s not in manifest. Skipping.",
+                        py_file.name,
                     )
                     continue
                 if file_hash != expected:
                     logger.warning(
                         "Plugin %s hash mismatch (expected %s, got %s). Skipping.",
-                        py_file.name, expected[:16], file_hash[:16],
+                        py_file.name,
+                        expected[:16],
+                        file_hash[:16],
                     )
                     continue
 

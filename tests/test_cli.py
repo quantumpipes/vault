@@ -13,6 +13,7 @@ try:
     from typer.testing import CliRunner
 
     from qp_vault.cli.main import app
+
     HAS_TYPER = True
 except ImportError:
     HAS_TYPER = False
@@ -61,11 +62,17 @@ class TestCLIAdd:
         test_file = tmp_path / "sop.md"
         test_file.write_text("Standard operating procedure.")
 
-        result = runner.invoke(app, [
-            "add", str(test_file),
-            "--trust", "canonical",
-            "--path", str(vault_dir),
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "add",
+                str(test_file),
+                "--trust",
+                "canonical",
+                "--path",
+                str(vault_dir),
+            ],
+        )
         assert result.exit_code == 0
         assert "canonical" in result.output.lower()
 

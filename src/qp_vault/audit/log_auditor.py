@@ -47,7 +47,9 @@ class LogAuditor:
         event_id = str(uuid.uuid4())
         record = {
             "event_id": event_id,
-            "event_type": event.event_type.value if hasattr(event.event_type, "value") else event.event_type,
+            "event_type": event.event_type.value
+            if hasattr(event.event_type, "value")
+            else event.event_type,
             "resource_id": event.resource_id,
             "resource_name": event.resource_name,
             "resource_hash": event.resource_hash,

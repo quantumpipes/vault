@@ -103,13 +103,13 @@ async def run_correlate(
         )
 
     # Build existing content summary from trusted docs
-    existing_texts = [r.content[:config.max_content_chars] for r in related]
+    existing_texts = [r.content[: config.max_content_chars] for r in related]
     existing_summary = "\n---\n".join(existing_texts)
 
     # Ask LLM to check for contradictions
     prompt = _CONTRADICTION_PROMPT.format(
         existing=existing_summary,
-        new_content=content[:config.max_content_chars],
+        new_content=content[: config.max_content_chars],
     )
 
     try:

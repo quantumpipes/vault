@@ -32,7 +32,9 @@ class TestAdversarialVerifier:
 
     @pytest.mark.asyncio
     async def test_transition_unverified_to_verified(self, verifier):
-        result = await verifier.set_status("r1", AdversarialStatus.VERIFIED, reason="Membrane passed")
+        result = await verifier.set_status(
+            "r1", AdversarialStatus.VERIFIED, reason="Membrane passed"
+        )
         assert result == AdversarialStatus.VERIFIED
         assert await verifier.get_status("r1") == AdversarialStatus.VERIFIED
 
@@ -74,9 +76,7 @@ class TestAdversarialVerifier:
         """Bulk reassess skips invalid transitions without raising."""
         await verifier.set_status("r1", AdversarialStatus.SUSPICIOUS)
         # SUSPICIOUS -> UNVERIFIED is invalid
-        results = await verifier.bulk_reassess(
-            ["r1"], AdversarialStatus.UNVERIFIED, reason="test"
-        )
+        results = await verifier.bulk_reassess(["r1"], AdversarialStatus.UNVERIFIED, reason="test")
         assert results["r1"] == AdversarialStatus.SUSPICIOUS  # unchanged
 
     @pytest.mark.asyncio

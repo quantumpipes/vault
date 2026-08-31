@@ -28,7 +28,9 @@ def run_sha3_256_kat() -> bool:
     expected = "3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532"
     actual = hashlib.sha3_256(b"abc").hexdigest()
     if actual != expected:
-        raise FIPSKATError(f"SHA3-256 KAT failed: expected {expected[:16]}..., got {actual[:16]}...")
+        raise FIPSKATError(
+            f"SHA3-256 KAT failed: expected {expected[:16]}..., got {actual[:16]}..."
+        )
     return True
 
 
@@ -65,6 +67,7 @@ def run_ml_kem_768_kat() -> bool:
     """
     try:
         from qp_vault.encryption.ml_kem import MLKEMKeyManager
+
         km = MLKEMKeyManager()
     except ImportError:
         return True  # PQ crypto (liboqs) not installed, skip (not a failure)

@@ -71,8 +71,10 @@ class TestEntityMaterializer:
         n1 = await vault.graph.create_node(name="Alice", entity_type="person", tenant_id=tenant_id)
         n2 = await vault.graph.create_node(name="Acme", entity_type="company", tenant_id=tenant_id)
         await vault.graph.create_edge(
-            source_id=n1.id, target_id=n2.id,
-            relation_type="works_at", tenant_id=tenant_id,
+            source_id=n1.id,
+            target_id=n2.id,
+            relation_type="works_at",
+            tenant_id=tenant_id,
         )
         materializer = EntityMaterializer(vault.graph, vault)
         profile = await materializer._build_profile(n1)
@@ -85,7 +87,9 @@ class TestEntityMaterializer:
         node = await vault.graph.create_node(name="Mentioned", entity_type="t", tenant_id=tenant_id)
         resource = await vault.add("Some content", name="doc.md")
         await vault.graph.track_mention(
-            node.id, resource.id, context_snippet="mentioned in context",
+            node.id,
+            resource.id,
+            context_snippet="mentioned in context",
         )
         materializer = EntityMaterializer(vault.graph, vault)
         profile = await materializer._build_profile(node)
@@ -115,8 +119,10 @@ class TestEntityMaterializer:
         n1 = await vault.graph.create_node(name="M1", entity_type="t", tenant_id=tenant_id)
         n2 = await vault.graph.create_node(name="M2", entity_type="t", tenant_id=tenant_id)
         await vault.graph.create_edge(
-            source_id=n1.id, target_id=n2.id,
-            relation_type="related", tenant_id=tenant_id,
+            source_id=n1.id,
+            target_id=n2.id,
+            relation_type="related",
+            tenant_id=tenant_id,
         )
         materializer = EntityMaterializer(vault.graph, vault)
         manifest_str = await materializer._build_manifest(n1)
@@ -129,7 +135,9 @@ class TestEntityMaterializer:
 
     async def test_profile_minimal_node(self, vault, tenant_id):
         node = await vault.graph.create_node(
-            name="Bare", entity_type="t", tenant_id=tenant_id,
+            name="Bare",
+            entity_type="t",
+            tenant_id=tenant_id,
         )
         materializer = EntityMaterializer(vault.graph, vault)
         profile = await materializer._build_profile(node)

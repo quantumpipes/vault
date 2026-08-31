@@ -11,6 +11,7 @@ import pytest
 
 try:
     from typer.testing import CliRunner
+
     HAS_TYPER = True
 except ImportError:
     HAS_TYPER = False
@@ -29,6 +30,7 @@ def runner():
 @pytest.fixture
 def cli_app():
     from qp_vault.cli.main import app
+
     return app
 
 
@@ -47,18 +49,24 @@ class TestInit:
 class TestAdd:
     def test_add_text(self, runner, cli_app, vault_path) -> None:
         runner.invoke(cli_app, ["init", vault_path])
-        result = runner.invoke(cli_app, ["add", "Hello world content", "--path", vault_path, "--name", "hello.md"])
+        result = runner.invoke(
+            cli_app, ["add", "Hello world content", "--path", vault_path, "--name", "hello.md"]
+        )
         assert result.exit_code == 0
         assert "Added" in result.stdout
 
     def test_add_with_trust(self, runner, cli_app, vault_path) -> None:
         runner.invoke(cli_app, ["init", vault_path])
-        result = runner.invoke(cli_app, ["add", "Canonical doc", "--path", vault_path, "--trust", "canonical"])
+        result = runner.invoke(
+            cli_app, ["add", "Canonical doc", "--path", vault_path, "--trust", "canonical"]
+        )
         assert result.exit_code == 0
 
     def test_add_with_tags(self, runner, cli_app, vault_path) -> None:
         runner.invoke(cli_app, ["init", vault_path])
-        result = runner.invoke(cli_app, ["add", "Tagged doc", "--path", vault_path, "--tags", "important,reviewed"])
+        result = runner.invoke(
+            cli_app, ["add", "Tagged doc", "--path", vault_path, "--tags", "important,reviewed"]
+        )
         assert result.exit_code == 0
 
 

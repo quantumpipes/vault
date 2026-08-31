@@ -10,6 +10,7 @@ from __future__ import annotations
 
 try:
     from sentence_transformers import SentenceTransformer
+
     HAS_ST = True
 except ImportError:
     HAS_ST = False
@@ -28,8 +29,7 @@ class SentenceTransformerEmbedder:
     def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
         if not HAS_ST:
             raise ImportError(
-                "sentence-transformers is required. "
-                "Install with: pip install sentence-transformers"
+                "sentence-transformers is required. Install with: pip install sentence-transformers"
             )
         self._model = SentenceTransformer(model_name)
         self._dimensions = self._model.get_sentence_embedding_dimension()

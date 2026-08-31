@@ -39,11 +39,14 @@ class TestProvenanceVerifyPositive:
             return sig in signatures and signatures[sig] == data.hex()
 
         service = ContentProvenanceService(
-            signing_fn=mock_sign, verify_fn=mock_verify,
+            signing_fn=mock_sign,
+            verify_fn=mock_verify,
         )
         prov = await service.create_attestation(
-            resource_id="r1", uploader_id="u1",
-            method=UploadMethod.UI, original_hash="abc",
+            resource_id="r1",
+            uploader_id="u1",
+            method=UploadMethod.UI,
+            original_hash="abc",
         )
         assert prov.signature_verified is True
 
@@ -54,20 +57,26 @@ class TestProvenanceVerifyPositive:
     @pytest.mark.asyncio
     async def test_tampered_provenance_fails_verify(self):
         """Modified provenance does not verify."""
+
         async def mock_sign(data: bytes) -> str:
             import hashlib
+
             return f"sig_{hashlib.sha256(data).hexdigest()[:16]}"
 
         async def mock_verify(data: bytes, sig: str) -> bool:
             import hashlib
+
             return sig == f"sig_{hashlib.sha256(data).hexdigest()[:16]}"
 
         service = ContentProvenanceService(
-            signing_fn=mock_sign, verify_fn=mock_verify,
+            signing_fn=mock_sign,
+            verify_fn=mock_verify,
         )
         prov = await service.create_attestation(
-            resource_id="r1", uploader_id="u1",
-            method=UploadMethod.API, original_hash="abc",
+            resource_id="r1",
+            uploader_id="u1",
+            method=UploadMethod.API,
+            original_hash="abc",
         )
 
         # Tamper with the provenance
@@ -103,8 +112,10 @@ class TestAdversarialVerifierAuditor:
         verifier = AdversarialVerifier(auditor=auditor)
 
         await verifier.set_status(
-            "r1", AdversarialStatus.VERIFIED,
-            reason="Membrane passed", reviewer_id="admin1",
+            "r1",
+            AdversarialStatus.VERIFIED,
+            reason="Membrane passed",
+            reviewer_id="admin1",
         )
 
         auditor.record.assert_called_once()
@@ -123,7 +134,9 @@ class TestAdversarialVerifierAuditor:
         verifier = AdversarialVerifier(auditor=auditor)
 
         await verifier.bulk_reassess(
-            ["r1", "r2", "r3"], AdversarialStatus.SUSPICIOUS, reason="compromise",
+            ["r1", "r2", "r3"],
+            AdversarialStatus.SUSPICIOUS,
+            reason="compromise",
         )
         assert auditor.record.call_count == 3
 

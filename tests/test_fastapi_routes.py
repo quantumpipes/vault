@@ -10,6 +10,7 @@ try:
 
     from qp_vault import AsyncVault
     from qp_vault.integrations.fastapi_routes import create_vault_router
+
     HAS_FASTAPI = True
 except ImportError:
     HAS_FASTAPI = False
@@ -22,9 +23,7 @@ def client(tmp_path):
     vault = AsyncVault(tmp_path / "api-vault")
     app = FastAPI()
     # require_auth=False: embedding app owns auth in these endpoint-behavior tests.
-    router = create_vault_router(
-        vault, require_auth=False, io_base_dir=str(tmp_path / "api-vault")
-    )
+    router = create_vault_router(vault, require_auth=False, io_base_dir=str(tmp_path / "api-vault"))
     app.include_router(router, prefix="/v1/vault")
     return TestClient(app)
 
@@ -32,25 +31,34 @@ def client(tmp_path):
 @pytest.fixture
 def populated_client(client):
     """Client with some resources added."""
-    client.post("/v1/vault/resources", json={
-        "content": "Incident response SOP for critical outages.",
-        "name": "sop-incident.md",
-        "trust_tier": "canonical",
-    })
-    client.post("/v1/vault/resources", json={
-        "content": "Draft onboarding process improvements.",
-        "name": "draft-onboard.md",
-        "trust_tier": "working",
-    })
+    client.post(
+        "/v1/vault/resources",
+        json={
+            "content": "Incident response SOP for critical outages.",
+            "name": "sop-incident.md",
+            "trust_tier": "canonical",
+        },
+    )
+    client.post(
+        "/v1/vault/resources",
+        json={
+            "content": "Draft onboarding process improvements.",
+            "name": "draft-onboard.md",
+            "trust_tier": "working",
+        },
+    )
     return client
 
 
 class TestResourceEndpoints:
     def test_add_resource(self, client):
-        resp = client.post("/v1/vault/resources", json={
-            "content": "Hello world",
-            "name": "hello.md",
-        })
+        resp = client.post(
+            "/v1/vault/resources",
+            json={
+                "content": "Hello world",
+                "name": "hello.md",
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()["data"]
         assert data["name"] == "hello.md"
@@ -63,10 +71,13 @@ class TestResourceEndpoints:
         assert len(data) == 2
 
     def test_get_resource(self, client):
-        add_resp = client.post("/v1/vault/resources", json={
-            "content": "Test content",
-            "name": "test.md",
-        })
+        add_resp = client.post(
+            "/v1/vault/resources",
+            json={
+                "content": "Test content",
+                "name": "test.md",
+            },
+        )
         resource_id = add_resp.json()["data"]["id"]
 
         resp = client.get(f"/v1/vault/resources/{resource_id}")
@@ -78,23 +89,32 @@ class TestResourceEndpoints:
         assert resp.status_code == 404
 
     def test_update_resource(self, client):
-        add_resp = client.post("/v1/vault/resources", json={
-            "content": "Original",
-            "name": "orig.md",
-        })
+        add_resp = client.post(
+            "/v1/vault/resources",
+            json={
+                "content": "Original",
+                "name": "orig.md",
+            },
+        )
         resource_id = add_resp.json()["data"]["id"]
 
-        resp = client.put(f"/v1/vault/resources/{resource_id}", json={
-            "trust_tier": "canonical",
-            "tags": ["important"],
-        })
+        resp = client.put(
+            f"/v1/vault/resources/{resource_id}",
+            json={
+                "trust_tier": "canonical",
+                "tags": ["important"],
+            },
+        )
         assert resp.status_code == 200
 
     def test_delete_resource(self, client):
-        add_resp = client.post("/v1/vault/resources", json={
-            "content": "To delete",
-            "name": "delete.md",
-        })
+        add_resp = client.post(
+            "/v1/vault/resources",
+            json={
+                "content": "To delete",
+                "name": "delete.md",
+            },
+        )
         resource_id = add_resp.json()["data"]["id"]
 
         resp = client.delete(f"/v1/vault/resources/{resource_id}")
@@ -104,17 +124,23 @@ class TestResourceEndpoints:
 
 class TestSearchEndpoint:
     def test_search(self, populated_client):
-        resp = populated_client.post("/v1/vault/search", json={
-            "query": "incident response",
-            "top_k": 5,
-        })
+        resp = populated_client.post(
+            "/v1/vault/search",
+            json={
+                "query": "incident response",
+                "top_k": 5,
+            },
+        )
         assert resp.status_code == 200
         assert isinstance(resp.json()["data"], list)
 
     def test_search_empty(self, client):
-        resp = client.post("/v1/vault/search", json={
-            "query": "nonexistent_topic_xyz",
-        })
+        resp = client.post(
+            "/v1/vault/search",
+            json={
+                "query": "nonexistent_topic_xyz",
+            },
+        )
         assert resp.status_code == 200
         assert resp.json()["data"] == []
 
@@ -126,10 +152,13 @@ class TestVerifyEndpoints:
         assert resp.json()["data"]["passed"] is True
 
     def test_verify_resource(self, client):
-        add_resp = client.post("/v1/vault/resources", json={
-            "content": "Verify me",
-            "name": "verify.md",
-        })
+        add_resp = client.post(
+            "/v1/vault/resources",
+            json={
+                "content": "Verify me",
+                "name": "verify.md",
+            },
+        )
         resource_id = add_resp.json()["data"]["id"]
 
         resp = client.get(f"/v1/vault/resources/{resource_id}/verify")
@@ -153,26 +182,38 @@ class TestHealthAndStatus:
 
 class TestLifecycleEndpoints:
     def test_transition(self, client):
-        add_resp = client.post("/v1/vault/resources", json={
-            "content": "Draft doc",
-            "name": "draft.md",
-            "lifecycle": "draft",
-        })
+        add_resp = client.post(
+            "/v1/vault/resources",
+            json={
+                "content": "Draft doc",
+                "name": "draft.md",
+                "lifecycle": "draft",
+            },
+        )
         resource_id = add_resp.json()["data"]["id"]
 
-        resp = client.post(f"/v1/vault/resources/{resource_id}/transition", json={
-            "target": "review",
-        })
+        resp = client.post(
+            f"/v1/vault/resources/{resource_id}/transition",
+            json={
+                "target": "review",
+            },
+        )
         assert resp.status_code == 200
 
     def test_invalid_transition(self, client):
-        add_resp = client.post("/v1/vault/resources", json={
-            "content": "Active doc",
-            "name": "active.md",
-        })
+        add_resp = client.post(
+            "/v1/vault/resources",
+            json={
+                "content": "Active doc",
+                "name": "active.md",
+            },
+        )
         resource_id = add_resp.json()["data"]["id"]
 
-        resp = client.post(f"/v1/vault/resources/{resource_id}/transition", json={
-            "target": "draft",  # ACTIVE -> DRAFT not allowed
-        })
+        resp = client.post(
+            f"/v1/vault/resources/{resource_id}/transition",
+            json={
+                "target": "draft",  # ACTIVE -> DRAFT not allowed
+            },
+        )
         assert resp.status_code == 409  # Conflict: invalid lifecycle transition

@@ -35,6 +35,7 @@ class TestGraphProperty:
 
     async def test_graph_is_graph_engine(self, vault):
         from qp_vault.graph.service import GraphEngine
+
         assert isinstance(vault.graph, GraphEngine)
 
 
@@ -60,7 +61,9 @@ class TestNodeCRUD:
         assert n2.slug.startswith("test")
 
     async def test_get_node(self, vault, tenant_id):
-        node = await vault.graph.create_node(name="Alice", entity_type="person", tenant_id=tenant_id)
+        node = await vault.graph.create_node(
+            name="Alice", entity_type="person", tenant_id=tenant_id
+        )
         fetched = await vault.graph.get_node(node.id)
         assert fetched is not None
         assert fetched.name == "Alice"
@@ -76,7 +79,9 @@ class TestNodeCRUD:
         assert "vip" in updated.tags
 
     async def test_delete_node(self, vault, tenant_id):
-        node = await vault.graph.create_node(name="ToDelete", entity_type="temp", tenant_id=tenant_id)
+        node = await vault.graph.create_node(
+            name="ToDelete", entity_type="temp", tenant_id=tenant_id
+        )
         await vault.graph.delete_node(node.id)
         assert await vault.graph.get_node(node.id) is None
 
@@ -94,7 +99,9 @@ class TestNodeCRUD:
         assert all(n.entity_type == "person" for n in nodes)
 
     async def test_search_nodes(self, vault, tenant_id):
-        await vault.graph.create_node(name="Quantum Computing", entity_type="concept", tenant_id=tenant_id)
+        await vault.graph.create_node(
+            name="Quantum Computing", entity_type="concept", tenant_id=tenant_id
+        )
         results = await vault.graph.search_nodes("Quantum")
         assert len(results) >= 1
         assert any("Quantum" in r.name for r in results)
@@ -120,16 +127,20 @@ class TestEdgeCRUD:
         n = await vault.graph.create_node(name="Solo", entity_type="thing", tenant_id=tenant_id)
         with pytest.raises(ValueError, match="Self-edges"):
             await vault.graph.create_edge(
-                source_id=n.id, target_id=n.id,
-                relation_type="self", tenant_id=tenant_id,
+                source_id=n.id,
+                target_id=n.id,
+                relation_type="self",
+                tenant_id=tenant_id,
             )
 
     async def test_get_edges(self, vault, tenant_id):
         n1 = await vault.graph.create_node(name="X", entity_type="t", tenant_id=tenant_id)
         n2 = await vault.graph.create_node(name="Y", entity_type="t", tenant_id=tenant_id)
         await vault.graph.create_edge(
-            source_id=n1.id, target_id=n2.id,
-            relation_type="related", tenant_id=tenant_id,
+            source_id=n1.id,
+            target_id=n2.id,
+            relation_type="related",
+            tenant_id=tenant_id,
         )
         edges = await vault.graph.get_edges(n1.id, direction="outgoing")
         assert len(edges) == 1
@@ -139,8 +150,10 @@ class TestEdgeCRUD:
         n1 = await vault.graph.create_node(name="P", entity_type="t", tenant_id=tenant_id)
         n2 = await vault.graph.create_node(name="Q", entity_type="t", tenant_id=tenant_id)
         edge = await vault.graph.create_edge(
-            source_id=n1.id, target_id=n2.id,
-            relation_type="knows", tenant_id=tenant_id,
+            source_id=n1.id,
+            target_id=n2.id,
+            relation_type="knows",
+            tenant_id=tenant_id,
         )
         updated = await vault.graph.update_edge(edge.id, weight=0.9)
         assert updated.weight == pytest.approx(0.9)
@@ -149,8 +162,10 @@ class TestEdgeCRUD:
         n1 = await vault.graph.create_node(name="M", entity_type="t", tenant_id=tenant_id)
         n2 = await vault.graph.create_node(name="N", entity_type="t", tenant_id=tenant_id)
         edge = await vault.graph.create_edge(
-            source_id=n1.id, target_id=n2.id,
-            relation_type="temp", tenant_id=tenant_id,
+            source_id=n1.id,
+            target_id=n2.id,
+            relation_type="temp",
+            tenant_id=tenant_id,
         )
         await vault.graph.delete_edge(edge.id)
         edges = await vault.graph.get_edges(n1.id)
@@ -164,8 +179,12 @@ class TestTraversal:
         n1 = await vault.graph.create_node(name="Center", entity_type="t", tenant_id=tenant_id)
         n2 = await vault.graph.create_node(name="Hop1", entity_type="t", tenant_id=tenant_id)
         n3 = await vault.graph.create_node(name="Hop2", entity_type="t", tenant_id=tenant_id)
-        await vault.graph.create_edge(source_id=n1.id, target_id=n2.id, relation_type="r", tenant_id=tenant_id)
-        await vault.graph.create_edge(source_id=n2.id, target_id=n3.id, relation_type="r", tenant_id=tenant_id)
+        await vault.graph.create_edge(
+            source_id=n1.id, target_id=n2.id, relation_type="r", tenant_id=tenant_id
+        )
+        await vault.graph.create_edge(
+            source_id=n2.id, target_id=n3.id, relation_type="r", tenant_id=tenant_id
+        )
 
         neighbors = await vault.graph.neighbors(n1.id, depth=1)
         assert len(neighbors) >= 1
@@ -175,8 +194,12 @@ class TestTraversal:
         n1 = await vault.graph.create_node(name="Root", entity_type="t", tenant_id=tenant_id)
         n2 = await vault.graph.create_node(name="L1", entity_type="t", tenant_id=tenant_id)
         n3 = await vault.graph.create_node(name="L2", entity_type="t", tenant_id=tenant_id)
-        await vault.graph.create_edge(source_id=n1.id, target_id=n2.id, relation_type="r", tenant_id=tenant_id)
-        await vault.graph.create_edge(source_id=n2.id, target_id=n3.id, relation_type="r", tenant_id=tenant_id)
+        await vault.graph.create_edge(
+            source_id=n1.id, target_id=n2.id, relation_type="r", tenant_id=tenant_id
+        )
+        await vault.graph.create_edge(
+            source_id=n2.id, target_id=n3.id, relation_type="r", tenant_id=tenant_id
+        )
 
         neighbors = await vault.graph.neighbors(n1.id, depth=2)
         names = {n.node_name for n in neighbors}
@@ -190,8 +213,10 @@ class TestTraversal:
             nodes.append(n)
         for i in range(4):
             await vault.graph.create_edge(
-                source_id=nodes[i].id, target_id=nodes[i + 1].id,
-                relation_type="r", tenant_id=tenant_id,
+                source_id=nodes[i].id,
+                target_id=nodes[i + 1].id,
+                relation_type="r",
+                tenant_id=tenant_id,
             )
         neighbors = await vault.graph.neighbors(nodes[0].id, depth=10)
         max_depth = max((n.depth for n in neighbors), default=0)
@@ -206,7 +231,9 @@ class TestMentions:
         resource = await vault.add("Document mentioning Entity", name="doc.md")
 
         await vault.graph.track_mention(
-            node.id, resource.id, context_snippet="mentioning Entity here",
+            node.id,
+            resource.id,
+            context_snippet="mentioning Entity here",
         )
 
         updated = await vault.graph.get_node(node.id)
@@ -254,8 +281,10 @@ class TestCrossSpace:
         space1 = str(uuid.uuid4())
         space2 = str(uuid.uuid4())
         node = await vault.graph.create_node(
-            name="CrossSpace", entity_type="t",
-            primary_space_id=space1, tenant_id=tenant_id,
+            name="CrossSpace",
+            entity_type="t",
+            primary_space_id=space1,
+            tenant_id=tenant_id,
         )
         await vault.graph.add_to_space(node.id, space2)
         # Verify node appears in space2 listing
@@ -266,8 +295,10 @@ class TestCrossSpace:
         space1 = str(uuid.uuid4())
         space2 = str(uuid.uuid4())
         node = await vault.graph.create_node(
-            name="RemoveSpace", entity_type="t",
-            primary_space_id=space1, tenant_id=tenant_id,
+            name="RemoveSpace",
+            entity_type="t",
+            primary_space_id=space1,
+            tenant_id=tenant_id,
         )
         await vault.graph.add_to_space(node.id, space2)
         await vault.graph.remove_from_space(node.id, space2)
@@ -278,18 +309,24 @@ class TestMerge:
 
     async def test_merge_nodes(self, vault, tenant_id):
         n1 = await vault.graph.create_node(
-            name="Keep", entity_type="person", tags=["a"],
+            name="Keep",
+            entity_type="person",
+            tags=["a"],
             tenant_id=tenant_id,
         )
         n2 = await vault.graph.create_node(
-            name="Merge", entity_type="person", tags=["b"],
+            name="Merge",
+            entity_type="person",
+            tags=["b"],
             tenant_id=tenant_id,
         )
         n3 = await vault.graph.create_node(name="Other", entity_type="t", tenant_id=tenant_id)
 
         await vault.graph.create_edge(
-            source_id=n2.id, target_id=n3.id,
-            relation_type="knows", tenant_id=tenant_id,
+            source_id=n2.id,
+            target_id=n3.id,
+            relation_type="knows",
+            tenant_id=tenant_id,
         )
 
         merged = await vault.graph.merge_nodes(n1.id, n2.id)
@@ -308,14 +345,17 @@ class TestContextFor:
 
     async def test_context_for(self, vault, tenant_id):
         n1 = await vault.graph.create_node(
-            name="Alice", entity_type="person",
+            name="Alice",
+            entity_type="person",
             properties={"role": "engineer"},
             tenant_id=tenant_id,
         )
         n2 = await vault.graph.create_node(name="Acme", entity_type="company", tenant_id=tenant_id)
         await vault.graph.create_edge(
-            source_id=n1.id, target_id=n2.id,
-            relation_type="works_at", tenant_id=tenant_id,
+            source_id=n1.id,
+            target_id=n2.id,
+            relation_type="works_at",
+            tenant_id=tenant_id,
         )
 
         ctx = await vault.graph.context_for([n1.id])

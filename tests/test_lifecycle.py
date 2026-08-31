@@ -119,16 +119,16 @@ class TestSupersession:
 class TestExpiration:
     def test_expiring_within_window(self, vault):
         future = date.today() + timedelta(days=30)
-        r = vault.add("Expiring doc", name="expiring.md",
-                       valid_from=date.today(), valid_until=future)
+        r = vault.add(
+            "Expiring doc", name="expiring.md", valid_from=date.today(), valid_until=future
+        )
         expiring = vault.expiring(days=90)
         ids = [e.id for e in expiring]
         assert r.id in ids
 
     def test_not_expiring_outside_window(self, vault):
         far_future = date.today() + timedelta(days=365)
-        vault.add("Far doc", name="far.md",
-                   valid_from=date.today(), valid_until=far_future)
+        vault.add("Far doc", name="far.md", valid_from=date.today(), valid_until=far_future)
         expiring = vault.expiring(days=90)
         assert len(expiring) == 0
 

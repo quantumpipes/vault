@@ -99,15 +99,17 @@ class LayerManager:
         """Whether reads on this layer should be audited."""
         return self._configs[layer].audit_reads
 
-    def get_stats(
-        self, resources: list[Resource]
-    ) -> dict[str, dict[str, Any]]:
+    def get_stats(self, resources: list[Resource]) -> dict[str, dict[str, Any]]:
         """Compute per-layer statistics."""
         stats: dict[str, dict[str, Any]] = {}
 
         for layer in MemoryLayer:
-            layer_resources = [r for r in resources if r.layer and
-                               (r.layer.value if hasattr(r.layer, "value") else r.layer) == layer.value]
+            layer_resources = [
+                r
+                for r in resources
+                if r.layer
+                and (r.layer.value if hasattr(r.layer, "value") else r.layer) == layer.value
+            ]
             lc = self._configs[layer]
             stats[layer.value] = {
                 "resource_count": len(layer_resources),

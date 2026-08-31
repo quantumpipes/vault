@@ -244,6 +244,7 @@ class TestFastAPIGaps:
         assert router is not None
         # Secure default: refuses to build unauthenticated.
         import pytest as _pytest
+
         with _pytest.raises(ValueError):
             create_vault_router(vault)
 
@@ -307,7 +308,7 @@ class TestNoopEdge:
 class TestConfigEdge:
     def test_toml_flatten_unknown_section(self, tmp_path: Path) -> None:
         p = tmp_path / "c.toml"
-        p.write_text('[search]\nvector_weight = 0.9\n')
+        p.write_text("[search]\nvector_weight = 0.9\n")
         config = VaultConfig.from_toml(p)
         assert config.vector_weight == 0.9
 

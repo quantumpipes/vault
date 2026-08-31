@@ -64,27 +64,35 @@ class TestGraphEdgeModel:
 
     def test_weight_bounds(self):
         edge = GraphEdge(
-            source_node_id=uuid4(), target_node_id=uuid4(),
-            relation_type="r", weight=0.0,
+            source_node_id=uuid4(),
+            target_node_id=uuid4(),
+            relation_type="r",
+            weight=0.0,
         )
         assert edge.weight == 0.0
 
         edge = GraphEdge(
-            source_node_id=uuid4(), target_node_id=uuid4(),
-            relation_type="r", weight=1.0,
+            source_node_id=uuid4(),
+            target_node_id=uuid4(),
+            relation_type="r",
+            weight=1.0,
         )
         assert edge.weight == 1.0
 
     def test_weight_out_of_bounds_rejected(self):
         with pytest.raises(ValidationError):
             GraphEdge(
-                source_node_id=uuid4(), target_node_id=uuid4(),
-                relation_type="r", weight=1.5,
+                source_node_id=uuid4(),
+                target_node_id=uuid4(),
+                relation_type="r",
+                weight=1.5,
             )
         with pytest.raises(ValidationError):
             GraphEdge(
-                source_node_id=uuid4(), target_node_id=uuid4(),
-                relation_type="r", weight=-0.1,
+                source_node_id=uuid4(),
+                target_node_id=uuid4(),
+                relation_type="r",
+                weight=-0.1,
             )
 
     def test_bidirectional_default_false(self):
@@ -160,8 +168,11 @@ def test_graph_edge_bitemporal_valid_at() -> None:
     from qp_vault.graph.models import GraphEdge
 
     edge = GraphEdge(
-        source_node_id=uuid4(), target_node_id=uuid4(), relation_type="holds",
-        valid_from=datetime(2026, 1, 1, tzinfo=UTC), valid_to=datetime(2026, 6, 1, tzinfo=UTC),
+        source_node_id=uuid4(),
+        target_node_id=uuid4(),
+        relation_type="holds",
+        valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+        valid_to=datetime(2026, 6, 1, tzinfo=UTC),
     )
     assert edge.valid_at(datetime(2026, 3, 1, tzinfo=UTC)) is True
     assert edge.valid_at(datetime(2025, 12, 1, tzinfo=UTC)) is False  # before
@@ -185,6 +196,9 @@ def test_graph_edge_candidate_is_not_act_eligible() -> None:
     from qp_vault.graph.models import GraphEdge
 
     edge = GraphEdge(
-        source_node_id=uuid4(), target_node_id=uuid4(), relation_type="holds", assertion="candidate",
+        source_node_id=uuid4(),
+        target_node_id=uuid4(),
+        relation_type="holds",
+        assertion="candidate",
     )
     assert edge.is_act_eligible() is False
