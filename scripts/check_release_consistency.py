@@ -76,7 +76,25 @@ def check(root: pathlib.Path, tag: str) -> list[str]:
 
 
 def _plant(root: pathlib.Path, project_version: str, dunder: str) -> pathlib.Path:
-    """Write the smallest tree this guard can read, carrying the versions given."""
+    """Write the smallest tree this guard can read, carrying the versions given.
+
+    Args:
+        root: A directory that must NOT already exist. See the refusal below.
+        project_version: Version to write into ``pyproject.toml``.
+        dunder: Version to write into ``__init__.py``.
+
+    Returns:
+        The tree root.
+
+    Raises:
+        FileExistsError: ``root`` already exists.
+    """
+    # `exist_ok=False` is the guard, not a default. This function writes two FIXED filenames,
+    # `pyproject.toml` and `src/qp_vault/__init__.py`, into a directory the caller names. Pointed
+    # at a real checkout it would silently overwrite this package's own version declarations,
+    # which is the arbitrary-file-write shape a dir check plus a fixed name always has. Refusing
+    # an existing directory means it can only ever land somewhere nothing lives yet.
+    root.mkdir(parents=True, exist_ok=False)
     (root / "src" / "qp_vault").mkdir(parents=True, exist_ok=True)
     (root / "pyproject.toml").write_text(
         f'[project]\nname = "qp-vault"\nversion = "{project_version}"\n'
@@ -100,7 +118,9 @@ def self_test() -> int:
         base = pathlib.Path(tmp)
 
         agree = _plant(base / "agree", "9.9.9", "9.9.9")
-        checks.append(("passes when tag, pyproject and __version__ agree", not check(agree, "v9.9.9")))
+        checks.append(
+            ("passes when tag, pyproject and __version__ agree", not check(agree, "v9.9.9"))
+        )
 
         stale = _plant(base / "stale", "9.9.8", "9.9.8")
         checks.append(("fires when the tag is ahead of pyproject", bool(check(stale, "v9.9.9"))))
@@ -127,6 +147,17 @@ def self_test() -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the guard, or its self-test, and report an exit code CI can act on.
+
+    Args:
+        argv: Command-line arguments, or None to read ``sys.argv``.
+
+    Returns:
+        0 when the versions agree (or the self-test passes), 1 when they disagree, and 2 when the
+        tree could not be read at all. Two is deliberately distinct from one: "could not look" is
+        not "nothing wrong", and a caller that collapses them turns an unreadable checkout into a
+        pass.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tag", help="the git tag being published, e.g. v1.8.0")
     parser.add_argument("--root", default=".", help="repository checkout to read")

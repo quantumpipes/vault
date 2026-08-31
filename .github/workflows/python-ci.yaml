@@ -41,10 +41,13 @@ jobs:
         with:
           python-version: ${{ env.LINT_PYTHON }}
       - run: pip install "ruff==${{ env.RUFF_VERSION }}"
-      - run: ruff check src/ tests/
+      # `scripts/` is in scope, and it was not. The release guard that gates publishing lives
+      # there, so leaving it out meant the one script CI executes to protect a release was itself
+      # linted by nothing. Found by running ruff over the paths the workflow does NOT name.
+      - run: ruff check src/ tests/ scripts/
       # Formatting is checked, not merely available. 95 files were unformatted when this line was
       # added, which is what happens when a formatter is installed and never asserted on.
-      - run: ruff format --check src/ tests/
+      - run: ruff format --check src/ tests/ scripts/
 
   typecheck:
     runs-on: ubuntu-latest

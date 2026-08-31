@@ -24,8 +24,12 @@ the code released here.
   and upgrading either is a deliberate line in a diff.
 - **`publish` is gated on `typecheck`.** It was gated only on `lint` and `test`, which is how 1.5.2
   reached the index from a run whose overall conclusion reads `failure`.
-- **`ruff format --check` runs in CI**, and `src/` and `tests/` were formatted to match. 95 files
-  were unformatted, which is what happens when a formatter is installed and never asserted on.
+- **`ruff check` and `ruff format --check` run in CI over `src/`, `tests/` AND `scripts/`**, and
+  all three were formatted to match. 95 files were unformatted, which is what happens when a
+  formatter is installed and never asserted on. `scripts/` was added after a verification pass
+  found that the release guard protecting publishing was itself linted by nothing, and
+  `test_the_lint_job_covers_every_python_directory` now fails if a directory of Python falls
+  outside the linter's named paths again.
 - **The tag must match both declared versions.** `scripts/check_release_consistency.py` refuses a
   publish whose tag disagrees with `pyproject.toml` or `__version__`. `pyproject` read 1.7.0 while
   `main` sat fourteen commits past that tag, and nothing in the build objected.

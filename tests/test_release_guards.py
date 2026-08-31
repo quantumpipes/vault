@@ -35,6 +35,11 @@ INIT = REPO / "src" / "qp_vault" / "__init__.py"
 
 
 def _current_version() -> str:
+    """Read the version this checkout declares.
+
+    Returns:
+        The ``project.version`` string from ``pyproject.toml``.
+    """
     import tomllib
 
     with PYPROJECT.open("rb") as handle:
@@ -61,6 +66,15 @@ def _fixture_tree(root: pathlib.Path, project_version: str, dunder: str) -> path
 
 
 def _run_guard(root: pathlib.Path, tag: str) -> subprocess.CompletedProcess[str]:
+    """Invoke the guard as CI does, out of process.
+
+    Args:
+        root: The tree the guard should read.
+        tag: The tag to compare against, with or without its leading ``v``.
+
+    Returns:
+        The completed process, so a test can assert on the exit code AND the message.
+    """
     return subprocess.run(
         [sys.executable, str(GUARD), "--tag", tag, "--root", str(root)],
         capture_output=True,
@@ -139,6 +153,14 @@ def test_the_release_guard_agrees_with_the_real_tree() -> None:
 
 
 def _ruff() -> str:
+    """Locate the ruff the workflow would run.
+
+    Returns:
+        Absolute path to the ruff executable.
+
+    Raises:
+        Skipped: Via ``pytest.skip`` when ruff is not installed.
+    """
     ruff = shutil.which("ruff")
     if ruff is None:
         pytest.skip("ruff is not on PATH")
@@ -181,6 +203,15 @@ def test_ruff_format_check_passes_on_the_real_source_tree() -> None:
 
 
 def _workflow() -> dict:
+    """Parse the CI workflow so its gates can be asserted rather than eyeballed.
+
+    Returns:
+        The parsed workflow document.
+
+    Raises:
+        Skipped: Via ``importorskip`` when PyYAML is absent, which should not happen: it is
+            declared in the dev extra precisely so these assertions run instead of skipping.
+    """
     yaml = pytest.importorskip(
         "yaml", reason="PyYAML is declared in the dev extra; a skip here means it went missing"
     )
@@ -230,6 +261,45 @@ def test_the_workflow_pins_its_linters_to_exact_versions() -> None:
     text = WORKFLOW.read_text()
     assert "pip install ruff\n" not in text
     assert 'pip install "ruff==${{ env.RUFF_VERSION }}"' in text
+
+
+def test_the_lint_job_covers_every_python_directory() -> None:
+    """No directory of Python may sit outside the linter's named paths.
+
+    The lint job named ``src/`` and ``tests/`` and stopped there, so ``scripts/`` was linted by
+    nothing. That is where ``check_release_consistency.py`` lives: the one script CI runs to
+    protect a release was itself unchecked, and it was unformatted when this test was written.
+    A guard outside the guarded set is the shape this whole file exists to catch.
+    """
+    lint_steps = _workflow()["jobs"]["lint"]["steps"]
+    commands = " ".join(step.get("run", "") for step in lint_steps)
+
+    covered = {part.rstrip("/") for part in commands.split() if part.endswith("/")}
+    python_dirs = {
+        child.name
+        for child in REPO.iterdir()
+        if child.is_dir()
+        and not child.name.startswith((".", "_"))
+        and child.name not in {"dist", "docs", "examples", "evals", "node_modules"}
+        and any(child.rglob("*.py"))
+    }
+
+    missing = python_dirs - covered
+    assert not missing, f"lint does not cover: {sorted(missing)} (covers {sorted(covered)})"
+
+
+def test_the_coverage_assertion_can_fail() -> None:
+    """The vacuity test for the one above.
+
+    Without it, that assertion would pass just as happily against a lint job that named no paths
+    at all, since an empty `python_dirs` minus anything is still empty.
+    """
+    commands = "ruff check src/ tests/"
+
+    covered = {part.rstrip("/") for part in commands.split() if part.endswith("/")}
+    missing = {"src", "tests", "scripts"} - covered
+
+    assert missing == {"scripts"}
 
 
 def test_the_workflow_runs_on_a_schedule() -> None:
