@@ -105,9 +105,8 @@ class GraphEdge(BaseModel):
         """True if this edge's fact held at ``when`` (bitemporal valid-time)."""
         if self.valid_from is not None and when < self.valid_from:
             return False
-        if self.valid_to is not None and when >= self.valid_to:
-            return False
-        return True
+        # `valid_to` is exclusive: an edge closed at T did not hold at T.
+        return self.valid_to is None or when < self.valid_to
 
     def is_act_eligible(self) -> bool:
         """Only reviewed/asserted edges are facts an agent may act on (the gate)."""

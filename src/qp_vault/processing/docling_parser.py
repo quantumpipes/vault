@@ -31,6 +31,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from qp_vault.processing.document_intelligence import (
+    DocumentIntelligence,
     DocumentIntelligenceUnavailable,
     capability,
 )
@@ -112,7 +113,7 @@ class DoclingParser:
         self._converter: Any | None = None
 
     @property
-    def capability(self):  # noqa: ANN201 - dataclass, typed at the call site
+    def capability(self) -> DocumentIntelligence:
         """The capability record this parser was built against."""
         return self._capability
 
