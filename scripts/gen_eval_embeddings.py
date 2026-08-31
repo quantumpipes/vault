@@ -99,7 +99,9 @@ def main() -> int:
         )
         + "\n"
     )
-    print(f"wrote embeddings.npz ({len(doc_ids)} docs, {len(q_ids)} questions, dim {doc_vecs.shape[1]})")
+    print(
+        f"wrote embeddings.npz ({len(doc_ids)} docs, {len(q_ids)} questions, dim {doc_vecs.shape[1]})"
+    )
     return 0
 
 
